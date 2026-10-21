@@ -34,7 +34,9 @@ function ExcelDate($raw, $date1904) {
     return $base.AddDays($number).ToString('yyyy-MM-dd')
   }
   $date = [datetime]::MinValue
-  if ([datetime]::TryParse($raw, [ref]$date)) { return $date.ToString('yyyy-MM-dd') }
+  $formats = [string[]]@('d/M/yyyy','dd/MM/yyyy','d-M-yyyy','dd-MM-yyyy','yyyy-MM-dd')
+  if ([datetime]::TryParseExact($raw, $formats, [cultureinfo]::InvariantCulture,
+      [System.Globalization.DateTimeStyles]::None, [ref]$date)) { return $date.ToString('yyyy-MM-dd') }
   return $raw
 }
 function Yellow($cell, $fillIds, $fills) {

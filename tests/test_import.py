@@ -26,7 +26,8 @@ def main():
             xml = xml.replace('</row><row r="4">', cell('K3', 'closed at') + '</row><row r="4">')
             xml = xml.replace('</row><row r="5">', '<c r="K4"><v>5000</v></c></row><row r="5">')
             z.writestr("xl/worksheets/sheet1.xml", xml)
-        result = run(["powershell", "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", str(root / "import-xlsx.ps1"), "-Path", str(book)], capture_output=True, text=True)
+        command = f"[cultureinfo]::CurrentCulture = 'en-US'; & '{root / 'import-xlsx.ps1'}' -Path '{book}'"
+        result = run(["powershell", "-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", command], capture_output=True, text=True)
         assert result.returncode == 0, result.stderr
         import json
         parsed = json.loads(result.stdout)
@@ -49,7 +50,8 @@ def main():
                 if entry.filename == "xl/worksheets/sheet1.xml":
                     content = content.replace(cell("K3", "closed at").encode(), b"")
                 altered.writestr(entry, content)
-        unlabeled = run(["powershell", "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", str(root / "import-xlsx.ps1"), "-Path", str(unlabeled_book)], capture_output=True, text=True)
+        unlabeled_command = f"[cultureinfo]::CurrentCulture = 'en-US'; & '{root / 'import-xlsx.ps1'}' -Path '{unlabeled_book}'"
+        unlabeled = run(["powershell", "-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", unlabeled_command], capture_output=True, text=True)
         assert unlabeled.returncode == 0, unlabeled.stderr
         unlabeled_result = json.loads(unlabeled.stdout)
         unlabeled_group = unlabeled_result["clients"][0]["groups"][0]
