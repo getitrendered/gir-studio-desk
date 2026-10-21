@@ -1,0 +1,13 @@
+node_modules/
+dist/
+release/
+*.log
+.env
+.env.*
+.secrets/
+*.pfx
+*.p12
+*.pem
+*.crt
+ledger.json
+*.tmp

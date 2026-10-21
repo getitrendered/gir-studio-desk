@@ -1,0 +1,19 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>GIR Studio Desk</title><link rel="stylesheet" href="style.css"><link rel="stylesheet" href="extras.css"></head>
+<body>
+<div id="app">
+  <aside class="left"><div class="brand"><div class="mark">G<span>I</span>R</div><div><strong>STUDIO DESK</strong><small>Work, billing & clarity</small></div></div>
+    <div class="account-mini"><div class="top-avatar" id="topAvatar">S</div><div><strong id="accountName">Samuel</strong><small>My workspace</small></div></div>
+    <button class="primary wide" id="importBtn">＋ &nbsp; Import workbook</button>
+    <button class="quiet wide" id="previewBtn" hidden>▤ &nbsp; Review import</button>
+    <div class="side-label">WORKSPACE</div><nav id="clientList"></nav><button class="quiet wide" id="newClientBtn">＋ &nbsp; New client</button>
+    <div class="side-bottom"><button class="quiet" id="settingsBtn">⚙ &nbsp; Settings</button></div>
+  </aside>
+  <div class="center">
+    <div class="tabs" id="tabs"><button data-tab="sheet" class="active">Worksheet</button><button data-tab="dashboard">Dashboard</button><button data-tab="deadlines">Deadlines</button><button data-tab="revenue">Revenue</button><button data-tab="payments">Payments</button><button data-tab="invoices">Invoices</button><span class="tab-indicator" id="tabIndicator"></span></div>
+    <main id="main"></main>
+  </div>
+  <aside class="right"><div class="rail-content"><div class="team-head"><span>LIVE TEAM</span><span class="live-dot"></span></div><div class="team-sub">Click a person to find their rows</div><div id="teamList"></div><div class="rail-divider"></div><div class="team-head">QUICK VIEW</div><div id="quickView"></div></div><div class="rail-bottom"><div class="update-control"><div class="update-heading">APP UPDATE <span id="appVersion"></span></div><small id="updateStatus">Checking update support…</small><button class="small-btn wide" id="updateBtn" disabled>Check for updates</button></div><div class="connection" id="connection">● Local workspace</div><button class="small-btn wide" id="syncBtn">↻ &nbsp; Sync now</button><small id="autoSyncState">Connect Supabase for live sync</small></div></aside>
+</div>
+<div id="modalRoot"></div><div id="toast"></div>
+<script src="vendor/supabase.js"></script><script src="app.js"></script>
+</body></html>
