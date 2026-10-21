@@ -22,6 +22,7 @@ Local data is stored in `%APPDATA%/gir-studio-desk/ledger.json`. Back up that fi
 `npm ci` followed by `npm run build:win` produces the Windows installer, its blockmap, and `latest.yml` in `release/`. The installed app checks GitHub Releases when it starts and every six hours. In the right sidebar, **Check for updates** finds a release, **Download update** retrieves it, and **Restart to install** applies it. Local worksheet data stays in `%APPDATA%/gir-studio-desk/ledger.json` across app updates.
 
 `build-portable.ps1` still produces the older ZIP-style portable folder for local testing. Portable copies do not self-update; install the release installer to receive in-app updates.
+The Desktop folder's `Install GIR Studio Desk.cmd` launches the locally built release installer when one is present.
 
 To publish a future version, bump `package.json`'s version, commit and push, then push a matching tag such as `v0.3.0`. GitHub Actions builds the installer and publishes the installer, blockmap, and `latest.yml` to the release. The update feed is fixed to `getitrendered/gir-studio-desk` in the build configuration. Do not rename or transfer that repository while users have the app installed.
 
