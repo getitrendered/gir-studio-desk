@@ -1,4 +1,42 @@
 -- Run after schema.sql. This adds a reviewed, atomic workbook migration.
+alter table public.members add column if not exists avatar_data text not null default '';
+create table if not exists public.project_groups (
+  id uuid primary key,
+  workspace_id uuid not null references public.workspaces(id) on delete cascade,
+  client_id uuid not null references public.clients(id) on delete cascade,
+  label text not null,
+  created_at timestamptz not null default now()
+);
+alter table public.project_groups enable row level security;
+drop policy if exists "members read project groups" on public.project_groups;
+drop policy if exists "members insert project groups" on public.project_groups;
+drop policy if exists "members update project groups" on public.project_groups;
+drop policy if exists "members delete project groups" on public.project_groups;
+create policy "members read project groups" on public.project_groups for select to authenticated using (public.is_member(workspace_id));
+create policy "members insert project groups" on public.project_groups for insert to authenticated with check (public.is_member(workspace_id));
+create policy "members update project groups" on public.project_groups for update to authenticated using (public.is_member(workspace_id)) with check (public.is_member(workspace_id));
+create policy "members delete project groups" on public.project_groups for delete to authenticated using (public.is_member(workspace_id));
+alter table public.work_items add column if not exists project_group_id uuid references public.project_groups(id) on delete set null;
+do $$ begin
+  if not exists (select 1 from pg_publication_tables where pubname='supabase_realtime' and schemaname='public' and tablename='project_groups') then
+    alter publication supabase_realtime add table public.project_groups;
+  end if;
+end $$;
+create or replace function public.join_gir_workspace(code text, name text) returns uuid
+language plpgsql security definer set search_path = public as $$
+declare ws uuid := '17f39873-e10f-4bdf-93ee-1f92b3e25251';
+begin
+  if auth.uid() is null then raise exception 'Sign in first'; end if;
+  if not exists(select 1 from public.workspaces where id=ws and join_code=upper(trim(code))) then
+    raise exception 'GIR workspace code not found';
+  end if;
+  insert into public.members(workspace_id,user_id,display_name)
+  values(ws,auth.uid(),coalesce(nullif(trim(name),''),'Team member'))
+  on conflict (workspace_id,user_id) do nothing;
+  return ws;
+end $$;
+grant execute on function public.join_gir_workspace(text,text) to authenticated;
+notify pgrst, 'reload schema';
 alter table public.work_items add column if not exists serial text not null default '';
 alter table public.work_items add column if not exists advance_amount numeric(14,2) not null default 0;
 alter table public.work_items add column if not exists advance_received_at date;

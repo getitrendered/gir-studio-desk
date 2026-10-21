@@ -1,7 +1,7 @@
 {
   "name": "gir-studio-desk",
   "productName": "GIR Studio Desk",
-  "version": "0.2.3",
+  "version": "0.2.4",
   "private": true,
   "description": "GIR Studio Desk Windows work ledger",
   "main": "main.cjs",
@@ -32,6 +32,7 @@
       "app.js",
       "style.css",
       "extras.css",
+      "assets/gir-icon.png",
       "import-xlsx.ps1",
       "vendor/supabase.js"
     ],
@@ -46,6 +47,7 @@
     },
     "win": {
       "target": "nsis",
+      "icon": "assets/gir-icon.png",
       "executableName": "GIR Studio Desk",
       "verifyUpdateCodeSignature": false
     },

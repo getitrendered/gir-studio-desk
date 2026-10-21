@@ -13,6 +13,7 @@ create table if not exists public.members (
   workspace_id uuid not null references public.workspaces(id) on delete cascade,
   user_id uuid not null references auth.users(id) on delete cascade,
   display_name text not null,
+  avatar_data text not null default '',
   primary key (workspace_id,user_id)
 );
 create table if not exists public.clients (
@@ -31,11 +32,19 @@ create table if not exists public.deal_groups (
   agreed_amount numeric(14,2),
   created_at timestamptz not null default now()
 );
+create table if not exists public.project_groups (
+  id uuid primary key,
+  workspace_id uuid not null references public.workspaces(id) on delete cascade,
+  client_id uuid not null references public.clients(id) on delete cascade,
+  label text not null,
+  created_at timestamptz not null default now()
+);
 create table if not exists public.work_items (
   id uuid primary key,
   workspace_id uuid not null references public.workspaces(id) on delete cascade,
   client_id uuid not null references public.clients(id) on delete cascade,
   group_id uuid references public.deal_groups(id) on delete set null,
+  project_group_id uuid references public.project_groups(id) on delete set null,
   source_row integer,
   sort_order integer not null default 0,
   serial text not null default '',
@@ -84,6 +93,7 @@ alter table public.workspaces enable row level security;
 alter table public.members enable row level security;
 alter table public.clients enable row level security;
 alter table public.deal_groups enable row level security;
+alter table public.project_groups enable row level security;
 alter table public.work_items enable row level security;
 alter table public.invoices enable row level security;
 
@@ -113,6 +123,10 @@ create policy "members read groups" on public.deal_groups for select to authenti
 create policy "members insert groups" on public.deal_groups for insert to authenticated with check (public.is_member(workspace_id));
 create policy "members update groups" on public.deal_groups for update to authenticated using (public.is_member(workspace_id)) with check (public.is_member(workspace_id));
 create policy "members delete groups" on public.deal_groups for delete to authenticated using (public.is_member(workspace_id));
+create policy "members read project groups" on public.project_groups for select to authenticated using (public.is_member(workspace_id));
+create policy "members insert project groups" on public.project_groups for insert to authenticated with check (public.is_member(workspace_id));
+create policy "members update project groups" on public.project_groups for update to authenticated using (public.is_member(workspace_id)) with check (public.is_member(workspace_id));
+create policy "members delete project groups" on public.project_groups for delete to authenticated using (public.is_member(workspace_id));
 create policy "members read items" on public.work_items for select to authenticated using (public.is_member(workspace_id));
 create policy "members insert items" on public.work_items for insert to authenticated with check (public.is_member(workspace_id));
 create policy "members update items" on public.work_items for update to authenticated using (public.is_member(workspace_id)) with check (public.is_member(workspace_id));
@@ -123,6 +137,7 @@ create policy "members update invoices" on public.invoices for update to authent
 
 alter publication supabase_realtime add table public.clients;
 alter publication supabase_realtime add table public.deal_groups;
+alter publication supabase_realtime add table public.project_groups;
 alter publication supabase_realtime add table public.work_items;
 alter publication supabase_realtime add table public.invoices;
 alter publication supabase_realtime add table public.members;

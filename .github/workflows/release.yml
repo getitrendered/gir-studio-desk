@@ -40,4 +40,4 @@ jobs:
           $base = "release/GIR-Studio-Desk-$version-Setup.exe"
           $assets = @($base, "$base.blockmap", 'release/latest.yml')
           foreach ($asset in $assets) { if (!(Test-Path -LiteralPath $asset)) { throw "Missing release asset: $asset" } }
-          gh release create '${{ github.ref_name }}' @assets --verify-tag --title 'GIR Studio Desk ${{ github.ref_name }}' --notes 'Windows installer with in-app updates. Workbook preview detects yellow closed deals, including standalone K-column amounts; imports L-column advances and discarded Status rows. Revenue now includes advances received on open work and monthly totals.'
+          gh release create '${{ github.ref_name }}' @assets --verify-tag --title 'GIR Studio Desk ${{ github.ref_name }}' --notes 'Full-width worksheet with bottom client tabs, selectable rows, expandable blank rows, named project groups, Work Tracker, Client Details, team avatars, and a green theme. First-run sign-in and code-verified onboarding connect teammates to the existing GIR workspace. The supplied GIR logo is the app icon. Update and sync controls are in Settings. Existing imported data remains in Supabase.'

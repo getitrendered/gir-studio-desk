@@ -36,7 +36,7 @@ function initUpdates() {
 }
 function createWindow() {
   win = new BrowserWindow({ width: 1600, height: 980, minWidth: 1080, minHeight: 660, show: false,
-    backgroundColor: '#f7f8fa', title: 'GIR Studio Desk',
+    backgroundColor: '#f7f8fa', title: 'GIR Studio Desk', icon: path.join(__dirname, 'assets', 'gir-icon.png'),
     webPreferences: { preload: path.join(__dirname, 'preload.cjs'), contextIsolation: true, nodeIntegration: false, sandbox: true } });
   win.setMenuBarVisibility(false);
   win.loadFile(path.join(__dirname, 'index.html'));

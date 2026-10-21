@@ -20,8 +20,13 @@ const client = new Client({
 (async () => {
   await client.connect();
   try {
+    if (process.argv.includes('--workspace')) {
+      const result = await client.query('select w.id,w.name,w.join_code,count(c.id)::integer as clients from public.workspaces w left join public.clients c on c.workspace_id=w.id group by w.id,w.name,w.join_code order by clients desc');
+      console.log('Existing workspaces:', result.rows);
+      return;
+    }
     if (process.argv.includes('--check')) {
-      const result = await client.query("select (select count(*)::integer from auth.users) as auth_users, (select count(*)::integer from public.workspaces) as workspaces, exists(select 1 from information_schema.columns where table_schema='public' and table_name='work_items' and column_name='advance_amount') as advance_ready");
+      const result = await client.query("select (select count(*)::integer from auth.users) as auth_users, (select count(*)::integer from public.workspaces) as workspaces, exists(select 1 from information_schema.columns where table_schema='public' and table_name='work_items' and column_name='advance_amount') as advance_ready, exists(select 1 from information_schema.columns where table_schema='public' and table_name='work_items' and column_name='project_group_id') as project_groups_ready, to_regprocedure('public.join_gir_workspace(text,text)') is not null as gir_join_ready");
       console.log('Supabase setup status:', result.rows[0]);
       return;
     }
