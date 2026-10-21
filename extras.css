@@ -156,6 +156,8 @@ body{background:#f7f9f7}
 .sheet-toolbar #workFilter{border:1px solid #d5e2d8;border-radius:5px;background:white;color:#476450;padding:6px;font-size:11px;min-width:94px}
 .sheet-viewport{flex:1;min-height:0;max-height:none!important;overflow-y:auto!important;overflow-x:hidden!important;scrollbar-width:thin;scrollbar-color:#b8c8bb #f3f5f3}
 table.sheet{width:100%;min-width:0;table-layout:fixed}
+table.sheet{user-select:none}
+table.sheet input.editing{user-select:text}
 .sheet th{height:31px;background:#edf2ee;color:#48614f;border-color:#d4ddd6;padding:0 5px;font-size:10px}
 .sheet td{border-right:1px solid #d9e0da;border-bottom:1px solid #d9e0da;padding:0 2px}
 .sheet th:first-child,.sheet td:first-child{width:37px}
