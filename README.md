@@ -4,8 +4,8 @@ A compact Windows work ledger for GIR. Each worksheet in an imported `.xlsx` wor
 
 ## Product rules
 
-- **Work:** Pending → Working → Sent → Paid. Starting work again after Sent becomes **Changes 1**, then **Changes 2**, and so on. The assigned person and work state appear live in the sheet and Work Tracker. Working rows are tinted per person; their status cells retain their own colors.
-- **Worksheet:** The worksheet fills the app window. Clients are tabs at the bottom, like a workbook. Click a row to select it, Shift-click for a range, and double-click a cell to edit. Blank rows are available below existing work and extend as you scroll. Ctrl + and Ctrl − change grid size.
+- **Work:** Pending → Working → Sent → Paid. Starting work again after Sent becomes **Changes**; the number of change rounds stays recorded without cluttering the status label. The assigned person and work state appear live in the sheet and Work Tracker. Working rows are tinted per person; every status cell has its own color.
+- **Worksheet:** The worksheet fills the app window with white cells and light gray grid lines. Clients are compact, horizontally scrollable tabs at the bottom. Click a row to select it, Shift-click for a range, double-click a cell to edit, or paste into the selected cell. Blank rows are available below existing work and extend as you scroll. Ctrl + and Ctrl − change grid size.
 - **Project groups:** Select rows and choose **Group project** to create a named, collapsible heading. A project group can contain deal groups and its progress also appears in **Groups**. Use its heading to add another work row or rename it.
 - **Money:** Estimated incoming is unfinished work at its quoted total. Awaiting payment is sent work or issued invoices. Revenue is money actually recorded as paid.
 - **Deals:** A yellow run in the source workbook becomes a group. A group may have a negotiated amount. Its negotiated amount is the financial value for that group; row totals remain visible as reference.

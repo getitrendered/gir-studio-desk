@@ -205,3 +205,54 @@ table.sheet{width:100%;min-width:0;table-layout:fixed}
 .access-link{border:0;background:transparent;color:#167947;font-size:11px;font-weight:750;padding:6px}
 .access-card .access-error{border-radius:7px;background:#fff1e7;color:#9a5b30;padding:10px;margin:10px 0 0;text-align:left}
 .access-card .access-note{margin:0;color:#84978a}
+
+/* Compact, clearly separated navigation. */
+#app .tabs{height:51px;gap:0;padding:7px 12px;justify-content:flex-start;align-items:center;background:#fff}
+#app .tabs button{flex:0 0 auto;min-width:0;height:35px;padding:0 15px;background:#eef3ef;border:1px solid #dfe9e2;border-right:0;border-radius:0;color:#53695b;font-size:11px;font-weight:700}
+#app .tabs button:first-of-type{border-radius:8px 0 0 8px}
+#app .tabs button:last-of-type{border-right:1px solid #dfe9e2;border-radius:0 8px 8px 0}
+#app .tabs button:hover{background:#e2eee5;color:#196e43}
+#app .tabs button.active{background:#fff;color:#0f7844;border-color:#afd2b9;box-shadow:inset 0 -3px #188c51,0 1px 4px #17492a18}
+#app .tab-indicator{display:none}
+
+/* Traditional white spreadsheet cells with light gray grid lines. */
+.sheet tr.has-entry td:not(.status-cell){border-right-color:#d9e0da;border-bottom-color:#d9e0da}
+.sheet tr.blank-row td,.sheet tr.blank-row:nth-child(even) td{background:#fff;color:#657768}
+.sheet tr.grouped:not(.working-own):not(.working-other):not(.selected) td:not(.status-cell),.sheet tr.paid-group:not(.working-own):not(.working-other):not(.selected) td:not(.status-cell){background:#fff}
+.sheet tr:hover td:not(.status-cell){background:#f4f7f5}
+.sheet input[readonly]{pointer-events:none;cursor:cell}
+.sheet input[readonly]:focus{border-color:transparent;background:transparent;box-shadow:none}
+.sheet input.editing{pointer-events:auto;cursor:text;border-color:#179255;background:#fff;box-shadow:inset 0 0 0 1px #179255}
+.sheet tr.blank-row.blank-selected td{background:#edf5ee!important}
+
+/* Client names keep their full width and the strip scrolls horizontally. */
+.client-tabs{height:46px;padding:0 8px}
+.client-tab-list{scrollbar-width:thin;min-width:0}
+.client-tab{display:inline-flex;align-items:center;justify-content:center;gap:6px;flex:0 0 auto;width:max-content;min-width:max-content;padding:0 14px;line-height:1.2}
+.client-tab small{margin:0;flex:none}
+.new-client-tab{height:100%;width:41px}
+
+/* Status control: one clear color per state. */
+.sheet .status-cell.pending,.sheet tr.selected td.status-cell.pending{background:#eef1ef!important}
+.sheet .status-cell.working,.sheet tr.selected td.status-cell.working{background:#dceeff!important}
+.sheet .status-cell.changes,.sheet tr.selected td.status-cell.changes{background:#ede4ff!important}
+.sheet .status-cell.sent,.sheet tr.selected td.status-cell.sent{background:#fff0d2!important}
+.sheet .status-cell.paid,.sheet tr.selected td.status-cell.paid{background:#daf1df!important}
+.sheet .status-cell.discarded,.sheet tr.selected td.status-cell.discarded,.sheet tr.discarded-row td.status-cell{background:#fbe2e0!important}
+.status-trigger{display:flex;align-items:center;gap:7px;width:100%;height:100%;border:0;border-radius:3px;background:transparent;color:#244432;font-size:11px;font-weight:750;text-align:left;padding:0 7px}
+.status-trigger:hover,.status-trigger[aria-expanded=true]{box-shadow:inset 0 0 0 1px #6da483;background:#ffffff55}
+.status-trigger>span:nth-child(2){overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.status-dot{width:7px;height:7px;border-radius:50%;background:#8d9b90;flex:none}
+.status-chevron{margin-left:auto;font-size:13px;font-weight:700;color:#63806e}
+.status-cell.pending .status-dot,.status-option.pending .status-dot{background:#86958a}
+.status-cell.working .status-dot,.status-option.working .status-dot{background:#3585d6}
+.status-cell.changes .status-dot,.status-option.changes .status-dot{background:#9264d5}
+.status-cell.sent .status-dot,.status-option.sent .status-dot{background:#d4992e}
+.status-cell.paid .status-dot,.status-option.paid .status-dot{background:#279a59}
+.status-cell.discarded .status-dot,.status-option.discarded .status-dot{background:#d66860}
+.status-menu{position:fixed;z-index:9;width:172px;padding:6px;background:#fff;border:1px solid #d9e5dc;border-radius:10px;box-shadow:0 14px 36px #10291b30,0 2px 7px #10291b12;display:flex;flex-direction:column;gap:3px}
+.status-option{display:flex;align-items:center;gap:9px;width:100%;height:31px;border:1px solid transparent;border-radius:6px;background:#fff;color:#314c38;text-align:left;padding:0 9px;font-size:11px;font-weight:700}
+.status-option:hover,.status-option:focus-visible{outline:0;border-color:#acc5b3}
+.status-option.pending{background:#eef1ef}.status-option.working{background:#e1effe}.status-option.changes{background:#efe7ff}.status-option.sent{background:#fff1d7}.status-option.paid{background:#e1f3e5}.status-option.discarded{background:#fde9e7}
+.status-option:hover,.status-option.current{border-color:#a8c1af}
+.status-check{margin-left:auto;color:#367b4e}

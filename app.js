@@ -8,8 +8,8 @@ const esc = v => String(v ?? '').replace(/[&<>"']/g, c => ({ '&':'&amp;', '<':'&
 const fmtDate = d => { if (!d) return '—'; const x = new Date(d + 'T00:00:00'); return Number.isNaN(x.getTime()) ? d : x.toLocaleDateString('en-IN', { day:'numeric', month:'short', year:'numeric' }); };
 const defaults = { clients:[], groups:[], projectGroups:[], items:[], invoices:[], members:[], pending:[], settings:{ seller:{ name:'GIR — Get It Rendered', address:'', email:'', phone:'', taxId:'' }, url:'https://isdxybpeagloikchhsbp.supabase.co', key:'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImlzZHh5YnBlYWdsb2lrY2hoc2JwIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTI1NzkzMjcsImV4cCI6MjEwODE1NTMyN30.ll1YG9uyrTqmLzE90miCk-O1Ab5VkBPfqrCPDDUc5u8', workspaceId:'', displayName:'Samuel', localPartner:'Mezrid', zoom:100 } };
 const GIR_WORKSPACE_ID='17f39873-e10f-4bdf-93ee-1f92b3e25251';
-let data = structuredClone(defaults), tab = 'sheet', lastRenderedTab = null, lastRenderedClient = null, activeClient = null, selected = new Set(), selectionAnchor = null, collapsedGroups = new Set(), blankRows = 60, highlightUser = null, filter = 'all', clientApi = null, session = null, channel = null, syncing = false, toastTimer, syncTimer, importPreview = null, previewClientIndex = 0, migrating = false;
-let authLoading=true,workspaceReady=false,workspaceResolving=false,accessMode='signin',accessError='';
+let data = structuredClone(defaults), tab = 'sheet', lastRenderedTab = null, lastRenderedClient = null, activeClient = null, selected = new Set(), selectionAnchor = null, selectionCell = null, collapsedGroups = new Set(), blankRows = 60, highlightUser = null, filter = 'all', clientApi = null, session = null, channel = null, syncing = false, toastTimer, syncTimer, importPreview = null, previewClientIndex = 0, migrating = false;
+let authLoading=true,workspaceReady=false,workspaceResolving=false,accessMode='signin',accessError='',activeStatusMenu=null;
 let desktopUpdate = { status: 'unavailable', message: 'Checking update support…' };
 
 function toast(message) { const el = $('#toast'); el.textContent = message; el.classList.add('show'); clearTimeout(toastTimer); toastTimer = setTimeout(() => el.classList.remove('show'), 3000); }
@@ -20,7 +20,7 @@ function queue(table, id) { enqueue(table,id); save(); scheduleSync(); }
 function mutate(table, record) { record.updatedAt = new Date().toISOString(); const list = data[table]; const ix = list.findIndex(x => x.id === record.id); if (ix < 0) list.push(record); else list[ix] = record; queue(table, record.id); render(); }
 function currentClient() { return data.clients.find(c => c.id === activeClient); }
 function clientItems(id = activeClient) { return data.items.filter(i => i.clientId === id).sort((a,b) => a.sortOrder - b.sortOrder); }
-function displayStatus(i) { return i.status === 'changes' ? 'Changes ' + (i.revisionCount || 1) : i.status[0].toUpperCase() + i.status.slice(1); }
+function displayStatus(i) { return i.status === 'changes' ? 'Changes' : i.status[0].toUpperCase() + i.status.slice(1); }
 function currentUserId() { return session?.user?.id || 'local-me'; }
 function person(id) { return data.members.find(m => m.userId === id)?.displayName || (id === 'local-me' ? data.settings.displayName : id === 'local-partner' ? data.settings.localPartner : 'Team member'); }
 function initials(name) { return String(name || '?').split(/\s+/).map(s => s[0]).join('').slice(0,2).toUpperCase(); }
@@ -55,6 +55,7 @@ function financials() {
 }
 function counts() { const all = data.items.filter(i=>i.status!=='discarded'), todayValue = today(); return { total:all.length, discarded:data.items.length-all.length, done:all.filter(i => ['sent','paid'].includes(i.status)).length, working:all.filter(i => ['working','changes'].includes(i.status)).length, pending:all.filter(i => i.status === 'pending').length, overdue:all.filter(i => i.dueDate && i.dueDate < todayValue && !['sent','paid'].includes(i.status)).length }; }
 function render() {
+  closeStatusMenu();
   const main=$('#main'), sameSheet=tab==='sheet'&&lastRenderedTab==='sheet'&&lastRenderedClient===activeClient;
   const scroll=sameSheet?{main:main.scrollTop,grid:main.querySelector('.sheet-viewport')?.scrollTop||0,across:main.querySelector('.sheet-viewport')?.scrollLeft||0}:null;
   document.documentElement.style.setProperty('--grid-size', Math.round(12 * data.settings.zoom / 100) + 'px');
@@ -96,7 +97,13 @@ function renderClients() {
   const list = [...data.clients].sort((a,b) => a.sortOrder-b.sortOrder || a.name.localeCompare(b.name));
   nav.innerHTML = list.map(c => `<button class="client-tab ${activeClient===c.id && tab==='sheet'?'active':''}" data-client="${c.id}" title="${unfinishedCount(c.id)} unfinished rows">${esc(c.name)}<small>${unfinishedCount(c.id)}</small></button>`).join('');
   nav.scrollLeft=position;
-  $$('#clientList [data-client]').forEach(b => b.onclick = () => { activeClient = b.dataset.client; selected.clear();selectionAnchor=null;blankRows=60; tab='sheet'; render(); });
+  const active=nav.querySelector('.client-tab.active');
+  if(active){
+    const left=active.offsetLeft-nav.offsetLeft,right=left+active.offsetWidth;
+    if(left<nav.scrollLeft)nav.scrollLeft=left;
+    else if(right>nav.scrollLeft+nav.clientWidth)nav.scrollLeft=right-nav.clientWidth;
+  }
+  $$('#clientList [data-client]').forEach(b => b.onclick = () => { activeClient = b.dataset.client; selected.clear();selectionAnchor=null;selectionCell=null;blankRows=60; tab='sheet'; render(); });
 }
 function renderTeam() {
   const members = data.members.length ? data.members : [{ userId:'local-me', displayName:data.settings.displayName }, { userId:'local-partner', displayName:data.settings.localPartner }];
@@ -121,8 +128,8 @@ function groupHeader(kind,group,items) {
   return `<tr class="sheet-group-header ${kind}"><td colspan="11"><div class="group-heading"><button data-group-collapse="${kind}:${group.id}" aria-expanded="${!folded}">${folded?'▸':'▾'} <strong>${esc(group.label)}</strong><span>${done}/${active.length} complete${detail}</span></button>${kind==='project'?`<button class="group-add" data-group-add="${group.id}" title="Add work under this project">＋ Row</button><button class="group-rename" data-group-rename="${group.id}" title="Rename project group">Rename</button>`:''}</div></td></tr>`;
 }
 function blankRowHtml(order) {
-  const cell=(key,placeholder='')=>`<td><input data-blank-cell="${key}" data-blank-order="${order}" value="" placeholder="${placeholder}" readonly></td>`;
-  return `<tr class="blank-row" data-blank-row="${order}"><td class="row-selector"></td><td class="serial-cell">${order+1}</td>${cell('workDate','dd/mm/yyyy')}${cell('service')}${cell('quantity')}${cell('rate')}${cell('quotedTotal')}<td class="status-cell"></td>${cell('advanceAmount')}<td class="assignee-cell"></td>${cell('remarks')}</tr>`;
+  const cell=key=>`<td><input data-blank-cell="${key}" data-blank-order="${order}" value="" readonly></td>`;
+  return `<tr class="blank-row" data-blank-row="${order}"><td class="row-selector"></td><td class="serial-cell">${order+1}</td>${cell('workDate')}${cell('service')}${cell('quantity')}${cell('rate')}${cell('quotedTotal')}<td class="status-cell"></td>${cell('advanceAmount')}<td class="assignee-cell"></td>${cell('remarks')}</tr>`;
 }
 function groupedSheetItems(items) {
   const seen=new Set(),ordered=[];
@@ -165,7 +172,7 @@ function renderSheet() {
     rows+=`<tr data-row="${i.id}" class="${selected.has(i.id)?'selected':''} ${i.groupId?'grouped':''} ${i.status==='paid'&&i.groupId?'paid-group':''} ${i.status==='discarded'?'discarded-row':''} ${own?'working-own':''} ${other?'working-other':''} ${i.service?'has-entry':''}">
       <td class="row-selector"><input type="checkbox" data-check="${i.id}" ${selected.has(i.id)?'checked':''}></td>
       ${value('serial',i.serial||i.sortOrder+1)}${value('workDate',i.workDate||'')}${value('service',i.service)}${value('quantity',i.quantity)}${value('rate',i.rate)}${value('quotedTotal',i.quotedTotal,'class="money-cell"')}
-      <td class="status-cell ${i.status}"><select class="${i.status}" data-cell="status" data-id="${i.id}" tabindex="-1">${['pending','working','changes','sent','paid','discarded'].map(s=>`<option value="${s}" ${s===i.status?'selected':''}>${s==='changes'?'Changes '+(i.revisionCount||1):s[0].toUpperCase()+s.slice(1)}</option>`).join('')}</select></td>
+      <td class="status-cell ${i.status}"><button type="button" class="status-trigger" data-status-menu="${i.id}" aria-label="Change status from ${esc(displayStatus(i))}" aria-haspopup="listbox" aria-expanded="false"><span class="status-dot"></span><span>${esc(displayStatus(i))}</span><span class="status-chevron">⌄</span></button></td>
       ${value('advanceAmount',i.advanceAmount||0,'class="money-cell"')}
       <td class="assignee-cell"><button type="button" class="assignee-button" data-assignee-pick="${i.id}" title="${esc(i.assigneeId?person(i.assigneeId):'Assign person')}">${i.assigneeId?avatar(i.assigneeId,person(i.assigneeId)):'<span>＋</span>'}</button></td>
       ${value('remarks',i.remarks||'')}</tr>`;
@@ -239,14 +246,15 @@ function bindMain() {
   $$('[data-check]').forEach(b=>{b.onclick=e=>e.stopPropagation();b.onchange=()=>{b.checked?selected.add(b.dataset.check):selected.delete(b.dataset.check);selectionAnchor=b.dataset.check;refreshSelection();};});
   const all=$('#selectAll'); if(all) all.onchange=()=>{$$('[data-check]').forEach(b=>all.checked?selected.add(b.dataset.check):selected.delete(b.dataset.check));refreshSelection();};
   $$('[data-cell]').forEach(el=>{ el.onchange=()=>editCell(el.dataset.id,el.dataset.cell,el.value); if(el.tagName==='INPUT') el.onpaste=e=>pasteGrid(e,el); });
+  $$('[data-status-menu]').forEach(button=>button.onclick=()=>{selectSheetRow(button.dataset.statusMenu,false,false);openStatusMenu(button,button.dataset.statusMenu);});
   $$('[data-assignee-pick]').forEach(b=>b.onclick=()=>assignPersonDialog(b.dataset.assigneePick));
   $('#avatarUpload')?.addEventListener('change',e=>{if(e.target.files?.[0])saveAvatar(e.target.files[0]);});
   $$('[data-row]').forEach(row=>{
-    row.onclick=e=>{if(e.target.closest('button')||e.target.matches('[type=checkbox]'))return;selectSheetRow(row.dataset.row,e.shiftKey,e.ctrlKey||e.metaKey);};
+    row.onclick=e=>{if(e.target.closest('button')||e.target.matches('[type=checkbox]'))return;const field=e.target.closest('td')?.querySelector('[data-cell]');selectionCell=field?{id:row.dataset.row,key:field.dataset.cell}:null;selectSheetRow(row.dataset.row,e.shiftKey,e.ctrlKey||e.metaKey);};
     row.ondblclick=e=>{const td=e.target.closest('td'),field=td?.querySelector('[data-cell]');if(field)activateSheetField(field);};
     row.oncontextmenu=e=>{e.preventDefault();if(!selected.has(row.dataset.row))selectSheetRow(row.dataset.row,false,false);const menu=$('#contextMenu')||document.createElement('div');menu.id='contextMenu';menu.className='context-menu';menu.innerHTML='<button id="contextInvoice">▣ &nbsp; Create invoice</button><button id="contextAssign">● &nbsp; Start work</button><button id="contextSent">✓ &nbsp; Mark sent</button>';document.body.appendChild(menu);menu.style.left=Math.min(e.clientX,innerWidth-190)+'px';menu.style.top=Math.min(e.clientY,innerHeight-135)+'px';$('#contextInvoice').onclick=()=>{menu.remove();invoiceDialog();};$('#contextAssign').onclick=()=>{menu.remove();assign([...selected]);};$('#contextSent').onclick=()=>{menu.remove();markSent([...selected]);};setTimeout(()=>document.addEventListener('click',()=>menu.remove(),{once:true}),0);};
   });
-  $$('[data-blank-row]').forEach(row=>{row.onclick=()=>{$$('[data-blank-row]').forEach(r=>r.classList.remove('blank-selected'));row.classList.add('blank-selected');};row.ondblclick=e=>{const field=e.target.closest('td')?.querySelector('[data-blank-cell]');if(field)activateSheetField(field);};});
+  $$('[data-blank-row]').forEach(row=>{row.onclick=e=>{const field=e.target.closest('td')?.querySelector('[data-blank-cell]');selectionCell=field?{blankOrder:Number(row.dataset.blankRow),key:field.dataset.blankCell}:null;$$('[data-blank-row]').forEach(r=>r.classList.remove('blank-selected'));row.classList.add('blank-selected');};row.ondblclick=e=>{const field=e.target.closest('td')?.querySelector('[data-blank-cell]');if(field)activateSheetField(field);};});
   $$('[data-blank-cell]').forEach(el=>{el.onchange=()=>materializeBlankRow(el);el.onpaste=e=>pasteBlankGrid(e,el);});
   $$('[data-group-collapse]').forEach(b=>b.onclick=()=>{const id=b.dataset.groupCollapse;collapsedGroups.has(id)?collapsedGroups.delete(id):collapsedGroups.add(id);render();});
   $$('[data-group-add]').forEach(b=>b.onclick=()=>{const group=data.projectGroups.find(g=>g.id===b.dataset.groupAdd);if(!group)return;const item=newItem(group.clientId,clientItems(group.clientId).length);item.projectGroupId=group.id;mutate('items',item);setTimeout(()=>{const row=document.querySelector(`[data-row="${item.id}"]`);row?.scrollIntoView({block:'center'});const field=row?.querySelector('[data-cell="service"]');if(field)activateSheetField(field);},60);});
@@ -260,6 +268,28 @@ function bindMain() {
   $$('[data-invoice-view]').forEach(b=>b.onclick=()=>viewInvoice(b.dataset.invoiceView));
   $$('[data-invoice-paid]').forEach(b=>b.onclick=()=>markInvoicePaid(b.dataset.invoicePaid));
   $$('[data-jump-item]').forEach(r=>r.onclick=()=>{const i=data.items.find(x=>x.id===r.dataset.jumpItem);activeClient=i.clientId;tab='sheet';render();setTimeout(()=>document.querySelector(`[data-row="${i.id}"]`)?.scrollIntoView({block:'center'}),100);});
+}
+function closeStatusMenu(){
+  if(!activeStatusMenu)return;
+  activeStatusMenu.trigger.setAttribute('aria-expanded','false');
+  document.removeEventListener('pointerdown',activeStatusMenu.outside,true);
+  activeStatusMenu.menu.remove();activeStatusMenu=null;
+}
+function openStatusMenu(trigger,id){
+  if(activeStatusMenu?.trigger===trigger){closeStatusMenu();return;}
+  closeStatusMenu();
+  const item=data.items.find(i=>i.id===id);if(!item)return;
+  const statuses=['pending','working','changes','sent','paid','discarded'];
+  const menu=document.createElement('div');menu.className='status-menu';menu.setAttribute('role','listbox');menu.setAttribute('aria-label','Choose status');
+  menu.innerHTML=statuses.map(status=>`<button type="button" class="status-option ${status} ${item.status===status?'current':''}" data-set-status="${status}" role="option" aria-selected="${item.status===status}"><span class="status-dot"></span><span>${status==='changes'?'Changes':status[0].toUpperCase()+status.slice(1)}</span>${item.status===status?'<span class="status-check">✓</span>':''}</button>`).join('');
+  document.body.appendChild(menu);
+  const rect=trigger.getBoundingClientRect();
+  menu.style.left=Math.max(8,Math.min(rect.left,innerWidth-menu.offsetWidth-8))+'px';
+  menu.style.top=Math.max(8,Math.min(rect.bottom+4,innerHeight-menu.offsetHeight-8))+'px';
+  const outside=e=>{if(!menu.contains(e.target)&&e.target!==trigger)closeStatusMenu();};
+  activeStatusMenu={menu,trigger,outside};trigger.setAttribute('aria-expanded','true');
+  menu.querySelectorAll('[data-set-status]').forEach(button=>button.onclick=()=>{const next=button.dataset.setStatus;closeStatusMenu();if(next!==item.status)editCell(id,'status',next);});
+  setTimeout(()=>{if(activeStatusMenu?.menu===menu)document.addEventListener('pointerdown',outside,true);},0);
 }
 function refreshSelection() {
   $$('[data-row]').forEach(row=>row.classList.toggle('selected',selected.has(row.dataset.row)));
@@ -319,7 +349,7 @@ function editCell(id, key, value) {
 function pasteGrid(e,el) {
   const text=e.clipboardData.getData('text/plain'); if(!text.includes('\t')&&!text.includes('\n'))return;
   e.preventDefault(); const columns=['serial','workDate','service','quantity','rate','quotedTotal','status','advanceAmount','assigneeId','remarks']; const startCol=columns.indexOf(el.dataset.cell); if(startCol<0)return;
-  const rows=text.trimEnd().split(/\r?\n/).map(r=>r.split('\t')); const items=clientItems(); let start=items.findIndex(i=>i.id===el.dataset.id);
+  const rows=text.trimEnd().split(/\r?\n/).map(r=>r.split('\t')); const items=groupedSheetItems(clientItems()); let start=items.findIndex(i=>i.id===el.dataset.id);
   for(const cells of rows) { let item=items[start]; if(!item){item=newItem(activeClient,items.length);items.push(item);data.items.push(item);} cells.forEach((v,c)=>{const key=columns[startCol+c];if(!key)return;if(['quantity','rate','quotedTotal','advanceAmount'].includes(key))v=Math.max(0,num(v));if(key==='status'){v=v.trim()==='-'?'discarded':v.trim().toLowerCase()||'pending';if(v==='paid'&&item.status!=='paid')item.paidAt=today();}if(key==='advanceAmount'&&v>0&&!item.advanceReceivedAt)item.advanceReceivedAt=today();item[key]=v;}); if(!item.manualTotal && cells.length && !cells.some((_,c)=>columns[startCol+c]==='quotedTotal'))item.quotedTotal=num(item.quantity)*num(item.rate); enqueue('items',item.id);start++; }
   save();scheduleSync();
   toast(`Pasted ${rows.length} row${rows.length===1?'':'s'}`);render();
@@ -518,5 +548,16 @@ async function updateApp(){
   } catch(error){toast('Update failed: '+error.message);}
 }
 $$('#tabs button').forEach(b=>b.onclick=()=>{tab=b.dataset.tab;selected.clear();render();});
-document.addEventListener('keydown',e=>{if(e.ctrlKey&&(e.key==='+'||e.key==='='||e.key==='-')){e.preventDefault();data.settings.zoom=Math.max(70,Math.min(150,data.settings.zoom+(e.key==='-'?-10:10)));save();render();}if(e.key==='Escape')closeModal();});
+document.addEventListener('keydown',e=>{if(e.ctrlKey&&(e.key==='+'||e.key==='='||e.key==='-')){e.preventDefault();data.settings.zoom=Math.max(70,Math.min(150,data.settings.zoom+(e.key==='-'?-10:10)));save();render();}if(e.key==='Escape'){closeStatusMenu();closeModal();}});
+document.addEventListener('paste',e=>{
+  if(tab!=='sheet'||!selectionCell||activeStatusMenu||$('#modalRoot').children.length)return;
+  if(e.target?.matches?.('[data-cell],[data-blank-cell]'))return;
+  const focused=document.activeElement;
+  if(focused?.matches('input:not([readonly]),textarea,select')||focused?.isContentEditable)return;
+  const value=e.clipboardData?.getData('text/plain');if(!value)return;
+  if(selectionCell.blankOrder!=null){pasteBlankGrid(e,{dataset:{blankOrder:String(selectionCell.blankOrder),blankCell:selectionCell.key}});return;}
+  if(!selectionCell.id)return;
+  if(value.includes('\t')||value.includes('\n'))pasteGrid(e,{dataset:{id:selectionCell.id,cell:selectionCell.key}});
+  else{e.preventDefault();editCell(selectionCell.id,selectionCell.key,value);}
+});
 (async()=>{try{const saved=await window.desk.read();if(saved)data={...structuredClone(defaults),...saved,settings:{...structuredClone(defaults.settings),...(saved.settings||{}),seller:{...defaults.settings.seller,...(saved.settings?.seller||{})}}};if(!activeClient&&data.clients.length)activeClient=data.clients[0].id;render();setupSupabase();}catch(e){render();toast('Could not load local data: '+e.message);}})();
