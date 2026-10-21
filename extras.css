@@ -207,7 +207,7 @@ table.sheet{width:100%;min-width:0;table-layout:fixed}
 .access-card .access-note{margin:0;color:#84978a}
 
 /* Compact, clearly separated navigation. */
-#app .tabs{height:51px;gap:0;padding:7px 12px;justify-content:flex-start;align-items:center;background:#fff}
+#app .tabs{height:51px;gap:0;padding:7px 12px;justify-content:safe center;align-items:center;background:#fff}
 #app .tabs button{flex:0 0 auto;min-width:0;height:35px;padding:0 15px;background:#fff;border:1px solid #dfe9e2;border-right:0;border-radius:0;color:#53695b;font-size:11px;font-weight:700}
 #app .tabs button:first-of-type{border-radius:8px 0 0 8px}
 #app .tabs button:last-of-type{border-right:1px solid #dfe9e2;border-radius:0 8px 8px 0}
@@ -229,15 +229,23 @@ table.sheet{width:100%;min-width:0;table-layout:fixed}
 #app.sheet-mode main,.sheet-shell,.sheet-viewport,.sheet-toolbar,.client-tabs{background:#fff}
 .sheet td:not(.status-cell){background:#fff}
 .sheet tr:hover td:not(.status-cell){background:#f7f8f7}
+.sheet tr.blank-row:hover td.status-cell{background:#f7f8f7}
 .sheet tr.selected td:not(.status-cell),.sheet tr.selected td.row-selector,.sheet tr.blank-row.blank-selected td{background:#fff!important;box-shadow:inset 0 1px #178a50,inset 0 -1px #178a50}
 .client-tab,.new-client-tab{background:#fff}
 
 /* Client names keep their full width and the strip scrolls horizontally. */
-.client-tabs{height:46px;padding:0 8px}
-.client-tab-list{scrollbar-width:thin;min-width:0}
-.client-tab{display:inline-flex;align-items:center;justify-content:center;gap:6px;flex:0 0 auto;width:max-content;min-width:max-content;padding:0 14px;line-height:1.2}
-.client-tab small{margin:0;flex:none}
-.new-client-tab{height:100%;width:41px}
+.client-tabs{height:54px;padding:0 8px;border-top:2px solid #cedbd0}
+.client-tab-list{scrollbar-width:thin;min-width:0;gap:4px}
+.client-tab{display:inline-flex;align-items:center;justify-content:center;gap:6px;flex:0 0 auto;width:max-content;min-width:max-content;margin:4px 0;padding:0 18px;line-height:1.2;font-size:12px;font-weight:600;border:2px solid #cbd8ce;border-radius:5px}
+.client-tab.active{border-color:#168451}
+.client-tab small{margin:0;flex:none;font-size:10px}
+.new-client-tab{height:100%;width:46px;border-left:2px solid #cbd8ce}
+
+/* Center worksheet actions independently of the selection count. */
+#app.sheet-mode .sheet-toolbar{display:grid;grid-template-columns:minmax(0,1fr) max-content minmax(0,1fr)}
+#app.sheet-mode .sheet-toolbar .actions{grid-column:2;justify-self:center}
+#app.sheet-mode .sheet-toolbar #selectedCount{grid-column:3;justify-self:end}
+@media(max-width:980px){#app.sheet-mode .sheet-toolbar{display:flex;justify-content:space-between}}
 
 /* Status control: one clear color per state. */
 .sheet .status-cell.pending,.sheet tr.selected td.status-cell.pending{background:#eef1ef!important}
