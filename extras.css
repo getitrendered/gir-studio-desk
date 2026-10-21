@@ -208,7 +208,7 @@ table.sheet{width:100%;min-width:0;table-layout:fixed}
 
 /* Compact, clearly separated navigation. */
 #app .tabs{height:51px;gap:0;padding:7px 12px;justify-content:flex-start;align-items:center;background:#fff}
-#app .tabs button{flex:0 0 auto;min-width:0;height:35px;padding:0 15px;background:#eef3ef;border:1px solid #dfe9e2;border-right:0;border-radius:0;color:#53695b;font-size:11px;font-weight:700}
+#app .tabs button{flex:0 0 auto;min-width:0;height:35px;padding:0 15px;background:#fff;border:1px solid #dfe9e2;border-right:0;border-radius:0;color:#53695b;font-size:11px;font-weight:700}
 #app .tabs button:first-of-type{border-radius:8px 0 0 8px}
 #app .tabs button:last-of-type{border-right:1px solid #dfe9e2;border-radius:0 8px 8px 0}
 #app .tabs button:hover{background:#e2eee5;color:#196e43}
@@ -224,6 +224,13 @@ table.sheet{width:100%;min-width:0;table-layout:fixed}
 .sheet input[readonly]:focus{border-color:transparent;background:transparent;box-shadow:none}
 .sheet input.editing{pointer-events:auto;cursor:text;border-color:#179255;background:#fff;box-shadow:inset 0 0 0 1px #179255}
 .sheet tr.blank-row.blank-selected td{background:#edf5ee!important}
+
+/* Keep the worksheet white; green marks actions and the selected outline. */
+#app.sheet-mode main,.sheet-shell,.sheet-viewport,.sheet-toolbar,.client-tabs{background:#fff}
+.sheet td:not(.status-cell){background:#fff}
+.sheet tr:hover td:not(.status-cell){background:#f7f8f7}
+.sheet tr.selected td:not(.status-cell),.sheet tr.selected td.row-selector,.sheet tr.blank-row.blank-selected td{background:#fff!important;box-shadow:inset 0 1px #178a50,inset 0 -1px #178a50}
+.client-tab,.new-client-tab{background:#fff}
 
 /* Client names keep their full width and the strip scrolls horizontally. */
 .client-tabs{height:46px;padding:0 8px}
