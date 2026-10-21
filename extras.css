@@ -159,7 +159,7 @@ table.sheet{width:100%;min-width:0;table-layout:fixed}
 .sheet th{height:31px;background:#edf2ee;color:#48614f;border-color:#d4ddd6;padding:0 5px;font-size:10px}
 .sheet td{border-right:1px solid #d9e0da;border-bottom:1px solid #d9e0da;padding:0 2px}
 .sheet th:first-child,.sheet td:first-child{width:37px}
-.sheet th:nth-child(2){width:45px}.sheet th:nth-child(3){width:100px}.sheet th:nth-child(4){width:auto}.sheet th:nth-child(5){width:52px}.sheet th:nth-child(6){width:74px}.sheet th:nth-child(7){width:85px}.sheet th:nth-child(8){width:102px}.sheet th:nth-child(9){width:80px}.sheet th:nth-child(10){width:70px}.sheet th:nth-child(11){width:16%}
+.sheet th:nth-child(2){width:45px}.sheet th:nth-child(3){width:100px}.sheet th:nth-child(4){width:auto}.sheet th:nth-child(5){width:52px}.sheet th:nth-child(6){width:74px}.sheet th:nth-child(7){width:85px}.sheet th:nth-child(8){width:130px}.sheet th:nth-child(9){width:80px}.sheet th:nth-child(10){width:70px}.sheet th:nth-child(11){width:16%}
 .sheet tr.has-entry td:not(.status-cell){border-bottom-color:#3f4b40;border-right-color:#637168}
 .sheet tr.blank-row td{background:#fff;color:#8c9c91}.sheet tr.blank-row:nth-child(even) td{background:#fafbfa}
 .sheet tr.working-own td:not(.status-cell){background:#fff1b9}.sheet tr.working-other td:not(.status-cell){background:#e7dcf9}
@@ -181,12 +181,26 @@ table.sheet{width:100%;min-width:0;table-layout:fixed}
 .group-grid,.tracker-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:12px;margin-bottom:16px}
 .group-card,.tracker-item{border:1px solid #dce6de;background:white;border-radius:10px;text-align:left;padding:14px;display:flex;flex-direction:column;gap:8px;color:#244431;width:100%;margin-bottom:7px}
 .group-card:hover,.tracker-item:hover{border-color:#8fbea0;background:#f7fbf8}.group-card small,.tracker-item small{color:#84978a}.group-card .bar{width:100%}
+.group-card{position:relative}
+.group-card-open{display:flex;flex-direction:column;align-items:flex-start;gap:8px;width:100%;padding:0;border:0;background:transparent;text-align:left;color:inherit}
+.group-card-open[hidden],.group-card-rename[hidden],.group-card-editor[hidden]{display:none}
+.group-card-rename{position:absolute;top:11px;right:12px;border:1px solid #c9d9ce;border-radius:6px;background:#fff;color:#24764b;padding:5px 9px;font-size:10px;font-weight:750}
+.group-card-rename:hover{border-color:#168451;background:#eaf5ed}
+.group-card-editor{display:flex;flex-direction:column;gap:10px;width:100%}
+.group-card-editor label{display:flex;flex-direction:column;gap:5px;font-size:10px;font-weight:700;color:#64806c}
+.group-card-editor input{height:34px;width:100%;border:1px solid #a8c9b2;border-radius:6px;background:#fff;color:#244431;padding:0 9px;outline:none;font-size:12px}
+.group-card-editor input:focus{border-color:#168451;box-shadow:0 0 0 2px #16845124}
+.group-card-editor>div{display:flex;gap:7px}
+.group-card-editor button{border:1px solid #cbd9cf;border-radius:6px;background:#fff;color:#43614b;padding:6px 11px;font-size:11px;font-weight:700}
+.group-card-editor button[data-save-card]{border-color:#168451;background:#168451;color:#fff}
 .tracker-avatar{width:28px;height:28px;display:inline-grid;place-items:center;vertical-align:middle;border-radius:50%;overflow:hidden;background:#e4f2e7;margin-right:8px}
 .sheet tr.discarded-row td.status-cell{background:#e7e9e8!important}
 .sheet tr.selected td.status-cell.pending{background:#f4f6f4!important}.sheet tr.selected td.status-cell.working{background:#d8e9fc!important}.sheet tr.selected td.status-cell.changes{background:#e9e0ff!important}.sheet tr.selected td.status-cell.sent{background:#fff0d2!important}.sheet tr.selected td.status-cell.paid{background:#d5efdb!important}
 .sheet tr.blank-row.blank-selected td{background:#e2f1e5!important}
 .group-heading{display:flex;align-items:center;width:100%;height:100%}.group-heading [data-group-collapse]{flex:1;min-width:0}.group-heading .group-add,.group-heading .group-rename{width:auto;flex:none;padding:0 10px;border-left:1px solid #bcd7c3;font-size:10px;font-weight:700}
 .group-heading .group-add:hover,.group-heading .group-rename:hover{background:#d5ecdb}
+.sheet-group-header.deal .group-rename{border-left-color:#e8c96c}
+.sheet-group-header.deal .group-rename:hover{background:#ffe6a1}
 .sheet select[data-cell]{pointer-events:none}
 #app.access-mode{background:radial-gradient(circle at 50% 0%,#e3f2e6 0,#f6f9f5 48%,#edf3ee 100%)}
 #app.access-mode .center{display:block}
