@@ -16,10 +16,10 @@ def main():
             z.writestr("xl/sharedStrings.xml", '<sst xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><si><t>SERVICE PROVIDED</t></si><si><t>PHOTOBOOTH 3D</t></si></sst>')
             def cell(ref, value, yellow=False):
                 return f'<c r="{ref}" t="inlineStr" s="{int(yellow)}"><is><t>{value}</t></is></c>'
-            heads = [("A", "SR NO"), ("B", "DATE"), ("C", "SERVICE PROVIDED"), ("D", "QUANTITY"), ("F", "RATE"), ("G", "TOTAL"), ("H", "STATUS"), ("J", "REMARKS")]
+            heads = [("A", "SR NO"), ("B", "DATE"), ("C", "SERVICE PROVIDED"), ("D", "QUANTITY"), ("F", "RATE"), ("G", "TOTAL"), ("H", "STATUS"), ("J", "REMARKS"), ("L", "ADVANCE TAKEN")]
             header = "".join(cell(f"{col}2", title) for col, title in heads)
             def row(number, service, yellow):
-                values = [("A", number-2),("B", "10/9/2024"),("C", service),("D",1),("F",3000),("G",3000),("H","SENT"),("J","")]
+                values = [("A", number-2),("B", "10/9/2024"),("C", service),("D",1),("F",3000),("G",3000),("H","-" if number == 5 else "" if number == 4 else "SENT"),("J",""),("L",500 if number == 3 else "")]
                 return f'<row r="{number}">' + "".join(cell(f"{col}{number}", value, yellow) for col,value in values) + '</row>'
             xml = '<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><sheetData><row r="2">' + header + '</row>' + row(3, "PHOTOBOOTH 3D", True) + row(4, "HALLOWEEN 3D", True) + row(5, "CHRISTMAS 3D", False) + '</sheetData></worksheet>'
             xml = xml.replace(cell("C2", "SERVICE PROVIDED"), '<c r="C2" t="s"><v>0</v></c>').replace(cell("C3", "PHOTOBOOTH 3D", True), '<c r="C3" t="s" s="1"><v>1</v></c>')
@@ -36,9 +36,24 @@ def main():
         assert rows[2]["yellowGroup"] is None, parsed
         assert rows[0]["date"] == "2024-09-10", parsed
         assert rows[0]["service"] == "PHOTOBOOTH 3D", parsed
+        assert rows[0]["advance"] == "500" and rows[0]["advanceCell"] == "L3", parsed
+        assert rows[1]["status"] == "pending", parsed
+        assert rows[2]["status"] == "discarded", parsed
         group = parsed["clients"][0]["groups"][0]
         assert group["startRow"] == 3 and group["endRow"] == 4, parsed
         assert group["agreedAmount"] == 5000 and group["amountCell"] == "K4", parsed
+        unlabeled_book = Path(folder) / "unlabeled.xlsx"
+        with ZipFile(book) as original, ZipFile(unlabeled_book, "w") as altered:
+            for entry in original.infolist():
+                content = original.read(entry.filename)
+                if entry.filename == "xl/worksheets/sheet1.xml":
+                    content = content.replace(cell("K3", "closed at").encode(), b"")
+                altered.writestr(entry, content)
+        unlabeled = run(["powershell", "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", str(root / "import-xlsx.ps1"), "-Path", str(unlabeled_book)], capture_output=True, text=True)
+        assert unlabeled.returncode == 0, unlabeled.stderr
+        unlabeled_result = json.loads(unlabeled.stdout)
+        unlabeled_group = unlabeled_result["clients"][0]["groups"][0]
+        assert unlabeled_group["agreedAmount"] == 5000 and unlabeled_group["amountCell"] == "K4", unlabeled_result
         print("Import fixture passed")
 
 

@@ -1,5 +1,13 @@
 -- Run after schema.sql. This adds a reviewed, atomic workbook migration.
 alter table public.work_items add column if not exists serial text not null default '';
+alter table public.work_items add column if not exists advance_amount numeric(14,2) not null default 0;
+alter table public.work_items add column if not exists advance_received_at date;
+alter table public.work_items add column if not exists paid_at date;
+alter table public.invoices add column if not exists paid_at date;
+alter table public.invoices add column if not exists advance_amount numeric(14,2) not null default 0;
+alter table public.work_items drop constraint if exists work_items_status_check;
+alter table public.work_items add constraint work_items_status_check
+  check (status in ('pending','working','changes','sent','paid','discarded'));
 create table if not exists public.import_batches (
   id uuid primary key,
   workspace_id uuid not null references public.workspaces(id) on delete cascade,
@@ -79,13 +87,14 @@ begin
         raise exception 'A work row references a group outside its client';
       end if;
       insert into public.work_items(id,workspace_id,client_id,group_id,source_row,sort_order,serial,
-        work_date,due_date,service,quantity,rate,quoted_total,status,revision_count,remarks)
+        work_date,due_date,service,quantity,rate,quoted_total,advance_amount,status,revision_count,remarks)
       values((item_row->>'id')::uuid,p_workspace_id,client_id,group_id,
         nullif(item_row->>'source_row','')::integer,coalesce((item_row->>'sort_order')::integer,0),
         coalesce(item_row->>'serial',''),
         nullif(item_row->>'work_date','')::date,nullif(item_row->>'due_date','')::date,
         coalesce(item_row->>'service',''),coalesce((item_row->>'quantity')::numeric,1),
         coalesce((item_row->>'rate')::numeric,0),coalesce((item_row->>'quoted_total')::numeric,0),
+        coalesce((item_row->>'advance_amount')::numeric,0),
         coalesce(item_row->>'status','pending'),coalesce((item_row->>'revision_count')::integer,0),
         coalesce(item_row->>'remarks',''));
       v_item_count := v_item_count + 1;

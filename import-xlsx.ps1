@@ -99,11 +99,13 @@ try {
         elseif ($h -eq 'total') { $found.total = $key }
         elseif ($h -eq 'status') { $found.status = $key }
         elseif ($h -match '^remarks?$|^notes?$') { $found.remarks = $key }
+        elseif ($h -match '^advance(s|taken|received|amount)?$') { $found.advance = $key }
       }
       if ($found.ContainsKey('service') -and $found.ContainsKey('date') -and $found.ContainsKey('status')) { $headers = $found; $headerRow = $row.index; break }
     }
     if (!$headerRow) { $skipped += [pscustomobject]@{ name = (Attr $sheet 'name'); reason = 'Required Date, Service and Status headers were not found' }; continue }
     $items = @(); $groupNo = 0; $previousYellow = $false
+    $advanceColumn = if ($headers.ContainsKey('advance')) { [int]$headers.advance } else { 12 }
     foreach ($row in ($rawRows | Where-Object { $_.index -gt $headerRow })) {
       $read = { param($name) if ($headers.ContainsKey($name)) { TextCell $row.cells[$headers[$name]] $strings } else { '' } }
       $service = (& $read 'service').Trim()
@@ -116,15 +118,20 @@ try {
       if ($isYellow -and !$previousYellow) { $groupNo++ }
       $previousYellow = $isYellow
       $status = (& $read 'status').Trim().ToLower()
-      if ($status -notin @('paid','sent','pending','working')) { $status = 'pending' }
+      $total = (& $read 'total').Trim()
+      $advance = (TextCell $row.cells[$advanceColumn] $strings).Trim()
+      if ($status -match '^[\-–—]$') { $status = 'discarded' }
+      elseif ($status -notin @('paid','sent','pending','working')) { $status = 'pending' }
       $items += [pscustomobject]@{
         sourceRow = $row.index; serial = (& $read 'serial'); date = (ExcelDate (& $read 'date') $date1904)
-        service = $service; quantity = (& $read 'quantity'); rate = (& $read 'rate'); total = (& $read 'total')
-        status = $status; remarks = (& $read 'remarks'); yellowGroup = $(if ($isYellow) { $groupNo } else { $null })
+        service = $service; quantity = (& $read 'quantity'); rate = (& $read 'rate'); total = $total
+        status = $status; remarks = (& $read 'remarks'); advance = $advance
+        advanceCell = $(if ($advance) { Attr $row.cells[$advanceColumn] 'r' } else { '' })
+        yellowGroup = $(if ($isYellow) { $groupNo } else { $null })
       }
     }
     $groups = @()
-    $lastTableColumn = [int](($headers.Values | Measure-Object -Maximum).Maximum)
+    $lastTableColumn = [int](($headers.GetEnumerator() | Where-Object { $_.Key -ne 'advance' } | ForEach-Object { $_.Value } | Measure-Object -Maximum).Maximum)
     $groupNumbers = @($items | Where-Object { $null -ne $_.yellowGroup } | ForEach-Object { $_.yellowGroup } | Sort-Object -Unique)
     foreach ($number in $groupNumbers) {
       $sourceRows = @($items | Where-Object { $_.yellowGroup -eq $number } | ForEach-Object { $_.sourceRow })
@@ -144,7 +151,17 @@ try {
         $values = @()
         foreach ($row in ($rawRows | Where-Object { $_.index -ge $startRow -and $_.index -le $endRow })) {
           foreach ($column in $row.cells.Keys) {
-            if ([int]$column -lt $marker.column -or [int]$column -gt ($marker.column + 1)) { continue }
+            if ([int]$column -ne $marker.column) { continue }
+            $raw = (TextCell $row.cells[$column] $strings).Trim() -replace '[\u20B9,]','' -replace '^(?i:rs\.?\s*)',''
+            if ($raw -match '^\d+(?:\.\d{1,2})?$') {
+              $values += [pscustomobject]@{ value = [decimal]::Parse($raw, [cultureinfo]::InvariantCulture); cell = (Attr $row.cells[$column] 'r') }
+            }
+          }
+        }
+        if ($values.Count -eq 0 -and ($marker.column + 1) -ne $advanceColumn) {
+          foreach ($row in ($rawRows | Where-Object { $_.index -ge $startRow -and $_.index -le $endRow })) {
+            $column = $marker.column + 1
+            if (!$row.cells.ContainsKey($column)) { continue }
             $raw = (TextCell $row.cells[$column] $strings).Trim() -replace '[\u20B9,]','' -replace '^(?i:rs\.?\s*)',''
             if ($raw -match '^\d+(?:\.\d{1,2})?$') {
               $values += [pscustomobject]@{ value = [decimal]::Parse($raw, [cultureinfo]::InvariantCulture); cell = (Attr $row.cells[$column] 'r') }
@@ -154,7 +171,21 @@ try {
         if ($values.Count -eq 1) { $amount = $values[0].value; $amountCell = $values[0].cell }
         elseif ($values.Count -gt 1) { $warning = 'More than one amount was found beside closed at; enter the correct amount in the preview' }
         else { $warning = 'Closed at label found, but its amount was not found' }
-      } else { $warning = 'Yellow group has no closed at label; check its agreed amount in the preview' }
+      } else {
+        $candidates = @()
+        foreach ($row in ($rawRows | Where-Object { $_.index -ge $startRow -and $_.index -le $endRow })) {
+          foreach ($column in $row.cells.Keys) {
+            if ([int]$column -le $lastTableColumn -or [int]$column -eq $advanceColumn) { continue }
+            $raw = (TextCell $row.cells[$column] $strings).Trim() -replace '[\u20B9,]','' -replace '^(?i:rs\.?\s*)',''
+            if ($raw -match '^\d+(?:\.\d{1,2})?$') {
+              $candidates += [pscustomobject]@{ value = [decimal]::Parse($raw, [cultureinfo]::InvariantCulture); cell = (Attr $row.cells[$column] 'r') }
+            }
+          }
+        }
+        if ($candidates.Count -eq 1) { $amount = $candidates[0].value; $amountCell = $candidates[0].cell }
+        elseif ($candidates.Count -gt 1) { $warning = 'Multiple amounts found beside this yellow group; choose the closed amount in the preview' }
+        else { $warning = 'Yellow group has no detected closed amount; check the preview' }
+      }
       $groups += [pscustomobject]@{ sourceGroup = $number; startRow = $startRow; endRow = $endRow; agreedAmount = $amount; amountCell = $amountCell; warning = $warning }
     }
     $result += [pscustomobject]@{ name = (Attr $sheet 'name'); items = @($items); groups = @($groups); headerRow = $headerRow }

@@ -21,8 +21,15 @@ const client = new Client({
   await client.connect();
   try {
     if (process.argv.includes('--check')) {
-      const result = await client.query('select (select count(*)::integer from auth.users) as auth_users, (select count(*)::integer from public.workspaces) as workspaces');
+      const result = await client.query("select (select count(*)::integer from auth.users) as auth_users, (select count(*)::integer from public.workspaces) as workspaces, exists(select 1 from information_schema.columns where table_schema='public' and table_name='work_items' and column_name='advance_amount') as advance_ready");
       console.log('Supabase setup status:', result.rows[0]);
+      return;
+    }
+    if (process.argv.includes('--upgrade')) {
+      await client.query('begin');
+      await client.query(fs.readFileSync(path.join(__dirname, 'import-migration.sql'), 'utf8'));
+      await client.query('commit');
+      console.log('Supabase import schema upgraded.');
       return;
     }
     const existing = await client.query("select to_regclass('public.workspaces') as workspaces, to_regclass('public.import_batches') as import_batches");
