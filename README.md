@@ -26,6 +26,8 @@ The Desktop folder's `Install GIR Studio Desk.cmd` launches the locally built re
 
 To publish a future version, bump `package.json`'s version, commit and push, then push a matching tag such as `v0.3.0`. GitHub Actions builds the installer and publishes the installer, blockmap, and `latest.yml` to the release. The update feed is fixed to `getitrendered/gir-studio-desk` in the build configuration. Do not rename or transfer that repository while users have the app installed.
 
+The current installer is not Authenticode signed, so Windows may show an unknown publisher warning. For a signed production release, add a Windows code-signing certificate to the release build and enable update code-signature verification in `package.json`.
+
 ## Next setup steps
 
 Two team accounts and a workspace still need to be created in the app. Invoice seller identity and client billing details are entered in Settings/client details; they are not reliably present in the old workbook. The screenshot shows the **closed at** pattern, but an actual `.xlsx` file is needed to verify its exact colors, merged-cell patterns, and formulas.
