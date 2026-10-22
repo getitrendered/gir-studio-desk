@@ -296,3 +296,7 @@ table.sheet input.editing{user-select:text}
 .status-option.pending{background:#eef1ef}.status-option.working{background:#e1effe}.status-option.changes{background:#efe7ff}.status-option.sent{background:#fff1d7}.status-option.paid{background:#e1f3e5}.status-option.discarded{background:#fde9e7}
 .status-option:hover,.status-option.current{border-color:#a8c1af}
 .status-check{margin-left:auto;color:#367b4e}
+
+/* Consistent affordance for every clickable control. */
+button,select,[role="button"],[role="option"]{cursor:pointer}
+button:disabled,select:disabled,[role="button"][aria-disabled="true"],[role="option"][aria-disabled="true"]{cursor:not-allowed}
