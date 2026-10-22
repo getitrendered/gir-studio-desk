@@ -387,3 +387,13 @@ button:disabled,select:disabled,[role="button"][aria-disabled="true"],[role="opt
 .bank-account-top{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:8px}
 .bank-account-top label strong{font-size:13px;color:#183624}
 .bank-account-preview{padding-top:6px;border-top:1px dashed #e4ede6}
+
+/* Avatar hover 5x zoom */
+.sheet tr:has(.assignee-button:not([title="Assign person"]):hover){position:relative;z-index:50}
+.sheet .assignee-cell:has(.assignee-button:not([title="Assign person"]):hover){position:relative;z-index:60}
+.sheet .assignee-button:not([title="Assign person"]){position:relative;transition:transform .16s cubic-bezier(0.2,0,0,1),box-shadow .16s ease;transform-origin:center center;will-change:transform;backface-visibility:hidden}
+.sheet .assignee-button:not([title="Assign person"]):hover{transform:scale(5);z-index:1000;box-shadow:0 10px 30px rgba(0,0,0,0.45),0 0 0 1.5px #fff;border-color:#fff}
+.tracker-avatar{position:relative;transition:transform .16s cubic-bezier(0.2,0,0,1),box-shadow .16s ease;transform-origin:center center;will-change:transform;backface-visibility:hidden}
+.tracker-avatar:hover{transform:scale(5);z-index:1000;box-shadow:0 10px 30px rgba(0,0,0,0.45),0 0 0 1.5px #fff}
+.member .avatar{position:relative;transition:transform .16s cubic-bezier(0.2,0,0,1),box-shadow .16s ease;transform-origin:center center;will-change:transform;backface-visibility:hidden}
+.member .avatar:hover{transform:scale(4.5);z-index:1000;box-shadow:0 8px 24px rgba(0,0,0,0.4),0 0 0 1.5px #fff}
