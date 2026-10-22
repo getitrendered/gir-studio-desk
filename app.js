@@ -11,6 +11,38 @@ const GIR_WORKSPACE_ID='17f39873-e10f-4bdf-93ee-1f92b3e25251';
 let data = structuredClone(defaults), tab = 'sheet', lastRenderedTab = null, lastRenderedClient = null, activeClient = null, selected = new Set(), selectionAnchor = null, selectionCell = null, collapsedGroups = new Set(), blankRows = 60, highlightUser = null, filter = 'all', clientApi = null, session = null, channel = null, syncing = false, toastTimer, syncTimer, lastSyncTime = Date.now(), importPreview = null, previewClientIndex = 0, migrating = false;
 let authLoading=true,workspaceReady=false,workspaceResolving=false,accessMode='signin',accessError='',activeStatusMenu=null;
 let desktopUpdate = { status: 'unavailable', message: 'Checking update support…' };
+const navHistory = [];
+let isNavigatingBack = false;
+const openTrackerClients = new Set();
+
+function recordNav(prevTab, prevClient) {
+  if (isNavigatingBack || !prevTab) return;
+  const last = navHistory[navHistory.length - 1];
+  if (last && last.tab === prevTab && last.client === prevClient) return;
+  navHistory.push({ tab: prevTab, client: prevClient });
+  if (navHistory.length > 50) navHistory.shift();
+  updateBackBtn();
+}
+
+function updateBackBtn() {
+  const btn = $('#topBackBtn');
+  if (btn) btn.disabled = navHistory.length === 0;
+}
+
+function goBack() {
+  if (!navHistory.length) return;
+  isNavigatingBack = true;
+  const prev = navHistory.pop();
+  if (prev) {
+    if (prev.tab) tab = prev.tab;
+    if (prev.client && data.clients.some(c => c.id === prev.client)) {
+      activeClient = prev.client;
+    }
+    render();
+  }
+  isNavigatingBack = false;
+  updateBackBtn();
+}
 
 function toast(message) { const el = $('#toast'); el.textContent = message; el.classList.add('show'); clearTimeout(toastTimer); toastTimer = setTimeout(() => el.classList.remove('show'), 3000); }
 function save() { window.desk.write(data).catch(e => toast('Could not save locally: ' + e.message)); }
@@ -152,9 +184,12 @@ function render() {
   if(scroll){main.scrollTop=scroll.main;const grid=main.querySelector('.sheet-viewport');if(grid){grid.scrollTop=scroll.grid;grid.scrollLeft=scroll.across;}}
   const indicator = $('#tabIndicator'), active = $(`#tabs button[data-tab="${tab}"]`);
   requestAnimationFrame(() => { indicator.style.opacity = active ? '1' : '0'; if (active) { indicator.style.left = active.offsetLeft + 'px'; indicator.style.width = active.offsetWidth + 'px'; } });
+  if (lastRenderedTab && (lastRenderedTab !== tab || (tab === 'sheet' && lastRenderedClient !== activeClient))) {
+    recordNav(lastRenderedTab, lastRenderedClient);
+  }
   if (lastRenderedTab !== tab) { const order = ['sheet','dashboard','tracker','groups','revenue','payments','invoices','client-details','settings']; const direction = order.indexOf(tab) >= order.indexOf(lastRenderedTab) ? 'tab-next' : 'tab-prev'; $('#main').classList.remove('tab-next','tab-prev'); void $('#main').offsetWidth; $('#main').classList.add(direction); lastRenderedTab = tab; }
   if(tab==='settings')showUpdateState(desktopUpdate);
-  lastRenderedClient=activeClient;bindMain();updateSyncUI();
+  lastRenderedClient=activeClient;bindMain();updateSyncUI();updateBackBtn();
 }
 function $$(s) { return [...document.querySelectorAll(s)]; }
 function renderAccess(){
@@ -277,8 +312,23 @@ function renderDeadlines() {
 function renderTracker() {
   const members=data.members.length?data.members:[{userId:'local-me',displayName:data.settings.displayName},{userId:'local-partner',displayName:data.settings.localPartner}];
   const working=data.items.filter(i=>['working','changes'].includes(i.status));
-  const unassigned=data.items.filter(i=>!i.assigneeId&&!['discarded','paid'].includes(i.status));
+  const unassigned=data.items.filter(i=>!i.assigneeId&&['pending','changes'].includes(i.status));
   const statusRank=s=>s==='changes'?1:s==='working'?2:s==='sent'?3:4;
+
+  const clientMap=new Map();
+  for(const item of unassigned){
+    if(!clientMap.has(item.clientId)){
+      const client=data.clients.find(c=>c.id===item.clientId)||{id:item.clientId,name:'Client'};
+      clientMap.set(item.clientId,{client,items:[],total:0});
+    }
+    const grp=clientMap.get(item.clientId);
+    grp.items.push(item);
+    grp.total+=(item.quotedTotal||effectiveItemValue(item));
+  }
+  const unassignedGroups=[...clientMap.values()].sort((a,b)=>b.items.length-a.items.length);
+  if(!openTrackerClients.size&&unassignedGroups.length){
+    openTrackerClients.add(unassignedGroups[0].client.id);
+  }
 
   const renderCard=(i,showStart=true)=>{
     const client=data.clients.find(c=>c.id===i.clientId);
@@ -301,7 +351,7 @@ function renderTracker() {
         ${i.dueDate?`<span class="tracker-due ${i.dueDate<today()&&!['sent','paid'].includes(i.status)?'overdue':''}">Due ${fmtDate(i.dueDate)}</span>`:''}
       </div>
       <div class="tracker-card-actions">
-        ${showStart&&!isWorking?`<button type="button" class="small-btn blue tracker-start-btn" data-tracker-start="${i.id}">▶ Start</button>`:showStart&&isWorking?`<span class="pill working tracker-active-badge">● In progress</span>`:''}
+        ${showStart&&!isWorking?`<button type="button" class="small-btn blue tracker-start-btn" data-tracker-start="${i.id}">▶ Start work</button>`:showStart&&isWorking?`<span class="pill working tracker-active-badge">● In progress</span>`:''}
         <select class="tracker-status-select ${i.status}" data-tracker-status="${i.id}" aria-label="Change status">
           ${['pending','working','changes','sent','paid','discarded'].map(s=>`<option value="${s}" ${i.status===s?'selected':''}>${s==='changes'?'Changes':s[0].toUpperCase()+s.slice(1)}</option>`).join('')}
           <option value="paid-date">Paid on date…</option>
@@ -342,32 +392,54 @@ function renderTracker() {
         </div>`;
       }).join('')}
     </div>
-    ${unassigned.length?`<div class="panel">
-      <h3>Unassigned active work <span class="muted">· ${unassigned.length} rows</span></h3>
-      <p class="muted">Rows without an assignee. Click to assign to a team member or open in the worksheet.</p>
-      <div class="tracker-grid" style="margin-top:12px">
-        ${unassigned.slice(0,40).map(i=>{
-          const client=data.clients.find(c=>c.id===i.clientId);
-          const amount=i.quotedTotal||effectiveItemValue(i);
-          return `<div class="tracker-card ${i.status}">
-            <div class="tracker-card-head" data-jump-item="${i.id}" title="Click to open row in worksheet">
-              <div class="tracker-card-title">
-                <strong>${esc(i.service||'Unnamed work')}</strong>
-                <span class="tracker-card-client">${esc(client?.name||'Client')}</span>
+    ${unassigned.length?`<div class="panel tracker-unassigned-section">
+      <h3>Unassigned pending work <span class="muted">· ${unassigned.length} pending row${unassigned.length===1?'':'s'} across ${unassignedGroups.length} client${unassignedGroups.length===1?'':'s'}</span></h3>
+      <p class="muted">Pending rows without an assignee. Click a client card to view its pending work and assign team members.</p>
+      <div class="tracker-client-groups">
+        ${unassignedGroups.map(g=>{
+          const isOpen=openTrackerClients.has(g.client.id);
+          return `<div class="tracker-client-card ${isOpen?'open':''}">
+            <div class="tracker-client-header" data-toggle-tracker-client="${esc(g.client.id)}" title="Click to ${isOpen?'collapse':'expand'} pending work">
+              <div class="tracker-client-title">
+                <span class="tracker-client-dot"></span>
+                <strong>${esc(g.client.name)}</strong>
+                <span class="pill pending">${g.items.length} pending</span>
+                <span class="tracker-client-total">${money(g.total)}</span>
               </div>
-              <div class="tracker-card-price">
-                <strong>${money(amount)}</strong>
-                ${i.rate?`<small>${i.quantity} × ${money(i.rate)}</small>`:''}
+              <div class="tracker-client-controls">
+                <button type="button" class="small-btn tracker-open-sheet-btn" data-client-open="${esc(g.client.id)}" onclick="event.stopPropagation()">Open sheet</button>
+                <span class="tracker-client-chevron">
+                  <svg viewBox="0 0 16 16" width="12" height="12" fill="none"><path d="m4 6 4 4 4-4" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                </span>
               </div>
             </div>
-            <div class="tracker-card-meta">
-              <span class="pill ${i.status}">${esc(displayStatus(i))}</span>
-              ${i.dueDate?`<span class="tracker-due ${i.dueDate<today()&&!['sent','paid'].includes(i.status)?'overdue':''}">Due ${fmtDate(i.dueDate)}</span>`:''}
-            </div>
-            <div class="tracker-card-actions">
-              <button type="button" class="small-btn blue tracker-start-btn" data-assignee-pick="${i.id}">Assign</button>
-              <button type="button" class="small-btn tracker-view-btn" data-jump-item="${i.id}">View sheet</button>
-            </div>
+            ${isOpen?`<div class="tracker-client-items">
+              <div class="tracker-grid">
+                ${g.items.map(i=>{
+                  const amount=i.quotedTotal||effectiveItemValue(i);
+                  return `<div class="tracker-card ${i.status}">
+                    <div class="tracker-card-head" data-jump-item="${i.id}" title="Click to open row in worksheet">
+                      <div class="tracker-card-title">
+                        <strong>${esc(i.service||'Unnamed work')}</strong>
+                        <span class="tracker-card-client">${esc(g.client.name)}</span>
+                      </div>
+                      <div class="tracker-card-price">
+                        <strong>${money(amount)}</strong>
+                        ${i.rate?`<small>${i.quantity} × ${money(i.rate)}</small>`:''}
+                      </div>
+                    </div>
+                    <div class="tracker-card-meta">
+                      <span class="pill ${i.status}">${esc(displayStatus(i))}</span>
+                      ${i.dueDate?`<span class="tracker-due ${i.dueDate<today()&&!['sent','paid'].includes(i.status)?'overdue':''}">Due ${fmtDate(i.dueDate)}</span>`:''}
+                    </div>
+                    <div class="tracker-card-actions">
+                      <button type="button" class="small-btn blue tracker-start-btn" data-assignee-pick="${i.id}">Assign</button>
+                      <button type="button" class="small-btn tracker-view-btn" data-jump-item="${i.id}">View sheet</button>
+                    </div>
+                  </div>`;
+                }).join('')}
+              </div>
+            </div>`:''}
           </div>`;
         }).join('')}
       </div>
@@ -517,6 +589,15 @@ function renderSettings() { const s=data.settings; return `<div class="section-t
 
 function bindMain() {
   $$('[data-action]').forEach(b=>b.onclick=()=>actions(b.dataset.action));
+  const backBtn=$('#topBackBtn');if(backBtn)backBtn.onclick=goBack;
+  $$('[data-toggle-tracker-client]').forEach(el=>{
+    el.onclick=()=>{
+      const cid=el.dataset.toggleTrackerClient;
+      if(openTrackerClients.has(cid))openTrackerClients.delete(cid);
+      else openTrackerClients.add(cid);
+      render();
+    };
+  });
   const addBankBtn=$('#addBankAccBtn');if(addBankBtn)addBankBtn.onclick=()=>bankAccountDialog();
   const addFirstBankBtn=$('#addFirstBankAccBtn');if(addFirstBankBtn)addFirstBankBtn.onclick=()=>bankAccountDialog();
   $$('[data-edit-bank]').forEach(b=>b.onclick=e=>{e.stopPropagation();bankAccountDialog(b.dataset.editBank);});
