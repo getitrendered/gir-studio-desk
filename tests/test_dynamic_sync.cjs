@@ -147,4 +147,37 @@ vm.runInContext("updateTrackerItemStatus('item_s1', 'sent')", context);
 const s1 = vm.runInContext("data.items.find(i => i.id === 'item_s1')", context);
 assert.equal(s1.status, 'sent', 'Samuel work transitioned to sent via updateTrackerItemStatus');
 
+// 11. Test sortedClients hierarchy: pending descending, then sent awaiting clearance, then inactive
+vm.runInContext(`
+data.clients = [
+  { id: 'cD', name: 'Inactive Client', sortOrder: 4 },
+  { id: 'cA', name: 'Most Pending Client', sortOrder: 1 },
+  { id: 'cC', name: 'Sent Awaiting Client', sortOrder: 3 },
+  { id: 'cB', name: 'Less Pending Client', sortOrder: 2 }
+];
+data.items = [
+  // cA has 3 pending
+  { id: 'i1', clientId: 'cA', status: 'pending', service: 'Task 1' },
+  { id: 'i2', clientId: 'cA', status: 'working', service: 'Task 2' },
+  { id: 'i3', clientId: 'cA', status: 'changes', service: 'Task 3' },
+  // cB has 1 pending
+  { id: 'i4', clientId: 'cB', status: 'pending', service: 'Task 4' },
+  // cC has 0 pending, but 2 sent awaiting clearance
+  { id: 'i5', clientId: 'cC', status: 'sent', service: 'Task 5' },
+  { id: 'i6', clientId: 'cC', status: 'sent', service: 'Task 6' },
+  // cD has only paid and discarded items
+  { id: 'i7', clientId: 'cD', status: 'paid', service: 'Task 7' },
+  { id: 'i8', clientId: 'cD', status: 'discarded', service: 'Task 8' }
+];
+`, context);
+
+const sorted = JSON.parse(JSON.stringify(vm.runInContext("sortedClients().map(c => c.id)", context)));
+assert.deepEqual(sorted, ['cA', 'cB', 'cC', 'cD'], 'Clients sorted: pending descending, then sent awaiting clearance, then inactive');
+assert.equal(sorted[0], 'cA', 'Extremely first client is cA with most pending work');
+
+// 12. Test Revenue Accordion drill-down
+const revHtml = vm.runInContext('renderRevenue()', context);
+assert.ok(revHtml.includes('revenue-month-accordion'), 'Revenue rendered with month dropdown accordions');
+assert.ok(revHtml.includes('revenue-month-summary'), 'Revenue month summary present');
+
 console.log('ALL DYNAMIC SYNC AND REVENUE TESTS PASSED!');

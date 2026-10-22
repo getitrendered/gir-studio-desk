@@ -25,6 +25,21 @@ function currentUserId() { return session?.user?.id || 'local-me'; }
 function person(id) { return data.members.find(m => m.userId === id)?.displayName || (id === 'local-me' ? data.settings.displayName : id === 'local-partner' ? data.settings.localPartner : 'Team member'); }
 function initials(name) { return String(name || '?').split(/\s+/).map(s => s[0]).join('').slice(0,2).toUpperCase(); }
 function unfinishedCount(clientId) { return data.items.filter(i=>i.clientId===clientId && !['sent','paid','discarded'].includes(i.status)).length; }
+function clientActivity(clientId) {
+  const items = data.items.filter(i => i.clientId === clientId);
+  const pending = items.filter(i => ['pending', 'working', 'changes'].includes(i.status)).length;
+  const sent = items.filter(i => i.status === 'sent').length;
+  return { pending, sent, active: pending + sent };
+}
+function sortedClients() {
+  return [...data.clients].sort((a, b) => {
+    const actA = clientActivity(a.id);
+    const actB = clientActivity(b.id);
+    if (actA.pending !== actB.pending) return actB.pending - actA.pending;
+    if (actA.sent !== actB.sent) return actB.sent - actA.sent;
+    return (a.sortOrder || 0) - (b.sortOrder || 0) || a.name.localeCompare(b.name);
+  });
+}
 function selectionLabel(){const total=data.items.filter(i=>selected.has(i.id)).reduce((sum,i)=>sum+num(i.quotedTotal),0);return selected.size?`${selected.size} selected · Total ${money(total)}`:'0 selected';}
 function avatar(id,name,size='') { const src=data.members.find(m=>m.userId===id)?.avatarData || (id===currentUserId()?data.settings.avatarData:''); return src&&/^data:image\/(?:png|jpeg|webp);base64,/i.test(src)?`<img class="avatar-image ${size}" src="${esc(src)}" alt="${esc(name)}">`:`<span>${esc(initials(name))}</span>`; }
 function billedIds() { return new Set(data.invoices.flatMap(inv => inv.itemIds || [])); }
@@ -158,8 +173,15 @@ function bindAccess(){
 }
 function renderClients() {
   const nav=$('#clientList'), position=nav.scrollLeft;
-  const list = data.clients.map(c=>({client:c,pending:unfinishedCount(c.id)})).sort((a,b)=>b.pending-a.pending || a.client.sortOrder-b.client.sortOrder || a.client.name.localeCompare(b.client.name));
-  nav.innerHTML = list.map(({client:c,pending}) => `<button class="client-tab ${activeClient===c.id && tab==='sheet'?'active':''}" data-client="${c.id}" title="${pending} unfinished rows">${esc(c.name)}<small>${pending}</small></button>`).join('');
+  const list = sortedClients();
+  if(!activeClient && list.length) activeClient = list[0].id;
+  nav.innerHTML = list.map(c => {
+    const act = clientActivity(c.id);
+    const badges = [];
+    if(act.pending > 0) badges.push(`<small class="pending-badge" title="${act.pending} pending tasks">${act.pending}</small>`);
+    if(act.sent > 0) badges.push(`<small class="sent-badge" title="${act.sent} sent awaiting payment">${act.sent} sent</small>`);
+    return `<button class="client-tab ${activeClient===c.id && tab==='sheet'?'active':''}" data-client="${c.id}" title="${act.pending} pending, ${act.sent} sent awaiting payment">${esc(c.name)}${badges.join('')}</button>`;
+  }).join('');
   nav.scrollLeft=position;
   const active=nav.querySelector('.client-tab.active');
   if(active){
@@ -256,7 +278,7 @@ function renderTracker() {
   const members=data.members.length?data.members:[{userId:'local-me',displayName:data.settings.displayName},{userId:'local-partner',displayName:data.settings.localPartner}];
   const working=data.items.filter(i=>['working','changes'].includes(i.status));
   const unassigned=data.items.filter(i=>!i.assigneeId&&!['discarded','paid'].includes(i.status));
-  const statusRank=s=>s==='working'?1:s==='changes'?2:s==='pending'?3:4;
+  const statusRank=s=>s==='changes'?1:s==='working'?2:s==='sent'?3:4;
 
   const renderCard=(i,showStart=true)=>{
     const client=data.clients.find(c=>c.id===i.clientId);
@@ -280,7 +302,7 @@ function renderTracker() {
       </div>
       <div class="tracker-card-actions">
         ${showStart&&!isWorking?`<button type="button" class="small-btn blue tracker-start-btn" data-tracker-start="${i.id}">▶ Start</button>`:showStart&&isWorking?`<span class="pill working tracker-active-badge">● In progress</span>`:''}
-        <select class="tracker-status-select" data-tracker-status="${i.id}" aria-label="Change status">
+        <select class="tracker-status-select ${i.status}" data-tracker-status="${i.id}" aria-label="Change status">
           ${['pending','working','changes','sent','paid','discarded'].map(s=>`<option value="${s}" ${i.status===s?'selected':''}>${s==='changes'?'Changes':s[0].toUpperCase()+s.slice(1)}</option>`).join('')}
           <option value="paid-date">Paid on date…</option>
         </select>
@@ -386,8 +408,36 @@ function renderRevenue() {
   return `<div class="section-top"><div><h2>Revenue</h2><p>Money received is recorded by payment date and client. Estimated incoming is unpaid active work.</p></div></div>
     <div class="cards"><div class="card green"><div class="card-label">Received</div><div class="card-value">${money(f.revenue)}</div><div class="card-foot">Recorded cash receipts</div></div><div class="card blue"><div class="card-label">Paid work value</div><div class="card-value">${money(f.closed)}</div><div class="card-foot">Value marked paid on worksheets</div></div><div class="card amber"><div class="card-label">Open-work advances</div><div class="card-value">${money(f.openAdvances)}</div><div class="card-foot">Already received; included in historical receipts where recorded</div></div><div class="card"><div class="card-label">Discarded project value</div><div class="card-value">${money(f.discarded)}</div><div class="card-foot">Excluded from income estimates</div></div></div>
     <div class="cards"><div class="card amber"><div class="card-label">Work sent expected</div><div class="card-value">${money(f.awaiting)}</div><div class="card-foot">Sent or invoiced balances still due</div></div><div class="card blue"><div class="card-label">Estimated incoming</div><div class="card-value">${money(f.estimated)}</div><div class="card-foot">All unpaid active work, including sent</div></div></div>
-    <div class="panel"><h3>Revenue by month</h3><p class="muted">Historical payments come from the supplied revenue workbook. New payments appear here when work is marked Paid.</p>${months.size?`<table class="table-list"><thead><tr><th>MONTH</th><th>PAYMENTS</th><th>RECEIVED</th></tr></thead><tbody>${[...months].map(([key,m])=>`<tr><td><strong>${monthName(key)}</strong></td><td>${m.receipts.length}</td><td><strong>${money(m.total)}</strong></td></tr>`).join('')}</tbody></table>`:'<p class="muted">No payment receipts recorded.</p>'}</div>
-    <div class="panel"><h3>Payment history</h3><p class="muted">Client, amount and receipt date for every recorded payment. A month-only date means the source day could not be verified.</p>${[...months].map(([key,m])=>`<details class="revenue-month"><summary><strong>${monthName(key)}</strong><span>${m.receipts.length} payments · ${money(m.total)}</span></summary><table class="table-list"><thead><tr><th>DATE</th><th>CLIENT</th><th>PAYMENT</th><th>AMOUNT</th></tr></thead><tbody>${m.receipts.map(r=>`<tr><td>${r.receivedOn?fmtDate(r.receivedOn):'Day unconfirmed'}</td><td>${esc(r.effectiveClientName||r.clientName)}</td><td>${esc(r.effectiveDescription||r.description|| (r.source==='historical_workbook'?'Historical payment':'Payment'))}</td><td><strong>${money(r.effectiveAmount!=null?r.effectiveAmount:r.amount)}</strong></td></tr>`).join('')}</tbody></table></details>`).join('')||'<p class="muted">No payments yet.</p>'}</div>
+    <div class="panel">
+      <h3>Revenue by month</h3>
+      <p class="muted">Click any month to open the dropdown details showing exactly who has paid, payment dates, and amounts.</p>
+      ${months.size?`
+        <div class="revenue-month-list">
+          ${[...months].map(([key,m],idx)=>`
+            <details class="revenue-month-accordion" ${idx===0?'open':''}>
+              <summary class="revenue-month-summary">
+                <div class="revenue-month-col">
+                  <span class="revenue-month-chevron">▶</span>
+                  <strong>${monthName(key)}</strong>
+                  <span class="muted font-11">(${m.receipts.length} payment${m.receipts.length===1?'':'s'})</span>
+                </div>
+                <div class="revenue-month-sum">
+                  <strong>${money(m.total)}</strong>
+                </div>
+              </summary>
+              <div class="revenue-month-breakdown">
+                <table class="table-list">
+                  <thead><tr><th>DATE</th><th>CLIENT</th><th>PAYMENT / SERVICE</th><th style="text-align:right">AMOUNT</th></tr></thead>
+                  <tbody>
+                    ${m.receipts.map(r=>`<tr><td>${r.receivedOn?fmtDate(r.receivedOn):'<span class="muted">Day unconfirmed</span>'}</td><td><strong>${esc(r.effectiveClientName||r.clientName)}</strong></td><td>${esc(r.effectiveDescription||r.description||(r.source==='historical_workbook'?'Historical payment':'Payment'))}</td><td style="text-align:right"><strong>${money(r.effectiveAmount!=null?r.effectiveAmount:r.amount)}</strong></td></tr>`).join('')}
+                  </tbody>
+                </table>
+              </div>
+            </details>
+          `).join('')}
+        </div>
+      `:'<p class="muted">No payment receipts recorded.</p>'}
+    </div>
     ${renderOutstandingPanel(f)}`;
 }
 function renderOutstandingPanel(f=financials()) {
@@ -1020,7 +1070,7 @@ async function flushPending() {
   } finally { syncing=false; if(successful&&data.pending.length)scheduleSync(); }
 }
 async function fetchAll(table){let out=[];for(let start=0;;start+=1000){const {data:rows,error}=await clientApi.from(table).select('*').eq('workspace_id',data.settings.workspaceId).order('id').range(start,start+999);if(error)throw error;out.push(...rows);if(rows.length<1000)break;}return out;}
-async function pullRemote(){if(!clientApi||!session||!data.settings.workspaceId)return;const ws=data.settings.workspaceId;const [w,m,...tables]=await Promise.all([clientApi.from('workspaces').select('*').eq('id',ws).single(),clientApi.from('members').select('*').eq('workspace_id',ws),...['clients','deal_groups','project_groups','work_items','invoices','payment_receipts'].map(fetchAll)]);if(w.error)throw w.error;if(m.error)throw m.error;data.settings.joinCode=w.data.join_code;if(w.data.business&&Object.keys(w.data.business).length)data.settings.seller={...defaults.settings.seller,...data.settings.seller,...w.data.business};data.members=m.data.map(x=>({userId:x.user_id,displayName:x.display_name,avatarData:x.avatar_data||''}));['clients','groups','projectGroups','items','invoices','receipts'].forEach((table,k)=>{const pending=new Set(data.pending.filter(p=>p.table===table).map(p=>p.id));const pendingDeletes=new Set((data.pendingDeletes||[]).filter(p=>p.table===table).map(p=>p.id));const locals=data[table].filter(x=>pending.has(x.id));data[table]=tables[k].filter(x=>!pendingDeletes.has(x.id)).map(x=>localRow(table,x));for(const local of locals){const ix=data[table].findIndex(x=>x.id===local.id);if(ix<0)data[table].push(local);else data[table][ix]=local;}});if(!activeClient&&data.clients.length)activeClient=data.clients[0].id;lastSyncTime=Date.now();save();render();updateSyncUI();}
+async function pullRemote(){if(!clientApi||!session||!data.settings.workspaceId)return;const ws=data.settings.workspaceId;const [w,m,...tables]=await Promise.all([clientApi.from('workspaces').select('*').eq('id',ws).single(),clientApi.from('members').select('*').eq('workspace_id',ws),...['clients','deal_groups','project_groups','work_items','invoices','payment_receipts'].map(fetchAll)]);if(w.error)throw w.error;if(m.error)throw m.error;data.settings.joinCode=w.data.join_code;if(w.data.business&&Object.keys(w.data.business).length)data.settings.seller={...defaults.settings.seller,...data.settings.seller,...w.data.business};data.members=m.data.map(x=>({userId:x.user_id,displayName:x.display_name,avatarData:x.avatar_data||''}));['clients','groups','projectGroups','items','invoices','receipts'].forEach((table,k)=>{const pending=new Set(data.pending.filter(p=>p.table===table).map(p=>p.id));const pendingDeletes=new Set((data.pendingDeletes||[]).filter(p=>p.table===table).map(p=>p.id));const locals=data[table].filter(x=>pending.has(x.id));data[table]=tables[k].filter(x=>!pendingDeletes.has(x.id)).map(x=>localRow(table,x));for(const local of locals){const ix=data[table].findIndex(x=>x.id===local.id);if(ix<0)data[table].push(local);else data[table][ix]=local;}});if(!activeClient || !data.clients.some(c=>c.id===activeClient))activeClient=sortedClients()[0]?.id||null;lastSyncTime=Date.now();save();render();updateSyncUI();}
 function subscribe(){
   if(!clientApi||!session||!data.settings.workspaceId)return;
   if(channel)clientApi.removeChannel(channel);
@@ -1136,4 +1186,4 @@ document.addEventListener('paste',e=>{
   if(value.includes('\t')||value.includes('\n'))pasteGrid(e,{dataset:{id:selectionCell.id,cell:selectionCell.key}});
   else{e.preventDefault();editCell(selectionCell.id,selectionCell.key,value);}
 });
-(async()=>{try{const saved=await window.desk.read();if(saved)data={...structuredClone(defaults),...saved,settings:{...structuredClone(defaults.settings),...(saved.settings||{}),seller:{...defaults.settings.seller,...(saved.settings?.seller||{})}}};if(!activeClient&&data.clients.length)activeClient=data.clients[0].id;render();setupSupabase();}catch(e){render();toast('Could not load local data: '+e.message);}})();
+(async()=>{try{const saved=await window.desk.read();if(saved)data={...structuredClone(defaults),...saved,settings:{...structuredClone(defaults.settings),...(saved.settings||{}),seller:{...defaults.settings.seller,...(saved.settings?.seller||{})}}};const topClient=sortedClients()[0]?.id;if(topClient)activeClient=topClient;render();setupSupabase();}catch(e){render();toast('Could not load local data: '+e.message);}})();
