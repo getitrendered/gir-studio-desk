@@ -467,10 +467,11 @@ async function saveCompanyLogo(file){
     const scale=Math.min(1,640/image.naturalWidth,240/image.naturalHeight),canvas=document.createElement('canvas');
     canvas.width=Math.max(1,Math.round(image.naturalWidth*scale));canvas.height=Math.max(1,Math.round(image.naturalHeight*scale));
     canvas.getContext('2d').drawImage(image,0,0,canvas.width,canvas.height);
+    $$('[data-setting^="seller."]').forEach(el=>{data.settings.seller[el.dataset.setting.split('.')[1]]=el.value;});
     data.settings.seller.logoData=canvas.toDataURL('image/png');save();
     if(clientApi&&session&&data.settings.workspaceId){const {error}=await clientApi.from('workspaces').update({business:data.settings.seller}).eq('id',data.settings.workspaceId);if(error)throw error;}
     render();toast('Company logo saved');
-  }catch(error){toast('Logo saved locally; team sync failed: '+error.message);}
+  }catch(error){render();toast('Could not sync company logo: '+error.message);}
   finally{URL.revokeObjectURL(url);}
 }
 function inputValue(id){return $('#'+id)?.value.trim()||'';}
