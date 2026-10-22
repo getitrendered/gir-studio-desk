@@ -28,8 +28,12 @@ create index if not exists payment_receipts_month_idx on public.payment_receipts
 alter table public.payment_receipts enable row level security;
 drop policy if exists "members read payment receipts" on public.payment_receipts;
 drop policy if exists "members insert payment receipts" on public.payment_receipts;
+drop policy if exists "members update payment receipts" on public.payment_receipts;
+drop policy if exists "members delete payment receipts" on public.payment_receipts;
 create policy "members read payment receipts" on public.payment_receipts for select to authenticated using (public.is_member(workspace_id));
 create policy "members insert payment receipts" on public.payment_receipts for insert to authenticated with check (public.is_member(workspace_id));
+create policy "members update payment receipts" on public.payment_receipts for update to authenticated using (public.is_member(workspace_id)) with check (public.is_member(workspace_id));
+create policy "members delete payment receipts" on public.payment_receipts for delete to authenticated using (public.is_member(workspace_id));
 do $$ begin
   if not exists (select 1 from pg_publication_tables where pubname='supabase_realtime' and schemaname='public' and tablename='payment_receipts') then
     alter publication supabase_realtime add table public.payment_receipts;
