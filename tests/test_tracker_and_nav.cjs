@@ -72,8 +72,12 @@ assert.equal(vm.runInContext('navHistory.length', context), 0, 'navHistory shoul
 assert.equal(backBtnMock.disabled, true, 'Back button should be disabled when history is empty');
 console.log('✓ Test 1: Navigation history & Back button passed');
 
-// Test 2: Unassigned work in Work Tracker excludes 'sent' and only shows pending/changes
+// Test 2: Client grouping and dropdown expand/collapse in Work Tracker
 vm.runInContext(`
+trackerClientsInitialized = false;
+openTrackerClients.clear();
+trackerClientFilter = 'active';
+trackerClientSearch = '';
 data.clients = [
   { id: 'c_purple', name: 'PURPLE TREE' },
   { id: 'c_tayari', name: 'TAYARI EVENTS' }
@@ -90,38 +94,47 @@ data.items = [
 
 const trackerHtml = vm.runInContext('renderTracker()', context);
 
-// 'sent' items should NOT be in unassigned section
-assert.ok(!trackerHtml.includes('BAR FLOWER'), 'Sent item BAR FLOWER should NOT be in unassigned tracker');
-assert.ok(!trackerHtml.includes('PAID ITEM'), 'Paid item should NOT be in unassigned tracker');
-
-// The default open client card shows its pending items
-assert.ok(trackerHtml.includes('SANGEET BUFFET'), 'Pending unassigned item should be shown in open client card');
-
-// Both client name cards are displayed
+// Both active client cards are displayed (neither is omitted!)
 assert.ok(trackerHtml.includes('tracker-client-card'), 'Client name cards rendered');
 assert.ok(trackerHtml.includes('PURPLE TREE'), 'Client name PURPLE TREE displayed');
 assert.ok(trackerHtml.includes('TAYARI EVENTS'), 'Client name TAYARI EVENTS displayed');
 assert.ok(trackerHtml.includes('data-toggle-tracker-client'), 'Toggle client card attribute present');
 
-// When expanding second client card, its pending items show
-vm.runInContext("openTrackerClients.add('c_tayari')", context);
-const expandedHtml = vm.runInContext('renderTracker()', context);
-assert.ok(expandedHtml.includes('TICKET COUNTER'), 'Pending unassigned item in expanded card should be shown');
-console.log('✓ Test 2: Unassigned tracker filter passed (sent items excluded)');
-console.log('✓ Test 3: Unassigned client name grouping & expansion passed');
+// Paid items are excluded from active cards
+assert.ok(!trackerHtml.includes('PAID ITEM'), 'Paid item should NOT be in active tracker cards');
 
-// Test 4: "▶ Start work" button label
+// TAYARI EVENTS has 2 pending items (i3, i6), PURPLE TREE has 1 (i2).
+// TAYARI EVENTS is sorted first and auto-opened on initial view.
+assert.ok(trackerHtml.includes('TICKET COUNTER'), 'First client pending item shown in open card');
+
+// Test 3: Dropdown collapse bugfix verification:
+// When the user collapses the only open card, it MUST STAY CLOSED and not auto-reopen!
+vm.runInContext("openTrackerClients.clear();", context);
+const collapsedHtml = vm.runInContext('renderTracker()', context);
+assert.ok(!collapsedHtml.includes('TICKET COUNTER'), 'Item in collapsed card must not be rendered');
+assert.ok(!collapsedHtml.includes('tracker-client-card open'), 'No cards should have open class when collapsed');
+console.log('✓ Test 2: Client cards rendered for all active clients');
+console.log('✓ Test 3: Accordion dropdown collapses and stays closed without auto-reopening');
+
+// Test 4: Expanding a specific client card shows its pending and sent sections
+vm.runInContext("openTrackerClients.add('c_purple');", context);
+const purpleHtml = vm.runInContext('renderTracker()', context);
+assert.ok(purpleHtml.includes('SANGEET BUFFET'), 'Pending item SANGEET BUFFET shown when PURPLE TREE expanded');
+assert.ok(purpleHtml.includes('BAR FLOWER'), 'Sent item BAR FLOWER shown under sent section in PURPLE TREE');
+console.log('✓ Test 4: Client card expands with pending and sent sections');
+
+// Test 5: "▶ Start work" button label
 assert.ok(trackerHtml.includes('▶ Start work'), 'Button label is ▶ Start work');
 assert.ok(!trackerHtml.includes('▶ Start<'), 'Old ▶ Start button label is replaced');
-console.log('✓ Test 4: ▶ Start work button label passed');
+console.log('✓ Test 5: ▶ Start work button label passed');
 
-// Test 5: Verify new logo assets
+// Test 6: Verify new logo assets
 const iconPng = path.join(__dirname, '..', 'assets', 'gir-icon.png');
 const iconIco = path.join(__dirname, '..', 'assets', 'gir-icon.ico');
 assert.ok(fs.existsSync(iconPng), 'gir-icon.png exists');
 assert.ok(fs.statSync(iconPng).size > 10000, 'gir-icon.png has content');
 assert.ok(fs.existsSync(iconIco), 'gir-icon.ico exists');
 assert.ok(fs.statSync(iconIco).size > 10000, 'gir-icon.ico has content');
-console.log('✓ Test 5: App logo assets verified');
+console.log('✓ Test 6: App logo assets verified');
 
 console.log('ALL WORK TRACKER & NAVIGATION TESTS PASSED!');

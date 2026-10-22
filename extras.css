@@ -406,7 +406,19 @@ button:disabled,select:disabled,[role="button"][aria-disabled="true"],[role="opt
 
 /* Work tracker client grouping */
 .tracker-unassigned-section{margin-top:20px}
-.tracker-client-groups{display:flex;flex-direction:column;gap:10px;margin-top:14px}
+.tracker-clients-section-head{display:flex;align-items:flex-start;justify-content:space-between;gap:16px;flex-wrap:wrap;margin-bottom:4px}
+.tracker-clients-header-actions{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;margin:12px 0 14px}
+.tracker-filter-pills{display:flex;align-items:center;gap:6px;flex-wrap:wrap}
+.tracker-pill-btn{border:1px solid #d4ded6;background:#fff;color:#45594b;border-radius:20px;padding:4px 12px;font-size:12px;font-weight:600;cursor:pointer;transition:all .15s ease}
+.tracker-pill-btn:hover{background:#f0f6f2;border-color:#b5ccbb;color:#183624}
+.tracker-pill-btn.active{background:#168451;border-color:#168451;color:#fff;box-shadow:0 1px 3px rgba(22,132,81,0.2)}
+.tracker-header-right{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.tracker-search-input{border:1px solid #d4ded6;background:#fff;border-radius:6px;padding:4px 10px;font-size:12px;color:#1a3324;outline:none;width:150px;transition:border-color .15s ease}
+.tracker-search-input:focus{border-color:#168451;box-shadow:0 0 0 2px rgba(22,132,81,0.12)}
+.tracker-accordion-btn{font-size:11px;padding:4px 10px;border-radius:6px;background:#f3f7f4;border:1px solid #d4ded6;color:#334a3b;cursor:pointer;transition:all .15s ease}
+.tracker-accordion-btn:hover{background:#e7efe9;color:#142d1f}
+
+.tracker-client-groups{display:flex;flex-direction:column;gap:10px;margin-top:10px}
 .tracker-client-card{border:1px solid #dce6de;border-radius:10px;background:#fff;overflow:hidden;box-shadow:0 1px 3px rgba(0,0,0,0.02);transition:border-color .15s ease,box-shadow .15s ease}
 .tracker-client-card:hover{border-color:#b9d0bf}
 .tracker-client-card.open{border-color:#168451;box-shadow:0 2px 8px rgba(22,132,81,0.08)}
@@ -414,8 +426,10 @@ button:disabled,select:disabled,[role="button"][aria-disabled="true"],[role="opt
 .tracker-client-card.open .tracker-client-header{background:#f6fbf7;border-bottom:1px solid #e5eee7}
 .tracker-client-header:hover{background:#f0f7f2}
 .tracker-client-title{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
-.tracker-client-dot{width:8px;height:8px;border-radius:50%;background:#e09312;display:inline-block;flex:none}
+.tracker-client-dot{width:8px;height:8px;border-radius:50%;background:#a4b0a7;display:inline-block;flex:none}
+.tracker-client-dot.has-pending{background:#e09312;box-shadow:0 0 0 3px rgba(224,147,18,0.2)}
 .tracker-client-card.open .tracker-client-dot{background:#168451}
+.tracker-client-card.open .tracker-client-dot.has-pending{background:#e09312}
 .tracker-client-title strong{font-size:13px;color:#1a3324;font-weight:700}
 .tracker-client-total{font-size:11px;font-weight:700;color:#168451;background:#e9f6ed;padding:2px 8px;border-radius:12px}
 .tracker-client-controls{display:flex;align-items:center;gap:10px}
@@ -423,3 +437,19 @@ button:disabled,select:disabled,[role="button"][aria-disabled="true"],[role="opt
 .tracker-client-chevron{display:inline-flex;align-items:center;color:#6b8272;transition:transform .2s ease}
 .tracker-client-card.open .tracker-client-chevron{transform:rotate(180deg);color:#168451}
 .tracker-client-items{padding:14px;background:#fff}
+
+/* Sub-group headers inside client cards */
+.tracker-subgroup-title{display:flex;align-items:center;gap:8px;font-size:12px;font-weight:700;color:#3d5244;margin:14px 0 8px;padding-bottom:5px;border-bottom:1px dashed #e1eae3}
+.tracker-subgroup-title:first-child{margin-top:0}
+.tracker-subgroup-dot{width:7px;height:7px;border-radius:50%;display:inline-block;flex:none}
+.tracker-subgroup-dot.pending{background:#e09312}
+.tracker-subgroup-dot.working{background:#0d8bf0}
+.tracker-subgroup-dot.sent{background:#168451}
+
+/* Assignee badges inside tracker cards */
+.tracker-assignee-badge{display:inline-flex;align-items:center;gap:5px;font-size:11px;color:#2c4033;background:#f0f6f2;padding:2px 8px;border-radius:12px;border:1px solid #dce7df}
+.tracker-assignee-avatar{display:inline-flex;width:16px;height:16px;border-radius:50%;overflow:hidden;flex:none}
+.tracker-assignee-avatar img, .tracker-assignee-avatar span{width:100%;height:100%;display:flex;align-items:center;justify-content:center;font-size:9px}
+.tracker-unassigned-tag{display:inline-block;font-size:11px;color:#856404;background:#fff3cd;padding:2px 8px;border-radius:12px;border:1px solid #ffeeba}
+.pill.unassigned-badge{background:#eef1f4;color:#495057;border:1px solid #dde2e5}
+
