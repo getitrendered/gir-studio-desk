@@ -134,6 +134,7 @@ create policy "members delete items" on public.work_items for delete to authenti
 create policy "members read invoices" on public.invoices for select to authenticated using (public.is_member(workspace_id));
 create policy "members insert invoices" on public.invoices for insert to authenticated with check (public.is_member(workspace_id));
 create policy "members update invoices" on public.invoices for update to authenticated using (public.is_member(workspace_id)) with check (public.is_member(workspace_id));
+create policy "members delete invoices" on public.invoices for delete to authenticated using (public.is_member(workspace_id));
 
 alter publication supabase_realtime add table public.clients;
 alter publication supabase_realtime add table public.deal_groups;

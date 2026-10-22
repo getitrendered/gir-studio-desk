@@ -41,4 +41,4 @@ jobs:
           $base = "release/GIR-Studio-Desk-$version-Setup.exe"
           $assets = @($base, "$base.blockmap", 'release/latest.yml')
           foreach ($asset in $assets) { if (!(Test-Path -LiteralPath $asset)) { throw "Missing release asset: $asset" } }
-          gh release create '${{ github.ref_name }}' @assets --verify-tag --title 'GIR Studio Desk ${{ github.ref_name }}' --notes 'Historical monthly revenue and client payment history from the supplied workbook. New paid work, group deals and invoices create dated receipts. Groups can be marked Sent or Paid together. Adds company logo and bank details to invoices, and completes the selected-row top outline.'
+          gh release create '${{ github.ref_name }}' @assets --verify-tag --title 'GIR Studio Desk ${{ github.ref_name }}' --notes 'Blank worksheet rows no longer show a stray selection line. Invoices can now be deleted from the invoice list or preview after confirmation; recorded payments remain in revenue.'

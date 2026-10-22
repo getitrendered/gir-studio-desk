@@ -30,6 +30,11 @@ const client = new Client({
       console.log('Supabase setup status:', result.rows[0]);
       return;
     }
+    if (process.argv.includes('--invoice-delete')) {
+      await client.query(fs.readFileSync(path.join(__dirname, 'invoice-delete.sql'), 'utf8'));
+      console.log('Invoice deletion enabled for workspace members.');
+      return;
+    }
     if (process.argv.includes('--upgrade')) {
       await client.query('begin');
       await client.query(fs.readFileSync(path.join(__dirname, 'import-migration.sql'), 'utf8'));
