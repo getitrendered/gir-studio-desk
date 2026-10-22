@@ -8,7 +8,7 @@ const esc = v => String(v ?? '').replace(/[&<>"']/g, c => ({ '&':'&amp;', '<':'&
 const fmtDate = d => { if (!d) return '—'; const x = new Date(d + 'T00:00:00'); return Number.isNaN(x.getTime()) ? d : x.toLocaleDateString('en-IN', { day:'numeric', month:'short', year:'numeric' }); };
 const defaults = { clients:[], groups:[], projectGroups:[], items:[], invoices:[], receipts:[], members:[], pending:[], settings:{ seller:{ name:'GIR — Get It Rendered', address:'', email:'', phone:'', taxId:'', bankDetails:'', logoData:'' }, url:'https://isdxybpeagloikchhsbp.supabase.co', key:'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImlzZHh5YnBlYWdsb2lrY2hoc2JwIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTI1NzkzMjcsImV4cCI6MjEwODE1NTMyN30.ll1YG9uyrTqmLzE90miCk-O1Ab5VkBPfqrCPDDUc5u8', workspaceId:'', displayName:'Samuel', localPartner:'Mezrid', zoom:100 } };
 const GIR_WORKSPACE_ID='17f39873-e10f-4bdf-93ee-1f92b3e25251';
-let data = structuredClone(defaults), tab = 'sheet', lastRenderedTab = null, lastRenderedClient = null, activeClient = null, selected = new Set(), selectionAnchor = null, selectionCell = null, collapsedGroups = new Set(), blankRows = 60, highlightUser = null, filter = 'all', clientApi = null, session = null, channel = null, syncing = false, toastTimer, syncTimer, importPreview = null, previewClientIndex = 0, migrating = false;
+let data = structuredClone(defaults), tab = 'sheet', lastRenderedTab = null, lastRenderedClient = null, activeClient = null, selected = new Set(), selectionAnchor = null, selectionCell = null, collapsedGroups = new Set(), blankRows = 60, highlightUser = null, filter = 'all', clientApi = null, session = null, channel = null, syncing = false, toastTimer, syncTimer, lastSyncTime = Date.now(), importPreview = null, previewClientIndex = 0, migrating = false;
 let authLoading=true,workspaceReady=false,workspaceResolving=false,accessMode='signin',accessError='',activeStatusMenu=null;
 let desktopUpdate = { status: 'unavailable', message: 'Checking update support…' };
 
@@ -126,9 +126,9 @@ function render() {
   document.documentElement.style.setProperty('--grid-height', Math.round(29 * data.settings.zoom / 100) + 'px');
   if(authLoading||!session||!workspaceReady||data.settings.workspaceId!==GIR_WORKSPACE_ID){
     $('#app').classList.remove('sheet-mode');$('#app').classList.add('access-mode');
-    $('#tabs').hidden=true;$('.client-tabs').hidden=true;main.innerHTML=renderAccess();bindAccess();return;
+    const tabsH=$('#tabsHeader')||$('#tabs');if(tabsH)tabsH.hidden=true;$('.client-tabs').hidden=true;main.innerHTML=renderAccess();bindAccess();return;
   }
-  $('#app').classList.remove('access-mode');$('#tabs').hidden=false;$('.client-tabs').hidden=false;
+  $('#app').classList.remove('access-mode');const tabsH=$('#tabsHeader')||$('#tabs');if(tabsH)tabsH.hidden=false;$('.client-tabs').hidden=false;
   $('#app').classList.toggle('sheet-mode',tab==='sheet');
   const live = !!(clientApi && session && data.settings.workspaceId);
   $$('#tabs button').forEach(b => b.classList.toggle('active', b.dataset.tab === tab));
@@ -139,7 +139,7 @@ function render() {
   requestAnimationFrame(() => { indicator.style.opacity = active ? '1' : '0'; if (active) { indicator.style.left = active.offsetLeft + 'px'; indicator.style.width = active.offsetWidth + 'px'; } });
   if (lastRenderedTab !== tab) { const order = ['sheet','dashboard','tracker','groups','revenue','payments','invoices','client-details','settings']; const direction = order.indexOf(tab) >= order.indexOf(lastRenderedTab) ? 'tab-next' : 'tab-prev'; $('#main').classList.remove('tab-next','tab-prev'); void $('#main').offsetWidth; $('#main').classList.add(direction); lastRenderedTab = tab; }
   if(tab==='settings')showUpdateState(desktopUpdate);
-  lastRenderedClient=activeClient;bindMain();
+  lastRenderedClient=activeClient;bindMain();updateSyncUI();
 }
 function $$(s) { return [...document.querySelectorAll(s)]; }
 function renderAccess(){
@@ -244,7 +244,7 @@ function renderSheet() {
       ${value('remarks',i.remarks||'')}</tr>`;
   }
   if(filter==='all')rows+=Array.from({length:blankRows},(_,n)=>blankRowHtml(all.length+n)).join('');
-  return `<div class="sheet-shell"><div class="sheet-toolbar"><div class="actions"><button class="small-btn blue" data-action="assign" ${selected.size?'':'disabled'}>● Start work</button><button class="small-btn" data-action="complete" ${selected.size?'':'disabled'}>✓ Mark sent</button><button class="small-btn" data-action="invoice" ${selected.size?'':'disabled'}>▣ Create invoice</button><button class="small-btn" data-action="group" ${selected.size>1?'':'disabled'}>Group deal</button><button class="small-btn" data-action="project-group" ${selected.size?'':'disabled'}>Group project</button><select id="bulkStatus" aria-label="Set selected rows status" ${selected.size?'':'disabled'}><option value="">Set status…</option>${['pending','working','changes','sent','paid','discarded'].map(s=>`<option value="${s}">${s[0].toUpperCase()+s.slice(1)}</option>`).join('')}</select><select id="workFilter" aria-label="Filter work">${['all','pending','working','changes','sent','paid','discarded'].map(s=>`<option value="${s}" ${filter===s?'selected':''}>${s==='all'?'All work':s[0].toUpperCase()+s.slice(1)}</option>`).join('')}</select></div><span class="hint" id="selectedCount">${selectionLabel()}</span></div>
+  return `<div class="sheet-shell"><div class="sheet-toolbar"><div class="actions"><button class="small-btn blue" data-action="assign" ${selected.size?'':'disabled'}>● Start work</button><button class="small-btn" data-action="complete" ${selected.size?'':'disabled'}>✓ Mark sent</button><button class="small-btn" data-action="invoice" ${selected.size?'':'disabled'}>▣ Create invoice</button><button class="small-btn" data-action="group" ${selected.size>1?'':'disabled'}>Group deal</button><button class="small-btn" data-action="project-group" ${selected.size?'':'disabled'}>Group project</button><select id="bulkStatus" aria-label="Set selected rows status" ${selected.size?'':'disabled'}><option value="">Set status…</option>${['pending','working','changes','sent','paid','discarded'].map(s=>`<option value="${s}">${s[0].toUpperCase()+s.slice(1)}</option>`).join('')}<option value="paid-date">Paid on date…</option></select><select id="workFilter" aria-label="Filter work">${['all','pending','working','changes','sent','paid','discarded'].map(s=>`<option value="${s}" ${filter===s?'selected':''}>${s==='all'?'All work':s[0].toUpperCase()+s.slice(1)}</option>`).join('')}</select></div><span class="hint" id="selectedCount">${selectionLabel()}</span></div>
     <div class="sheet-viewport"><table class="sheet"><thead><tr><th class="row-selector"><input type="checkbox" id="selectAll" aria-label="Select visible rows"></th><th>SR</th><th>DATE</th><th>SERVICE PROVIDED</th><th>QTY</th><th>RATE</th><th>TOTAL</th><th>STATUS</th><th>ADVANCE</th><th>ASSIGNED</th><th>REMARKS</th></tr></thead><tbody>${rows}</tbody></table></div></div>`;
 }
 
@@ -255,10 +255,101 @@ function renderDeadlines() {
 function renderTracker() {
   const members=data.members.length?data.members:[{userId:'local-me',displayName:data.settings.displayName},{userId:'local-partner',displayName:data.settings.localPartner}];
   const working=data.items.filter(i=>['working','changes'].includes(i.status));
-  const pending=data.items.filter(i=>i.status==='pending');
-  return `<div class="section-top"><div><h2>Work Tracker</h2><p>Live assignments and unfinished work across clients.</p></div><span class="pill working">${working.length} being worked on</span></div>
-    <div class="tracker-grid">${members.map(m=>{const work=working.filter(i=>i.assigneeId===m.userId);return `<div class="panel"><h3><span class="tracker-avatar">${avatar(m.userId,m.displayName)}</span>${esc(m.displayName)} <span class="muted">${work.length}</span></h3>${work.length?work.map(i=>`<button class="tracker-item" data-jump-item="${i.id}"><strong>${esc(i.service)}</strong><small>${esc(data.clients.find(c=>c.id===i.clientId)?.name)} · ${esc(displayStatus(i))}</small></button>`).join(''):'<p class="muted">Available</p>'}</div>`;}).join('')}</div>
-    <div class="panel"><h3>Not started · ${pending.length}</h3>${pending.slice(0,30).map(i=>`<button class="tracker-item" data-jump-item="${i.id}"><strong>${esc(i.service)}</strong><small>${esc(data.clients.find(c=>c.id===i.clientId)?.name)}</small></button>`).join('')||'<p class="muted">No pending rows.</p>'}</div>`;
+  const unassigned=data.items.filter(i=>!i.assigneeId&&!['discarded','paid'].includes(i.status));
+  const statusRank=s=>s==='working'?1:s==='changes'?2:s==='pending'?3:4;
+
+  const renderCard=(i,showStart=true)=>{
+    const client=data.clients.find(c=>c.id===i.clientId);
+    const amount=i.quotedTotal||effectiveItemValue(i);
+    const rateText=i.rate?`${i.quantity>1?i.quantity+' × ':''}${money(i.rate)}`:'';
+    const isWorking=i.status==='working';
+    return `<div class="tracker-card ${i.status}">
+      <div class="tracker-card-head" data-jump-item="${i.id}" title="Click to open row in worksheet">
+        <div class="tracker-card-title">
+          <strong>${esc(i.service||'Unnamed work')}</strong>
+          <span class="tracker-card-client">${esc(client?.name||'Client')}</span>
+        </div>
+        <div class="tracker-card-price">
+          <strong>${money(amount)}</strong>
+          ${rateText?`<small>${rateText}</small>`:''}
+        </div>
+      </div>
+      <div class="tracker-card-meta">
+        <span class="pill ${i.status}">${esc(displayStatus(i))}</span>
+        ${i.dueDate?`<span class="tracker-due ${i.dueDate<today()&&!['sent','paid'].includes(i.status)?'overdue':''}">Due ${fmtDate(i.dueDate)}</span>`:''}
+      </div>
+      <div class="tracker-card-actions">
+        ${showStart&&!isWorking?`<button type="button" class="small-btn blue tracker-start-btn" data-tracker-start="${i.id}">▶ Start</button>`:showStart&&isWorking?`<span class="pill working tracker-active-badge">● In progress</span>`:''}
+        <select class="tracker-status-select" data-tracker-status="${i.id}" aria-label="Change status">
+          ${['pending','working','changes','sent','paid','discarded'].map(s=>`<option value="${s}" ${i.status===s?'selected':''}>${s==='changes'?'Changes':s[0].toUpperCase()+s.slice(1)}</option>`).join('')}
+          <option value="paid-date">Paid on date…</option>
+        </select>
+        <button type="button" class="small-btn tracker-view-btn" data-jump-item="${i.id}">View sheet</button>
+      </div>
+    </div>`;
+  };
+
+  return `<div class="section-top">
+      <div>
+        <h2>Work Tracker</h2>
+        <p>Live team assignments, progress, and pending work across clients.</p>
+      </div>
+      <span class="pill working">${working.length} in progress</span>
+    </div>
+    <div class="tracker-grid">
+      ${members.map(m=>{
+        const assigned=data.items
+          .filter(i=>{
+            if(['discarded','paid'].includes(i.status))return false;
+            if(!i.assigneeId)return false;
+            if(i.assigneeId===m.userId)return true;
+            if(m.userId===currentUserId()&&i.assigneeId==='local-me')return true;
+            if(i.assigneeId==='local-partner'&&(m.userId==='local-partner'||m.displayName===data.settings.localPartner))return true;
+            if(i.assigneeId==='local-me'&&(m.userId==='local-me'||m.displayName===data.settings.displayName))return true;
+            if(m.displayName&&i.assigneeId.toLowerCase()===m.displayName.toLowerCase())return true;
+            return false;
+          })
+          .sort((a,b)=>statusRank(a.status)-statusRank(b.status)||(a.dueDate||'9999').localeCompare(b.dueDate||'9999'));
+        const inProgress=assigned.filter(i=>['working','changes'].includes(i.status)).length;
+        return `<div class="panel">
+          <h3>
+            <span class="tracker-avatar">${avatar(m.userId,m.displayName)}</span>${esc(m.displayName)}
+            <span class="muted">${assigned.length} assigned${inProgress?` · ${inProgress} in progress`:''}</span>
+          </h3>
+          ${assigned.length?assigned.map(i=>renderCard(i,true)).join(''):'<p class="muted">No work assigned right now. Assign work from any worksheet.</p>'}
+        </div>`;
+      }).join('')}
+    </div>
+    ${unassigned.length?`<div class="panel">
+      <h3>Unassigned active work <span class="muted">· ${unassigned.length} rows</span></h3>
+      <p class="muted">Rows without an assignee. Click to assign to a team member or open in the worksheet.</p>
+      <div class="tracker-grid" style="margin-top:12px">
+        ${unassigned.slice(0,40).map(i=>{
+          const client=data.clients.find(c=>c.id===i.clientId);
+          const amount=i.quotedTotal||effectiveItemValue(i);
+          return `<div class="tracker-card ${i.status}">
+            <div class="tracker-card-head" data-jump-item="${i.id}" title="Click to open row in worksheet">
+              <div class="tracker-card-title">
+                <strong>${esc(i.service||'Unnamed work')}</strong>
+                <span class="tracker-card-client">${esc(client?.name||'Client')}</span>
+              </div>
+              <div class="tracker-card-price">
+                <strong>${money(amount)}</strong>
+                ${i.rate?`<small>${i.quantity} × ${money(i.rate)}</small>`:''}
+              </div>
+            </div>
+            <div class="tracker-card-meta">
+              <span class="pill ${i.status}">${esc(displayStatus(i))}</span>
+              ${i.dueDate?`<span class="tracker-due ${i.dueDate<today()&&!['sent','paid'].includes(i.status)?'overdue':''}">Due ${fmtDate(i.dueDate)}</span>`:''}
+            </div>
+            <div class="tracker-card-actions">
+              <button type="button" class="small-btn blue tracker-start-btn" data-assignee-pick="${i.id}">Assign</button>
+              <button type="button" class="small-btn tracker-view-btn" data-jump-item="${i.id}">View sheet</button>
+            </div>
+          </div>`;
+        }).join('')}
+      </div>
+    </div>`:''}`;
 }
 function renderGroups() {
   const groups=[...data.projectGroups.map(g=>({...g,kind:'project'})),...data.groups.map(g=>({...g,kind:'deal'}))];
@@ -345,7 +436,9 @@ function bindMain() {
   $$('[data-preview-amount]').forEach(el=>el.onchange=()=>{const group=importPreview?.clients.flatMap(c=>c.groups).find(g=>g.id===el.dataset.previewAmount);if(group){group.agreedAmount=el.value.trim()===''?null:num(el.value);render();}});
   $$('[data-preview-advance]').forEach(el=>el.onchange=()=>{const item=importPreview?.clients.flatMap(c=>c.items).find(i=>i.id===el.dataset.previewAdvance);if(item){item.advanceAmount=Math.max(0,num(el.value));render();}});
   const workFilter=$('#workFilter');if(workFilter)workFilter.onchange=()=>{filter=workFilter.value;selected.clear();render();};
-  const bulkStatus=$('#bulkStatus');if(bulkStatus)bulkStatus.onchange=()=>{const next=bulkStatus.value;bulkStatus.value='';if(next)bulkSetStatus(next);};
+  const bulkStatus=$('#bulkStatus');if(bulkStatus)bulkStatus.onchange=()=>{const next=bulkStatus.value;bulkStatus.value='';if(next==='paid-date'){paidAtDialog([...selected]);}else if(next)bulkSetStatus(next);};
+  $$('[data-tracker-start]').forEach(b=>b.onclick=e=>{e.stopPropagation();startTrackerItem(b.dataset.trackerStart);});
+  $$('[data-tracker-status]').forEach(sel=>sel.onchange=e=>{e.stopPropagation();updateTrackerItemStatus(sel.dataset.trackerStatus,sel.value);});
   $$('[data-check]').forEach(b=>{b.onclick=e=>e.stopPropagation();b.onchange=()=>{b.checked?selected.add(b.dataset.check):selected.delete(b.dataset.check);selectionAnchor=b.dataset.check;refreshSelection();};});
   const all=$('#selectAll'); if(all) all.onchange=()=>{$$('[data-check]').forEach(b=>all.checked?selected.add(b.dataset.check):selected.delete(b.dataset.check));refreshSelection();};
   $$('[data-cell]').forEach(el=>{ el.onchange=()=>editCell(el.dataset.id,el.dataset.cell,el.value); if(el.tagName==='INPUT') el.onpaste=e=>pasteGrid(e,el); });
@@ -394,7 +487,8 @@ function openStatusMenu(trigger,id){
   const item=data.items.find(i=>i.id===id);if(!item)return;
   const statuses=['pending','working','changes','sent','paid','discarded'];
   const menu=document.createElement('div');menu.className='status-menu';menu.setAttribute('role','listbox');menu.setAttribute('aria-label','Choose status');
-  menu.innerHTML=statuses.map(status=>`<button type="button" class="status-option ${status} ${item.status===status?'current':''}" data-set-status="${status}" role="option" aria-selected="${item.status===status}"><span class="status-dot"></span><span>${status==='changes'?'Changes':status[0].toUpperCase()+status.slice(1)}</span>${item.status===status?'<span class="status-check">✓</span>':''}</button>`).join('');
+  menu.innerHTML=statuses.map(status=>`<button type="button" class="status-option ${status} ${item.status===status?'current':''}" data-set-status="${status}" role="option" aria-selected="${item.status===status}"><span class="status-dot"></span><span>${status==='changes'?'Changes':status[0].toUpperCase()+status.slice(1)}</span>${item.status===status?'<span class="status-check">✓</span>':''}</button>`).join('') +
+    `<button type="button" class="status-option paid" data-paid-at="${item.id}" role="option"><span class="status-dot"></span><span>Paid on date…</span></button>`;
   document.body.appendChild(menu);
   const rect=trigger.getBoundingClientRect();
   menu.style.left=Math.max(8,Math.min(rect.left,innerWidth-menu.offsetWidth-8))+'px';
@@ -402,6 +496,7 @@ function openStatusMenu(trigger,id){
   const outside=e=>{if(!menu.contains(e.target)&&e.target!==trigger)closeStatusMenu();};
   activeStatusMenu={menu,trigger,outside};trigger.setAttribute('aria-expanded','true');
   menu.querySelectorAll('[data-set-status]').forEach(button=>button.onclick=()=>{const next=button.dataset.setStatus;closeStatusMenu();if(next!==item.status)editCell(id,'status',next);});
+  menu.querySelectorAll('[data-paid-at]').forEach(button=>button.onclick=()=>{closeStatusMenu();paidAtDialog([button.dataset.paidAt]);});
   setTimeout(()=>{if(activeStatusMenu?.menu===menu)document.addEventListener('pointerdown',outside,true);},0);
 }
 function refreshSelection() {
@@ -491,8 +586,10 @@ function effectiveItemValue(item){
 }
 function createReceipt(clientId,amount,description,referenceKind,referenceId,stamp=new Date().toISOString()){
   if(amount<=0)return;
-  const id=uid(),date=today(),client=data.clients.find(c=>c.id===clientId);
-  const receipt={id,clientId,clientName:client?.name||'Client',amount:Math.round(amount*100)/100,receivedMonth:date.slice(0,7)+'-01',receivedOn:date,receivedAt:stamp,source:'app',sourceKey:'app:'+id,referenceKind,referenceId,description,dateQuality:'exact'};
+  const id=uid();
+  const date=(stamp&&/^\d{4}-\d{2}-\d{2}/.test(stamp))?stamp.slice(0,10):today();
+  const client=data.clients.find(c=>c.id===clientId);
+  const receipt={id,clientId,clientName:client?.name||'Client',amount:Math.round(amount*100)/100,receivedMonth:date.slice(0,7)+'-01',receivedOn:date,receivedAt:(stamp.length===10?stamp+'T12:00:00.000Z':stamp),source:'app',sourceKey:'app:'+id,referenceKind,referenceId,description,dateQuality:'exact'};
   data.receipts ||= [];data.receipts.push(receipt);enqueue('receipts',id);
 }
 function recordPaidItems(items,context=null,stamp=new Date().toISOString()){
@@ -521,15 +618,63 @@ function recordPaidItems(items,context=null,stamp=new Date().toISOString()){
 }
 function assign(ids) { ids.forEach(id=>{const i=data.items.find(x=>x.id===id);if(!i||i.status==='discarded')return;if(i.status==='sent'){i.status='changes';i.revisionCount=(i.revisionCount||0)+1;}else if(i.status!=='changes')i.status='working';i.paidAt=null;i.paidAtTs=null;i.assigneeId=currentUserId();queue('items',id);});selected.clear();render(); }
 function markSent(ids) { bulkSetStatus('sent',ids); }
-function bulkSetStatus(next,idsOverride=null,context=null) {
+function bulkSetStatus(next,idsOverride=null,context=null,customPaidDate=null) {
   const ids=new Set(idsOverride||selected),items=data.items.filter(i=>ids.has(i.id));if(!items.length)return;
   const invoices=data.invoices.filter(inv=>(inv.itemIds||[]).some(id=>ids.has(id)));
   if(invoices.some(inv=>next!=='paid'||(inv.status==='issued'&&!(inv.itemIds||[]).every(id=>ids.has(id))))){toast('Select every row on an invoice to mark it Paid; use invoice payment tracking for other changes');return;}
-  const stamp=new Date().toISOString();
+  const paidDay=(next==='paid'&&customPaidDate&&/^\d{4}-\d{2}-\d{2}/.test(customPaidDate))?customPaidDate.slice(0,10):today();
+  const stamp=(next==='paid'&&customPaidDate)?(paidDay+'T12:00:00.000Z'):new Date().toISOString();
   if(next==='paid'){
     const invoiced=new Set(invoices.flatMap(inv=>inv.itemIds||[]));
-    for(const inv of invoices)if(inv.status==='issued'){createReceipt(inv.clientId,Math.max(0,num(inv.finalAmount)-invoiceAdvance(inv)),`Invoice ${inv.number}`,'invoice',inv.id,stamp);inv.status='paid';inv.paidAt=today();inv.paidAtTs=stamp;inv.updatedAt=stamp;enqueue('invoices',inv.id);}
-    recordPaidItems(items.filter(i=>!invoiced.has(i.id)),context,stamp);
+    for(const inv of invoices){
+      if(inv.status==='issued'||customPaidDate){
+        let r=(data.receipts||[]).find(x=>x.referenceKind==='invoice'&&x.referenceId===inv.id);
+        if(r){
+          r.receivedOn=paidDay;
+          r.receivedMonth=paidDay.slice(0,7)+'-01';
+          r.receivedAt=stamp;
+          enqueue('receipts',r.id);
+        } else {
+          createReceipt(inv.clientId,Math.max(0,num(inv.finalAmount)-invoiceAdvance(inv)),`Invoice ${inv.number}`,'invoice',inv.id,stamp);
+        }
+        inv.status='paid';inv.paidAt=paidDay;inv.paidAtTs=stamp;inv.updatedAt=stamp;enqueue('invoices',inv.id);
+      }
+    }
+    const nonInvoicedItems=items.filter(i=>!invoiced.has(i.id));
+    if(customPaidDate){
+      for(const item of nonInvoicedItems){
+        const r=(data.receipts||[]).find(x=>(x.referenceKind==='item'&&x.referenceId===item.id)||(x.source==='app'&&x.sourceKey==='app:'+item.id));
+        if(r){
+          r.receivedOn=paidDay;
+          r.receivedMonth=paidDay.slice(0,7)+'-01';
+          r.receivedAt=stamp;
+          enqueue('receipts',r.id);
+        }
+      }
+      const dealIds=new Set(nonInvoicedItems.map(i=>i.groupId).filter(Boolean));
+      for(const gid of dealIds){
+        const r=(data.receipts||[]).find(x=>x.referenceKind==='deal'&&x.referenceId===gid);
+        if(r){
+          r.receivedOn=paidDay;
+          r.receivedMonth=paidDay.slice(0,7)+'-01';
+          r.receivedAt=stamp;
+          enqueue('receipts',r.id);
+        }
+      }
+      const projIds=new Set(nonInvoicedItems.map(i=>i.projectGroupId).filter(Boolean));
+      for(const pid of projIds){
+        const r=(data.receipts||[]).find(x=>x.referenceKind==='project'&&x.referenceId===pid);
+        if(r){
+          r.receivedOn=paidDay;
+          r.receivedMonth=paidDay.slice(0,7)+'-01';
+          r.receivedAt=stamp;
+          enqueue('receipts',r.id);
+        }
+      }
+      recordPaidItems(nonInvoicedItems.filter(i=>!(data.receipts||[]).some(x=>(x.referenceKind==='item'&&x.referenceId===i.id)||(x.source==='app'&&x.sourceKey==='app:'+i.id))),context,stamp);
+    } else {
+      recordPaidItems(nonInvoicedItems,context,stamp);
+    }
   } else {
     for(const item of items){
       if(item.status==='paid'){
@@ -538,7 +683,22 @@ function bulkSetStatus(next,idsOverride=null,context=null) {
       }
     }
   }
-  for(const item of items){let status=next;if(next==='working'&&item.status==='sent'){status='changes';item.revisionCount=(item.revisionCount||0)+1;}else if(next==='changes'&&item.status!=='changes')item.revisionCount=(item.revisionCount||0)+1;if(['working','changes'].includes(status))item.assigneeId ||= currentUserId();if(status==='paid'&&item.status!=='paid'){item.paidAt=today();item.paidAtTs=stamp;}else if(status!=='paid'){item.paidAt=null;item.paidAtTs=null;}item.status=status;item.updatedAt=stamp;enqueue('items',item.id);}
+  for(const item of items){
+    let status=next;
+    if(next==='working'&&item.status==='sent'){status='changes';item.revisionCount=(item.revisionCount||0)+1;}
+    else if(next==='changes'&&item.status!=='changes')item.revisionCount=(item.revisionCount||0)+1;
+    if(['working','changes'].includes(status))item.assigneeId ||= currentUserId();
+    if(status==='paid'){
+      if(item.status!=='paid'||customPaidDate){
+        item.paidAt=paidDay;
+        item.paidAtTs=stamp;
+      }
+    } else {
+      item.paidAt=null;
+      item.paidAtTs=null;
+    }
+    item.status=status;item.updatedAt=stamp;enqueue('items',item.id);
+  }
   selected.clear();save();scheduleSync();render();toast(`${items.length} row${items.length===1?'':'s'} updated`);
 }
 function syncItemReceipt(item) {
@@ -551,12 +711,18 @@ function syncItemReceipt(item) {
     const client = data.clients?.find(c => c.id === item.clientId);
     const amount = Math.max(0, effectiveItemValue(item) - num(item.advanceAmount));
     const desc = item.service || 'Work row';
+    const date = (item.paidAt && /^\d{4}-\d{2}-\d{2}/.test(item.paidAt)) ? item.paidAt.slice(0, 10) : today();
+    const month = date.slice(0, 7) + '-01';
+    const stamp = item.paidAtTs || (date + 'T12:00:00.000Z');
     if (r) {
-      const changed = r.amount !== amount || r.description !== desc || r.referenceId !== item.id;
+      const changed = r.amount !== amount || r.description !== desc || r.referenceId !== item.id || r.receivedOn !== date || r.receivedMonth !== month;
       r.amount = amount;
       r.description = desc;
       r.referenceKind = 'item';
       r.referenceId = item.id;
+      r.receivedOn = date;
+      r.receivedMonth = month;
+      r.receivedAt = stamp;
       if (client?.name) r.clientName = client.name;
       if (changed) {
         enqueue('receipts', r.id);
@@ -564,11 +730,70 @@ function syncItemReceipt(item) {
         scheduleSync();
       }
     } else {
-      createReceipt(item.clientId, amount, desc, 'item', item.id, item.paidAtTs || new Date().toISOString());
+      createReceipt(item.clientId, amount, desc, 'item', item.id, stamp);
     }
   } else if (r) {
     removeReceipt(r.id);
   }
+}
+function desktopNotify(title,body){
+  try{
+    if(window.desk?.notify){
+      window.desk.notify(title,body);
+    } else if(typeof Notification!=='undefined'&&Notification.permission==='granted'){
+      new Notification(title,{body});
+    }
+  }catch(err){console.warn('Desktop notification error:',err);}
+}
+function startTrackerItem(id){
+  const item=data.items.find(x=>x.id===id);if(!item||item.status==='discarded')return;
+  const user=data.members.find(m=>m.userId===(item.assigneeId||currentUserId()));
+  const userName=user?.displayName||data.settings.displayName||'You';
+  const client=data.clients.find(c=>c.id===item.clientId);
+  const clientName=client?` for ${client.name}`:'';
+  bulkSetStatus('working',[id]);
+  desktopNotify('Work started',`${userName} started working on "${item.service||'work item'}"${clientName}`);
+}
+function updateTrackerItemStatus(id,next){
+  const item=data.items.find(x=>x.id===id);if(!item)return;
+  if(next==='paid-date'){paidAtDialog([id]);return;}
+  if(!next||next===item.status)return;
+  const user=data.members.find(m=>m.userId===(item.assigneeId||currentUserId()));
+  const userName=user?.displayName||data.settings.displayName||'You';
+  const client=data.clients.find(c=>c.id===item.clientId);
+  const clientName=client?` for ${client.name}`:'';
+  const statusLabel=next==='working'?'started working on':next==='sent'?'marked as sent to client':next==='paid'?'marked as paid':next==='changes'?'marked for changes':`updated status to ${next} for`;
+  bulkSetStatus(next,[id]);
+  desktopNotify('Status updated',`${userName} ${statusLabel} "${item.service||'work item'}"${clientName}`);
+}
+function paidAtDialog(ids){
+  const targetIds=(ids&&ids.length)?ids:[...selected];
+  if(!targetIds.length){toast('Select at least one row to mark Paid');return;}
+  const items=data.items.filter(i=>targetIds.includes(i.id));
+  const firstItem=items[0];
+  const initialDate=(firstItem?.paidAt&&/^\d{4}-\d{2}-\d{2}/.test(firstItem.paidAt))?firstItem.paidAt.slice(0,10):today();
+  modal('Mark paid on date',`
+    <div style="display:flex;flex-direction:column;gap:12px">
+      <p>Select the date payment was received. This updates the revenue and receipt records for that month.</p>
+      <div class="field">
+        <label for="customPaidDateInput">Payment date</label>
+        <input type="date" id="customPaidDateInput" value="${initialDate}" style="font-size:14px;padding:8px 10px;border-radius:6px;border:1px solid #c8d8cd;width:100%">
+      </div>
+      <p class="muted" style="font-size:12px;margin:0">${items.length} row${items.length===1?'':'s'} selected · ${items.map(i=>esc(i.service||'Work row')).slice(0,3).join(', ')}${items.length>3?'...':''}</p>
+    </div>
+  `,`
+    <div class="modal-actions" style="display:flex;justify-content:flex-end;gap:8px;margin-top:16px">
+      <button type="button" class="small-btn" id="cancelPaidDate">Cancel</button>
+      <button type="button" class="small-btn blue" id="confirmPaidDate">Record paid</button>
+    </div>
+  `);
+  $('#cancelPaidDate').onclick=closeModal;
+  $('#confirmPaidDate').onclick=()=>{
+    const val=$('#customPaidDateInput')?.value;
+    if(!val||!/^\d{4}-\d{2}-\d{2}/.test(val)){toast('Please choose a valid payment date');return;}
+    closeModal();
+    bulkSetStatus('paid',targetIds,null,val);
+  };
 }
 function removeReceipt(id) {
   if (!id || !Array.isArray(data.receipts)) return;
@@ -795,9 +1020,88 @@ async function flushPending() {
   } finally { syncing=false; if(successful&&data.pending.length)scheduleSync(); }
 }
 async function fetchAll(table){let out=[];for(let start=0;;start+=1000){const {data:rows,error}=await clientApi.from(table).select('*').eq('workspace_id',data.settings.workspaceId).order('id').range(start,start+999);if(error)throw error;out.push(...rows);if(rows.length<1000)break;}return out;}
-async function pullRemote(){if(!clientApi||!session||!data.settings.workspaceId)return;const ws=data.settings.workspaceId;const [w,m,...tables]=await Promise.all([clientApi.from('workspaces').select('*').eq('id',ws).single(),clientApi.from('members').select('*').eq('workspace_id',ws),...['clients','deal_groups','project_groups','work_items','invoices','payment_receipts'].map(fetchAll)]);if(w.error)throw w.error;if(m.error)throw m.error;data.settings.joinCode=w.data.join_code;if(w.data.business&&Object.keys(w.data.business).length)data.settings.seller={...defaults.settings.seller,...data.settings.seller,...w.data.business};data.members=m.data.map(x=>({userId:x.user_id,displayName:x.display_name,avatarData:x.avatar_data||''}));['clients','groups','projectGroups','items','invoices','receipts'].forEach((table,k)=>{const pending=new Set(data.pending.filter(p=>p.table===table).map(p=>p.id));const pendingDeletes=new Set((data.pendingDeletes||[]).filter(p=>p.table===table).map(p=>p.id));const locals=data[table].filter(x=>pending.has(x.id));data[table]=tables[k].filter(x=>!pendingDeletes.has(x.id)).map(x=>localRow(table,x));for(const local of locals){const ix=data[table].findIndex(x=>x.id===local.id);if(ix<0)data[table].push(local);else data[table][ix]=local;}});if(!activeClient&&data.clients.length)activeClient=data.clients[0].id;save();render();}
-function subscribe(){if(!clientApi||!session||!data.settings.workspaceId)return;if(channel)clientApi.removeChannel(channel);let timer;channel=clientApi.channel('gir-ledger-'+data.settings.workspaceId);for(const table of ['clients','deal_groups','project_groups','work_items','invoices','payment_receipts','members'])channel.on('postgres_changes',{event:'*',schema:'public',table,filter:`workspace_id=eq.${data.settings.workspaceId}`},()=>{clearTimeout(timer);timer=setTimeout(()=>pullRemote().catch(e=>toast('Live refresh failed: '+e.message)),250);});channel.subscribe(status=>{if(status==='CHANNEL_ERROR'||status==='TIMED_OUT')toast('Live connection interrupted; use Sync now');});}
-async function syncNow(){if(!clientApi||!session){toast('Sign in to Supabase first');return;}if(!data.settings.workspaceId){toast('Create or join a workspace first');return;}try{await flushPending();await pullRemote();subscribe();toast('Workspace synced');}catch(e){toast('Sync failed: '+e.message);}}
+async function pullRemote(){if(!clientApi||!session||!data.settings.workspaceId)return;const ws=data.settings.workspaceId;const [w,m,...tables]=await Promise.all([clientApi.from('workspaces').select('*').eq('id',ws).single(),clientApi.from('members').select('*').eq('workspace_id',ws),...['clients','deal_groups','project_groups','work_items','invoices','payment_receipts'].map(fetchAll)]);if(w.error)throw w.error;if(m.error)throw m.error;data.settings.joinCode=w.data.join_code;if(w.data.business&&Object.keys(w.data.business).length)data.settings.seller={...defaults.settings.seller,...data.settings.seller,...w.data.business};data.members=m.data.map(x=>({userId:x.user_id,displayName:x.display_name,avatarData:x.avatar_data||''}));['clients','groups','projectGroups','items','invoices','receipts'].forEach((table,k)=>{const pending=new Set(data.pending.filter(p=>p.table===table).map(p=>p.id));const pendingDeletes=new Set((data.pendingDeletes||[]).filter(p=>p.table===table).map(p=>p.id));const locals=data[table].filter(x=>pending.has(x.id));data[table]=tables[k].filter(x=>!pendingDeletes.has(x.id)).map(x=>localRow(table,x));for(const local of locals){const ix=data[table].findIndex(x=>x.id===local.id);if(ix<0)data[table].push(local);else data[table][ix]=local;}});if(!activeClient&&data.clients.length)activeClient=data.clients[0].id;lastSyncTime=Date.now();save();render();updateSyncUI();}
+function subscribe(){
+  if(!clientApi||!session||!data.settings.workspaceId)return;
+  if(channel)clientApi.removeChannel(channel);
+  let timer;
+  channel=clientApi.channel('gir-ledger-'+data.settings.workspaceId);
+  for(const table of ['clients','deal_groups','project_groups','work_items','invoices','payment_receipts','members']){
+    channel.on('postgres_changes',{event:'*',schema:'public',table,filter:`workspace_id=eq.${data.settings.workspaceId}`},(payload)=>{
+      if(table==='work_items'&&payload?.new){
+        const item=payload.new;
+        const currentItem=data.items.find(x=>x.id===item.id);
+        const statusChanged=currentItem&&currentItem.status!==item.status;
+        const assignee=data.members.find(m=>m.userId===item.assignee_id);
+        const assigneeName=assignee?assignee.displayName:'A team member';
+        if(statusChanged&&item.assignee_id&&item.assignee_id!==session?.user?.id){
+          const client=data.clients.find(c=>c.id===item.client_id);
+          const workName=item.service||'work item';
+          const clientName=client?` (${client.name})`:'';
+          if(item.status==='working'){
+            desktopNotify('Work in progress',`${assigneeName} started working on "${workName}"${clientName}`);
+          }else if(item.status==='changes'){
+            desktopNotify('Changes requested',`${assigneeName} marked "${workName}"${clientName} for changes`);
+          }else if(item.status==='sent'){
+            desktopNotify('Work sent',`${assigneeName} marked "${workName}"${clientName} as sent to client`);
+          }else if(item.status==='paid'){
+            desktopNotify('Payment recorded',`${assigneeName} marked "${workName}"${clientName} as paid`);
+          }
+        }
+      }
+      clearTimeout(timer);
+      timer=setTimeout(()=>{pullRemote().catch(e=>toast('Live refresh failed: '+e.message));},250);
+    });
+  }
+  channel.subscribe(status=>{if(status==='CHANNEL_ERROR'||status==='TIMED_OUT')toast('Live connection interrupted; use Sync now');});
+}
+function updateSyncUI(){
+  const btn=$('#topSyncBtn');
+  const text=$('#topSyncText');
+  if(!btn||!text)return;
+  if(syncing){
+    btn.classList.add('syncing');
+    text.textContent='Syncing…';
+    return;
+  }
+  btn.classList.remove('syncing');
+  if(!session||!clientApi||!data.settings.workspaceId){
+    text.textContent='Local only';
+    btn.title='Not connected to Supabase workspace. Click to open settings.';
+    return;
+  }
+  btn.title='Click to refresh / sync workspace now';
+  const diffSec=Math.max(0,Math.floor((Date.now()-(lastSyncTime||Date.now()))/1000));
+  if(diffSec<60){
+    text.textContent='Synced just now';
+  }else if(diffSec<3600){
+    text.textContent=`Synced ${Math.floor(diffSec/60)}m ago`;
+  }else{
+    text.textContent=`Synced ${Math.floor(diffSec/3600)}h ago`;
+  }
+}
+async function syncNow(){
+  if(!clientApi||!session){toast('Sign in to Supabase first');return;}
+  if(!data.settings.workspaceId){toast('Create or join a workspace first');return;}
+  syncing=true;updateSyncUI();
+  try{
+    await flushPending();
+    await pullRemote();
+    subscribe();
+    lastSyncTime=Date.now();
+    toast('Workspace synced');
+  }catch(e){
+    toast('Sync failed: '+e.message);
+  }finally{
+    syncing=false;
+    updateSyncUI();
+  }
+}
+$('#topSyncBtn')?.addEventListener('click',()=>{
+  if(!session||!data.settings.workspaceId){tab='settings';render();toast('Connect or sign in to Supabase in Settings');return;}
+  syncNow();
+});
+if(typeof setInterval!=='undefined')setInterval(updateSyncUI,15000);
 
 $('#newClientBtn').onclick=newClientDialog;
 $('#clientList').addEventListener('wheel',e=>{const strip=e.currentTarget;if(strip.scrollWidth<=strip.clientWidth||Math.abs(e.deltaY)<=Math.abs(e.deltaX))return;strip.scrollLeft+=e.deltaY;e.preventDefault();},{passive:false});

@@ -9,6 +9,8 @@ const context = {
   console,
   setTimeout,
   clearTimeout,
+  setInterval: () => {},
+  clearInterval: () => {},
   URL: { createObjectURL: () => '' },
   window: { desk: { write: async () => true, read: async () => null, updates: { onChange: () => {}, state: async () => ({}) } } },
   document: {
@@ -108,5 +110,41 @@ assert.equal(f.revenue, 20240, 'Revenue restored to 20240 when marked paid again
 const newReceipt = vm.runInContext("data.receipts.find(r => r.referenceId === 'fj1')", context);
 assert.ok(newReceipt, 'New receipt created');
 assert.equal(newReceipt.amount, 11420, 'New receipt has 11420');
+
+// 7. Custom Paid Date ("Paid on date…") backdating to 2026-08-15
+vm.runInContext("bulkSetStatus('paid', ['fj1'], null, '2026-08-15')", context);
+const backdatedReceipt = vm.runInContext("data.receipts.find(r => r.referenceId === 'fj1')", context);
+assert.ok(backdatedReceipt, 'Backdated receipt found');
+assert.equal(backdatedReceipt.receivedOn, '2026-08-15', 'Receipt receivedOn matches custom date');
+assert.equal(backdatedReceipt.receivedMonth, '2026-08-01', 'Receipt receivedMonth placed in August 2026');
+const fjItem = vm.runInContext("data.items.find(i => i.id === 'fj1')", context);
+assert.equal(fjItem.paidAt, '2026-08-15', 'Item paidAt updated to custom date');
+
+// 8. Work Tracker live assignments & direct actions
+vm.runInContext(`
+data.members = [
+  { userId: 'u_samuel', displayName: 'Samuel' },
+  { userId: 'u_maitri', displayName: 'Maitri' }
+];
+data.items = [
+  { id: 'item_s1', clientId: 'c1', service: 'Samuel Pending Work', quantity: 1, rate: 500, quotedTotal: 500, status: 'pending', assigneeId: 'u_samuel' },
+  { id: 'item_m1', clientId: 'c1', service: 'Maitri Logo Design', quantity: 2, rate: 1500, quotedTotal: 3000, status: 'pending', assigneeId: 'u_maitri' }
+];
+`, context);
+
+const trackerHtml = vm.runInContext('renderTracker()', context);
+assert.ok(trackerHtml.includes('Samuel Pending Work'), 'Samuel pending work rendered in tracker');
+assert.ok(trackerHtml.includes('Maitri Logo Design'), 'Maitri pending work rendered in tracker');
+assert.ok(trackerHtml.includes('▶ Start'), 'Start button rendered on tracker card');
+
+// 9. Start tracker item
+vm.runInContext("startTrackerItem('item_m1')", context);
+const m1 = vm.runInContext("data.items.find(i => i.id === 'item_m1')", context);
+assert.equal(m1.status, 'working', 'Maitri work transitioned to working via startTrackerItem');
+
+// 10. Update tracker item status
+vm.runInContext("updateTrackerItemStatus('item_s1', 'sent')", context);
+const s1 = vm.runInContext("data.items.find(i => i.id === 'item_s1')", context);
+assert.equal(s1.status, 'sent', 'Samuel work transitioned to sent via updateTrackerItemStatus');
 
 console.log('ALL DYNAMIC SYNC AND REVENUE TESTS PASSED!');

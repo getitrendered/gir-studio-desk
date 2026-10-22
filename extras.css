@@ -201,6 +201,30 @@ table.sheet input.editing{user-select:text}
 .group-card-editor button{border:1px solid #cbd9cf;border-radius:6px;background:#fff;color:#43614b;padding:6px 11px;font-size:11px;font-weight:700}
 .group-card-editor button[data-save-card]{border-color:#168451;background:#168451;color:#fff}
 .tracker-avatar{width:28px;height:28px;display:inline-grid;place-items:center;vertical-align:middle;border-radius:50%;overflow:hidden;background:#e4f2e7;margin-right:8px}
+.tracker-card{border:1px solid #dce6de;background:#fff;border-radius:10px;padding:12px 14px;display:flex;flex-direction:column;gap:8px;margin-bottom:10px;transition:all .15s ease;box-shadow:0 1px 3px rgba(0,0,0,0.03)}
+.tracker-card:hover{border-color:#9ac4a9;box-shadow:0 3px 8px rgba(20,63,37,0.06)}
+.tracker-card.working{border-left:4px solid #1a73e8;background:#fdfefe}
+.tracker-card.changes{border-left:4px solid #8e24aa;background:#fdfdfe}
+.tracker-card.pending{border-left:4px solid #757575}
+.tracker-card.sent{border-left:4px solid #f57c00}
+.tracker-card-head{display:flex;justify-content:space-between;align-items:flex-start;gap:10px;cursor:pointer}
+.tracker-card-head:hover strong{color:#158650}
+.tracker-card-title{display:flex;flex-direction:column;gap:3px;min-width:0}
+.tracker-card-title strong{font-size:13px;font-weight:700;color:#1e3325;word-break:break-word}
+.tracker-card-client{font-size:11px;font-weight:600;color:#64806c}
+.tracker-card-price{text-align:right;white-space:nowrap;display:flex;flex-direction:column;align-items:flex-end}
+.tracker-card-price strong{font-size:13px;color:#158650;font-weight:700}
+.tracker-card-price small{font-size:10px;color:#84978a}
+.tracker-card-meta{display:flex;align-items:center;gap:8px;flex-wrap:wrap;font-size:11px}
+.tracker-card-actions{display:flex;align-items:center;gap:8px;margin-top:4px;padding-top:8px;border-top:1px solid #edf3ee}
+.tracker-start-btn{padding:4px 10px!important;font-size:11px!important;font-weight:700!important}
+.tracker-status-select{height:28px;padding:0 8px;font-size:11px;font-weight:600;border-radius:6px;border:1px solid #c8d8cd;background:#fff;color:#244431;cursor:pointer;outline:none;flex:1;min-width:90px}
+.tracker-status-select:focus{border-color:#158650}
+.tracker-view-btn{padding:4px 8px!important;font-size:10px!important;color:#64806c!important;background:transparent!important;border-color:#dce6de!important}
+.tracker-view-btn:hover{border-color:#158650!important;color:#158650!important}
+.tracker-due{font-size:10px;color:#64806c;background:#edf3ee;padding:2px 6px;border-radius:4px}
+.tracker-due.overdue{color:#d32f2f;background:#fde8e8;font-weight:700}
+.tracker-active-badge{font-size:10px!important;padding:3px 8px!important}
 .sheet tr.discarded-row td.status-cell{background:#e7e9e8!important}
 .sheet tr.selected td.status-cell.pending{background:#f4f6f4!important}.sheet tr.selected td.status-cell.working{background:#d8e9fc!important}.sheet tr.selected td.status-cell.changes{background:#e9e0ff!important}.sheet tr.selected td.status-cell.sent{background:#fff0d2!important}.sheet tr.selected td.status-cell.paid{background:#d5efdb!important}
 .sheet tr.blank-row.blank-selected td{background:#e2f1e5!important}
@@ -230,6 +254,15 @@ table.sheet input.editing{user-select:text}
 .access-card .access-note{margin:0;color:#84978a}
 
 /* Compact, clearly separated navigation. */
+.tabs-header{position:relative;display:flex;align-items:center;justify-content:center;background:#fff;border-bottom:1px solid #dce5df;height:51px;flex:none;padding:0 14px}
+.tabs-header .tabs{height:100%;border-bottom:0;flex:0 1 auto}
+.tabs-header .tabs-sync{position:absolute;right:14px;display:flex;align-items:center;z-index:2}
+.top-sync-btn{display:inline-flex;align-items:center;gap:6px;padding:5px 11px;border-radius:20px;border:1px solid #cddcd1;background:#f6faf7;color:#244431;font-size:11px;font-weight:700;transition:all .15s ease}
+.top-sync-btn:hover{background:#e8f4ec;border-color:#188c51;color:#106b3c}
+.top-sync-btn:active{transform:scale(0.98)}
+.top-sync-btn.syncing{opacity:.8;pointer-events:none}
+.top-sync-btn.syncing .sync-icon{animation:spin 1s linear infinite}
+@keyframes spin{from{transform:rotate(0deg)}to{transform:rotate(360deg)}}
 #app .tabs{height:51px;gap:0;padding:7px 12px;justify-content:safe center;align-items:center;background:#fff}
 #app .tabs button{flex:0 0 auto;min-width:0;height:35px;padding:0 15px;background:#fff;border:1px solid #dfe9e2;border-right:0;border-radius:0;color:#53695b;font-size:11px;font-weight:700}
 #app .tabs button:first-of-type{border-radius:8px 0 0 8px}

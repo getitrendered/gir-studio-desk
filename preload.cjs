@@ -4,6 +4,7 @@ contextBridge.exposeInMainWorld('desk', {
   write: value => ipcRenderer.invoke('write-store', value),
   chooseWorkbook: () => ipcRenderer.invoke('choose-workbook'),
   print: () => ipcRenderer.invoke('print-invoice'),
+  notify: (title, body) => ipcRenderer.invoke('show-notification', { title, body }),
   updates: {
     state: () => ipcRenderer.invoke('updates-state'),
     check: () => ipcRenderer.invoke('updates-check'),

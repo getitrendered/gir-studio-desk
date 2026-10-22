@@ -1,4 +1,4 @@
-const { app, BrowserWindow, ipcMain, dialog } = require('electron');
+const { app, BrowserWindow, ipcMain, dialog, Notification } = require('electron');
 const fs = require('node:fs');
 const path = require('node:path');
 const { spawn } = require('node:child_process');
@@ -65,6 +65,17 @@ ipcMain.handle('choose-workbook', async () => {
   });
 });
 ipcMain.handle('print-invoice', async () => { if (!win) return; await win.webContents.print({ silent: false, printBackground: true }); });
+ipcMain.handle('show-notification', (_e, { title, body }) => {
+  if (Notification && Notification.isSupported()) {
+    new Notification({
+      title: title || 'GIR Studio Desk',
+      body: body || '',
+      icon: path.join(__dirname, 'assets', 'gir-icon.png')
+    }).show();
+    return true;
+  }
+  return false;
+});
 ipcMain.handle('updates-state', () => updateState);
 ipcMain.handle('updates-check', async () => {
   if (!updater) return updateState;

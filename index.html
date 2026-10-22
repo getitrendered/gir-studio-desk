@@ -2,7 +2,10 @@
 <body>
 <div id="app">
   <div class="center">
-    <div class="tabs" id="tabs"><button data-tab="sheet" class="active">Worksheet</button><button data-tab="dashboard">Dashboard</button><button data-tab="tracker">Work Tracker</button><button data-tab="groups">Groups</button><button data-tab="revenue">Revenue</button><button data-tab="payments">Payments</button><button data-tab="invoices">Invoices</button><button data-tab="client-details">Client Details</button><button data-tab="settings">Settings</button><span class="tab-indicator" id="tabIndicator"></span></div>
+    <div class="tabs-header" id="tabsHeader">
+      <div class="tabs" id="tabs"><button data-tab="sheet" class="active">Worksheet</button><button data-tab="dashboard">Dashboard</button><button data-tab="tracker">Work Tracker</button><button data-tab="groups">Groups</button><button data-tab="revenue">Revenue</button><button data-tab="payments">Payments</button><button data-tab="invoices">Invoices</button><button data-tab="client-details">Client Details</button><button data-tab="settings">Settings</button><span class="tab-indicator" id="tabIndicator"></span></div>
+      <div class="tabs-sync" id="tabsSync"><button type="button" id="topSyncBtn" class="top-sync-btn" title="Click to refresh / sync"><svg class="sync-icon" viewBox="0 0 16 16" width="13" height="13" fill="none"><path d="M13.5 8a5.5 5.5 0 1 1-1.6-3.9L14 6m0-4.5V6h-4.5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg><span id="topSyncText">Synced just now</span></button></div>
+    </div>
     <main id="main"></main>
     <div class="client-tabs"><div id="clientList" class="client-tab-list"></div><button id="newClientBtn" class="new-client-tab" title="New client" aria-label="New client">＋</button></div>
   </div>
