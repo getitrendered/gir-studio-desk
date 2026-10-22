@@ -6,7 +6,7 @@ const money = n => '₹' + Number(n || 0).toLocaleString('en-IN', { maximumFract
 const num = v => Number(String(v ?? '').replace(/[^0-9.-]/g, '')) || 0;
 const esc = v => String(v ?? '').replace(/[&<>"']/g, c => ({ '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;' }[c]));
 const fmtDate = d => { if (!d) return '—'; const x = new Date(d + 'T00:00:00'); return Number.isNaN(x.getTime()) ? d : x.toLocaleDateString('en-IN', { day:'numeric', month:'short', year:'numeric' }); };
-const defaults = { clients:[], groups:[], projectGroups:[], items:[], invoices:[], receipts:[], members:[], pending:[], settings:{ seller:{ name:'GIR — Get It Rendered', address:'', email:'', phone:'', taxId:'', bankDetails:'', logoData:'' }, url:'https://isdxybpeagloikchhsbp.supabase.co', key:'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImlzZHh5YnBlYWdsb2lrY2hoc2JwIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTI1NzkzMjcsImV4cCI6MjEwODE1NTMyN30.ll1YG9uyrTqmLzE90miCk-O1Ab5VkBPfqrCPDDUc5u8', workspaceId:'', displayName:'Samuel', localPartner:'Mezrid', zoom:100 } };
+const defaults = { clients:[], groups:[], projectGroups:[], items:[], invoices:[], receipts:[], members:[], pending:[], settings:{ seller:{ name:'GIR — Get It Rendered', address:'', email:'', phone:'', taxId:'', bankDetails:'', bankAccounts:[], activeBankAccountId:'', logoData:'' }, url:'https://isdxybpeagloikchhsbp.supabase.co', key:'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImlzZHh5YnBlYWdsb2lrY2hoc2JwIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTI1NzkzMjcsImV4cCI6MjEwODE1NTMyN30.ll1YG9uyrTqmLzE90miCk-O1Ab5VkBPfqrCPDDUc5u8', workspaceId:'', displayName:'Samuel', localPartner:'Mezrid', zoom:100 } };
 const GIR_WORKSPACE_ID='17f39873-e10f-4bdf-93ee-1f92b3e25251';
 let data = structuredClone(defaults), tab = 'sheet', lastRenderedTab = null, lastRenderedClient = null, activeClient = null, selected = new Set(), selectionAnchor = null, selectionCell = null, collapsedGroups = new Set(), blankRows = 60, highlightUser = null, filter = 'all', clientApi = null, session = null, channel = null, syncing = false, toastTimer, syncTimer, lastSyncTime = Date.now(), importPreview = null, previewClientIndex = 0, migrating = false;
 let authLoading=true,workspaceReady=false,workspaceResolving=false,accessMode='signin',accessError='',activeStatusMenu=null;
@@ -477,11 +477,53 @@ function renderImportPreview() {
     ${!(clientApi&&session&&data.settings.workspaceId)?'<div class="notice">Connect and join a Supabase workspace in Settings before migration. This preview stays available while you do that.</div>':''}
     <div class="preview-footer"><span>Workbook ID: ${esc(stage.fileHash.slice(0,12))}…</span><button class="small-btn blue" data-action="migrate" ${migrating?'disabled':''}>${migrating?'Migrating…':'Migrate to Supabase'}</button></div>`;
 }
-function renderSettings() { const s=data.settings; return `<div class="section-top"><div><h2>Workspace settings</h2><p>Business details, people and Supabase connection.</p></div></div><div class="grid-2"><div class="panel"><h3>Business on invoices</h3><div class="field"><label>Business name</label><input data-setting="seller.name" value="${esc(s.seller.name)}"></div><div class="field"><label>Address</label><textarea data-setting="seller.address" rows="3">${esc(s.seller.address)}</textarea></div><div class="field-grid"><div class="field"><label>Email</label><input data-setting="seller.email" value="${esc(s.seller.email)}"></div><div class="field"><label>Phone</label><input data-setting="seller.phone" value="${esc(s.seller.phone)}"></div></div><div class="field"><label>Tax / GST ID (optional)</label><input data-setting="seller.taxId" value="${esc(s.seller.taxId)}"></div><label class="invoice-logo-upload"><span class="invoice-logo-preview">${s.seller.logoData?`<img src="${esc(s.seller.logoData)}" alt="Company logo">`:`<img src="assets/gir-icon.png" alt="Default GIR logo">`}</span><span>Choose company logo</span><input id="companyLogoUpload" type="file" accept="image/png,image/jpeg,image/webp" hidden></label><div class="field"><label>Your bank account details for client payments</label><textarea data-setting="seller.bankDetails" rows="4" placeholder="Account holder, bank, account number, IFSC">${esc(s.seller.bankDetails||'')}</textarea></div><button class="small-btn blue" data-action="save-settings">Save business details</button></div><div class="panel"><h3>Your team</h3><label class="avatar-upload"><span class="avatar">${avatar(currentUserId(),s.displayName)}</span><span>Choose your avatar image</span><input id="avatarUpload" type="file" accept="image/png,image/jpeg,image/webp" hidden></label><div class="field"><label>Your display name</label><input data-setting="displayName" value="${esc(s.displayName)}"></div>${!session?`<div class="field"><label>Second person (local view)</label><input data-setting="localPartner" value="${esc(s.localPartner)}"></div>`:''}<button class="small-btn blue" data-action="save-settings">Save names</button><div class="notice">When connected, both people sign in with their own Supabase accounts. Assignments and updates then appear live on both PCs.</div></div></div>
+function renderBankAccountsList() {
+  ensureBankAccounts();
+  const accounts = data.settings.seller.bankAccounts || [];
+  const activeId = data.settings.seller.activeBankAccountId;
+  if (!accounts.length) {
+    return `<div style="padding:14px;background:#f9fbf9;border:1px dashed #d0dcd2;border-radius:8px;text-align:center;">
+      <p class="muted" style="margin:0 0 10px 0;font-size:13px;">No bank accounts added yet.</p>
+      <button type="button" class="small-btn blue" id="addFirstBankAccBtn">+ Add bank account</button>
+    </div>`;
+  }
+  return `<div class="bank-accounts-list">
+    ${accounts.map(acc => {
+      const isActive = acc.id === activeId;
+      const detailsPreview = formatBankDetails(acc);
+      return `<div class="bank-account-card ${isActive ? 'active' : ''}">
+        <div class="bank-account-top">
+          <label style="display:flex;align-items:center;gap:8px;cursor:pointer;margin:0;">
+            <input type="radio" name="activeBankRadio" value="${esc(acc.id)}" ${isActive ? 'checked' : ''} data-set-active-bank="${esc(acc.id)}">
+            <strong>${esc(acc.label || acc.bankName || 'Bank Account')}</strong>
+            ${isActive ? '<span class="pill paid" style="font-size:10px;padding:2px 8px;">Active on invoices</span>' : ''}
+          </label>
+          <div style="display:flex;gap:6px;">
+            ${!isActive ? `<button type="button" class="small-btn" data-set-active-bank="${esc(acc.id)}" style="font-size:11px;padding:2px 8px;">Make active</button>` : ''}
+            <button type="button" class="small-btn" data-edit-bank="${esc(acc.id)}" style="font-size:11px;padding:2px 8px;">Edit</button>
+          </div>
+        </div>
+        <div class="bank-account-preview muted" style="font-size:11px;white-space:pre-line;line-height:1.4;">${esc(detailsPreview)}</div>
+      </div>`;
+    }).join('')}
+    <div style="display:flex;justify-content:flex-end;margin-top:6px;">
+      <button type="button" class="small-btn" id="addBankAccBtn">+ Add another account</button>
+    </div>
+  </div>`;
+}
+
+function renderSettings() { const s=data.settings; return `<div class="section-top"><div><h2>Workspace settings</h2><p>Business details, people and Supabase connection.</p></div></div><div class="grid-2"><div class="panel"><h3>Business on invoices</h3><div class="field"><label>Business name</label><input data-setting="seller.name" value="${esc(s.seller.name)}"></div><div class="field"><label>Address</label><textarea data-setting="seller.address" rows="3">${esc(s.seller.address)}</textarea></div><div class="field-grid"><div class="field"><label>Email</label><input data-setting="seller.email" value="${esc(s.seller.email)}"></div><div class="field"><label>Phone</label><input data-setting="seller.phone" value="${esc(s.seller.phone)}"></div></div><div class="field"><label>Tax / GST ID (optional)</label><input data-setting="seller.taxId" value="${esc(s.seller.taxId)}"></div><label class="invoice-logo-upload"><span class="invoice-logo-preview">${s.seller.logoData?`<img src="${esc(s.seller.logoData)}" alt="Company logo">`:`<img src="assets/gir-icon.png" alt="Default GIR logo">`}</span><span>Choose company logo</span><input id="companyLogoUpload" type="file" accept="image/png,image/jpeg,image/webp" hidden></label><div class="field"><label style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;"><span>Bank accounts for client payments</span><span class="muted" style="font-size:11px;font-weight:normal;">Active account is used on invoices</span></label>${renderBankAccountsList()}</div><button class="small-btn blue" data-action="save-settings">Save business details</button></div><div class="panel"><h3>Your team</h3><label class="avatar-upload"><span class="avatar">${avatar(currentUserId(),s.displayName)}</span><span>Choose your avatar image</span><input id="avatarUpload" type="file" accept="image/png,image/jpeg,image/webp" hidden></label><div class="field"><label>Your display name</label><input data-setting="displayName" value="${esc(s.displayName)}"></div>${!session?`<div class="field"><label>Second person (local view)</label><input data-setting="localPartner" value="${esc(s.localPartner)}"></div>`:''}<button class="small-btn blue" data-action="save-settings">Save names</button><div class="notice">When connected, both people sign in with their own Supabase accounts. Assignments and updates then appear live on both PCs.</div></div></div>
     <div class="panel"><h3>Supabase connection</h3><div class="field-grid"><div class="field"><label>Project URL</label><input id="supaUrl" placeholder="https://project.supabase.co" value="${esc(s.url)}"></div><div class="field"><label>Publishable / anon key</label><input id="supaKey" type="password" placeholder="Never enter a service-role key" value="${esc(s.key)}"></div></div><div class="actions"><button class="small-btn" data-action="save-connection">Save connection</button>${session?`<span class="pill paid">Signed in as ${esc(session.user.email)}</span><button class="small-btn" data-action="sign-out">Sign out</button>`:`<button class="small-btn blue" data-action="sign-in">Sign in</button><button class="small-btn" data-action="sign-up">Create account</button>`}</div>${session?`<div class="notice">Workspace code: <strong>${esc(s.joinCode||'Create or join a workspace')}</strong> · Share this code with your second team member. Workspace ID: ${esc(s.workspaceId||'none')}</div><div class="actions"><button class="small-btn blue" data-action="sync">Sync now</button></div>`:''}</div><div class="panel"><h3>Desktop app</h3><p class="muted">Changes sync automatically while connected.</p><div class="actions"><button class="small-btn" data-action="sync">Sync now</button><button class="small-btn blue" id="updateBtn">Check for updates</button><span id="appVersion"></span></div><p class="muted" id="updateStatus"></p></div>`; }
 
 function bindMain() {
   $$('[data-action]').forEach(b=>b.onclick=()=>actions(b.dataset.action));
+  const addBankBtn=$('#addBankAccBtn');if(addBankBtn)addBankBtn.onclick=()=>bankAccountDialog();
+  const addFirstBankBtn=$('#addFirstBankAccBtn');if(addFirstBankBtn)addFirstBankBtn.onclick=()=>bankAccountDialog();
+  $$('[data-edit-bank]').forEach(b=>b.onclick=e=>{e.stopPropagation();bankAccountDialog(b.dataset.editBank);});
+  $$('[data-set-active-bank]').forEach(el=>{
+    if(el.tagName==='INPUT')el.onchange=()=>setActiveBankAccount(el.dataset.setActiveBank);
+    else el.onclick=e=>{e.stopPropagation();setActiveBankAccount(el.dataset.setActiveBank);};
+  });
   $$('[data-preview-client]').forEach(b=>b.onclick=()=>{previewClientIndex=Number(b.dataset.previewClient);render();});
   $$('[data-preview-amount]').forEach(el=>el.onchange=()=>{const group=importPreview?.clients.flatMap(c=>c.groups).find(g=>g.id===el.dataset.previewAmount);if(group){group.agreedAmount=el.value.trim()===''?null:num(el.value);render();}});
   $$('[data-preview-advance]').forEach(el=>el.onchange=()=>{const item=importPreview?.clients.flatMap(c=>c.items).find(i=>i.id===el.dataset.previewAdvance);if(item){item.advanceAmount=Math.max(0,num(el.value));render();}});
@@ -902,9 +944,197 @@ async function saveCompanyLogo(file){
   }catch(error){render();toast('Could not sync company logo: '+error.message);}
   finally{URL.revokeObjectURL(url);}
 }
+function ensureBankAccounts() {
+  const seller = data.settings.seller ||= {};
+  seller.bankAccounts ||= [];
+  if (!seller.bankAccounts.length && seller.bankDetails && seller.bankDetails.trim()) {
+    const defaultAcc = {
+      id: uid(),
+      label: 'Primary Account',
+      holderName: seller.name || '',
+      bankName: '',
+      accountNumber: '',
+      ifsc: '',
+      upiId: '',
+      details: seller.bankDetails.trim()
+    };
+    seller.bankAccounts.push(defaultAcc);
+    seller.activeBankAccountId = defaultAcc.id;
+  }
+  if (seller.bankAccounts.length && (!seller.activeBankAccountId || !seller.bankAccounts.some(a => a.id === seller.activeBankAccountId))) {
+    seller.activeBankAccountId = seller.bankAccounts[0].id;
+  }
+}
+function formatBankDetails(acc) {
+  if (!acc) return '';
+  if (acc.details && acc.details.trim()) return acc.details.trim();
+  const parts = [];
+  if (acc.holderName) parts.push(`A/C Holder: ${acc.holderName}`);
+  if (acc.bankName) parts.push(`Bank: ${acc.bankName}`);
+  if (acc.accountNumber) parts.push(`A/C No: ${acc.accountNumber}`);
+  if (acc.ifsc) parts.push(`IFSC: ${acc.ifsc}`);
+  if (acc.upiId) parts.push(`UPI ID: ${acc.upiId}`);
+  return parts.join('\n');
+}
+function syncActiveBankDetails() {
+  ensureBankAccounts();
+  const seller = data.settings.seller;
+  const active = seller.bankAccounts.find(a => a.id === seller.activeBankAccountId) || seller.bankAccounts[0];
+  if (active) {
+    seller.activeBankAccountId = active.id;
+    seller.bankDetails = active.details && active.details.trim() ? active.details.trim() : formatBankDetails(active);
+  } else {
+    seller.bankDetails = '';
+  }
+}
+function bankAccountDialog(accId = null) {
+  ensureBankAccounts();
+  const accounts = data.settings.seller.bankAccounts;
+  const existing = accId ? accounts.find(a => a.id === accId) : null;
+  const isEditing = !!existing;
+  const isActive = isEditing ? (data.settings.seller.activeBankAccountId === accId) : (accounts.length === 0);
+
+  modal(isEditing ? 'Edit bank account' : 'Add bank account', `
+    <div style="display:flex;flex-direction:column;gap:10px">
+      <div class="field">
+        <label for="bankAccLabel">Account nickname / label</label>
+        <input id="bankAccLabel" placeholder="e.g. HDFC Current, ICICI Savings" value="${esc(existing?.label || '')}" autofocus>
+      </div>
+      <div class="field-grid">
+        <div class="field">
+          <label for="bankAccHolder">Account holder name</label>
+          <input id="bankAccHolder" placeholder="e.g. GIR — Get It Rendered" value="${esc(existing?.holderName || (isEditing ? '' : data.settings.seller.name || ''))}">
+        </div>
+        <div class="field">
+          <label for="bankAccBank">Bank name</label>
+          <input id="bankAccBank" placeholder="e.g. HDFC Bank, SBI" value="${esc(existing?.bankName || '')}">
+        </div>
+      </div>
+      <div class="field-grid">
+        <div class="field">
+          <label for="bankAccNumber">Account number</label>
+          <input id="bankAccNumber" placeholder="e.g. 50200012345678" value="${esc(existing?.accountNumber || '')}">
+        </div>
+        <div class="field">
+          <label for="bankAccIfsc">IFSC code</label>
+          <input id="bankAccIfsc" placeholder="e.g. HDFC0001234" value="${esc(existing?.ifsc || '')}">
+        </div>
+      </div>
+      <div class="field">
+        <label for="bankAccUpi">UPI ID (optional)</label>
+        <input id="bankAccUpi" placeholder="e.g. gir@okaxis, 9876543210@paytm" value="${esc(existing?.upiId || '')}">
+      </div>
+      <div class="field">
+        <label for="bankAccDetails">Custom formatted details / notes (optional, overrides above)</label>
+        <textarea id="bankAccDetails" rows="3" placeholder="Leave empty to auto-format from fields above">${esc(existing?.details || '')}</textarea>
+      </div>
+      <label style="display:flex;align-items:center;gap:8px;font-size:12px;font-weight:700;color:#1e3827;cursor:pointer;margin-top:4px">
+        <input type="checkbox" id="bankAccMakeActive" ${isActive ? 'checked' : ''} style="width:16px;height:16px;accent-color:#168451">
+        Set this account as active for client invoices
+      </label>
+    </div>
+  `, `
+    <div class="modal-actions" style="display:flex;justify-content:space-between;align-items:center">
+      ${isEditing ? `<button type="button" class="small-btn" id="deleteBankAcc" style="color:#d32f2f;border-color:#fbc4c4">Delete account</button>` : '<div></div>'}
+      <div style="display:flex;gap:8px">
+        <button type="button" class="small-btn" id="cancelBankAcc">Cancel</button>
+        <button type="button" class="small-btn blue" id="saveBankAcc">${isEditing ? 'Save changes' : 'Add account'}</button>
+      </div>
+    </div>
+  `);
+
+  $('#cancelBankAcc').onclick = closeModal;
+  if ($('#deleteBankAcc')) {
+    $('#deleteBankAcc').onclick = () => {
+      deleteBankAccount(accId);
+      closeModal();
+    };
+  }
+  $('#saveBankAcc').onclick = () => {
+    const label = inputValue('bankAccLabel') || inputValue('bankAccBank') || 'Bank Account';
+    const holderName = inputValue('bankAccHolder');
+    const bankName = inputValue('bankAccBank');
+    const accountNumber = inputValue('bankAccNumber');
+    const ifsc = inputValue('bankAccIfsc');
+    const upiId = inputValue('bankAccUpi');
+    const details = $('#bankAccDetails')?.value.trim() || '';
+    const makeActive = $('#bankAccMakeActive')?.checked;
+
+    if (!isEditing && !accountNumber && !details && !bankName) {
+      toast('Please enter at least a bank name, account number, or details');
+      return;
+    }
+
+    if (isEditing) {
+      existing.label = label;
+      existing.holderName = holderName;
+      existing.bankName = bankName;
+      existing.accountNumber = accountNumber;
+      existing.ifsc = ifsc;
+      existing.upiId = upiId;
+      existing.details = details;
+      if (makeActive) data.settings.seller.activeBankAccountId = existing.id;
+    } else {
+      const newAcc = {
+        id: uid(),
+        label,
+        holderName,
+        bankName,
+        accountNumber,
+        ifsc,
+        upiId,
+        details
+      };
+      accounts.push(newAcc);
+      if (makeActive || accounts.length === 1) {
+        data.settings.seller.activeBankAccountId = newAcc.id;
+      }
+    }
+    syncActiveBankDetails();
+    save();
+    if (clientApi && session && data.settings.workspaceId) {
+      clientApi.from('workspaces').update({ business: data.settings.seller }).eq('id', data.settings.workspaceId).catch(() => {});
+    }
+    closeModal();
+    render();
+    toast(isEditing ? 'Bank account updated' : 'Bank account added');
+  };
+}
+function setActiveBankAccount(accId) {
+  ensureBankAccounts();
+  const acc = data.settings.seller.bankAccounts.find(a => a.id === accId);
+  if (!acc) return;
+  data.settings.seller.activeBankAccountId = accId;
+  syncActiveBankDetails();
+  save();
+  if (clientApi && session && data.settings.workspaceId) {
+    clientApi.from('workspaces').update({ business: data.settings.seller }).eq('id', data.settings.workspaceId).catch(() => {});
+  }
+  render();
+  toast(`Active bank set to ${acc.label}`);
+}
+function deleteBankAccount(accId) {
+  ensureBankAccounts();
+  const accounts = data.settings.seller.bankAccounts;
+  const ix = accounts.findIndex(a => a.id === accId);
+  if (ix >= 0) {
+    accounts.splice(ix, 1);
+    if (data.settings.seller.activeBankAccountId === accId) {
+      data.settings.seller.activeBankAccountId = accounts[0]?.id || '';
+    }
+    syncActiveBankDetails();
+    save();
+    if (clientApi && session && data.settings.workspaceId) {
+      clientApi.from('workspaces').update({ business: data.settings.seller }).eq('id', data.settings.workspaceId).catch(() => {});
+    }
+    render();
+    toast('Bank account deleted');
+  }
+}
 function inputValue(id){return $('#'+id)?.value.trim()||'';}
 async function saveSettings(){
   $$('[data-setting]').forEach(el=>{const path=el.dataset.setting.split('.');if(path.length===2)data.settings[path[0]][path[1]]=el.value;else data.settings[path[0]]=el.value;});
+  syncActiveBankDetails();
   save();
   if(clientApi&&session&&data.settings.workspaceId){const [member,business]=await Promise.all([clientApi.from('members').update({display_name:data.settings.displayName}).eq('workspace_id',data.settings.workspaceId).eq('user_id',session.user.id),clientApi.from('workspaces').update({business:data.settings.seller}).eq('id',data.settings.workspaceId)]);if(member.error||business.error)toast('Saved locally; team sync failed: '+(member.error||business.error).message);else {const me=data.members.find(m=>m.userId===session.user.id);if(me)me.displayName=data.settings.displayName;}}
   render();toast('Settings saved');
@@ -1070,7 +1300,7 @@ async function flushPending() {
   } finally { syncing=false; if(successful&&data.pending.length)scheduleSync(); }
 }
 async function fetchAll(table){let out=[];for(let start=0;;start+=1000){const {data:rows,error}=await clientApi.from(table).select('*').eq('workspace_id',data.settings.workspaceId).order('id').range(start,start+999);if(error)throw error;out.push(...rows);if(rows.length<1000)break;}return out;}
-async function pullRemote(){if(!clientApi||!session||!data.settings.workspaceId)return;const ws=data.settings.workspaceId;const [w,m,...tables]=await Promise.all([clientApi.from('workspaces').select('*').eq('id',ws).single(),clientApi.from('members').select('*').eq('workspace_id',ws),...['clients','deal_groups','project_groups','work_items','invoices','payment_receipts'].map(fetchAll)]);if(w.error)throw w.error;if(m.error)throw m.error;data.settings.joinCode=w.data.join_code;if(w.data.business&&Object.keys(w.data.business).length)data.settings.seller={...defaults.settings.seller,...data.settings.seller,...w.data.business};data.members=m.data.map(x=>({userId:x.user_id,displayName:x.display_name,avatarData:x.avatar_data||''}));['clients','groups','projectGroups','items','invoices','receipts'].forEach((table,k)=>{const pending=new Set(data.pending.filter(p=>p.table===table).map(p=>p.id));const pendingDeletes=new Set((data.pendingDeletes||[]).filter(p=>p.table===table).map(p=>p.id));const locals=data[table].filter(x=>pending.has(x.id));data[table]=tables[k].filter(x=>!pendingDeletes.has(x.id)).map(x=>localRow(table,x));for(const local of locals){const ix=data[table].findIndex(x=>x.id===local.id);if(ix<0)data[table].push(local);else data[table][ix]=local;}});if(!activeClient || !data.clients.some(c=>c.id===activeClient))activeClient=sortedClients()[0]?.id||null;lastSyncTime=Date.now();save();render();updateSyncUI();}
+async function pullRemote(){if(!clientApi||!session||!data.settings.workspaceId)return;const ws=data.settings.workspaceId;const [w,m,...tables]=await Promise.all([clientApi.from('workspaces').select('*').eq('id',ws).single(),clientApi.from('members').select('*').eq('workspace_id',ws),...['clients','deal_groups','project_groups','work_items','invoices','payment_receipts'].map(fetchAll)]);if(w.error)throw w.error;if(m.error)throw m.error;data.settings.joinCode=w.data.join_code;if(w.data.business&&Object.keys(w.data.business).length){data.settings.seller={...defaults.settings.seller,...data.settings.seller,...w.data.business};ensureBankAccounts();syncActiveBankDetails();}data.members=m.data.map(x=>({userId:x.user_id,displayName:x.display_name,avatarData:x.avatar_data||''}));['clients','groups','projectGroups','items','invoices','receipts'].forEach((table,k)=>{const pending=new Set(data.pending.filter(p=>p.table===table).map(p=>p.id));const pendingDeletes=new Set((data.pendingDeletes||[]).filter(p=>p.table===table).map(p=>p.id));const locals=data[table].filter(x=>pending.has(x.id));data[table]=tables[k].filter(x=>!pendingDeletes.has(x.id)).map(x=>localRow(table,x));for(const local of locals){const ix=data[table].findIndex(x=>x.id===local.id);if(ix<0)data[table].push(local);else data[table][ix]=local;}});if(!activeClient || !data.clients.some(c=>c.id===activeClient))activeClient=sortedClients()[0]?.id||null;lastSyncTime=Date.now();save();render();updateSyncUI();}
 function subscribe(){
   if(!clientApi||!session||!data.settings.workspaceId)return;
   if(channel)clientApi.removeChannel(channel);
@@ -1186,4 +1416,4 @@ document.addEventListener('paste',e=>{
   if(value.includes('\t')||value.includes('\n'))pasteGrid(e,{dataset:{id:selectionCell.id,cell:selectionCell.key}});
   else{e.preventDefault();editCell(selectionCell.id,selectionCell.key,value);}
 });
-(async()=>{try{const saved=await window.desk.read();if(saved)data={...structuredClone(defaults),...saved,settings:{...structuredClone(defaults.settings),...(saved.settings||{}),seller:{...defaults.settings.seller,...(saved.settings?.seller||{})}}};const topClient=sortedClients()[0]?.id;if(topClient)activeClient=topClient;render();setupSupabase();}catch(e){render();toast('Could not load local data: '+e.message);}})();
+(async()=>{try{const saved=await window.desk.read();if(saved)data={...structuredClone(defaults),...saved,settings:{...structuredClone(defaults.settings),...(saved.settings||{}),seller:{...defaults.settings.seller,...(saved.settings?.seller||{})}}};ensureBankAccounts();syncActiveBankDetails();const topClient=sortedClients()[0]?.id;if(topClient)activeClient=topClient;render();setupSupabase();}catch(e){render();toast('Could not load local data: '+e.message);}})();
