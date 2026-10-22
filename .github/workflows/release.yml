@@ -40,4 +40,4 @@ jobs:
           $base = "release/GIR-Studio-Desk-$version-Setup.exe"
           $assets = @($base, "$base.blockmap", 'release/latest.yml')
           foreach ($asset in $assets) { if (!(Test-Path -LiteralPath $asset)) { throw "Missing release asset: $asset" } }
-          gh release create '${{ github.ref_name }}' @assets --verify-tag --title 'GIR Studio Desk ${{ github.ref_name }}' --notes 'Polished status dropdown with an SVG chevron. Includes compact tabs, clean white worksheet cells, taller client tabs, and color coded statuses from the previous update.'
+          gh release create '${{ github.ref_name }}' @assets --verify-tag --title 'GIR Studio Desk ${{ github.ref_name }}' --notes 'Shows unpaid active work by client in Revenue and Payments, with direct links to matching worksheet rows. Clickable controls now use a pointer cursor.'
