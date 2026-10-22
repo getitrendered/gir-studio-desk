@@ -226,6 +226,33 @@ table.sheet input.editing{user-select:text}
 .tracker-status-select.paid{background:#e8f7ec;color:#0d7340;border:1px solid #a3dfb7}
 .tracker-status-select.discarded{background:#f1f3f4;color:#757575;border:1px solid #dadce0}
 .tracker-status-select:focus{box-shadow:0 0 0 2px rgba(22,132,81,0.2)}
+.tracker-status-select option, #bulkStatus option{background:#fff;color:#1a3324;font-weight:700;padding:5px 8px}
+.tracker-status-select option.pending, .tracker-status-select option[value="pending"], #bulkStatus option[value="pending"]{color:#4c5e53!important;background:#f1f4f2!important}
+.tracker-status-select option.working, .tracker-status-select option[value="working"], #bulkStatus option[value="working"]{color:#1853db!important;background:#eaf2ff!important}
+.tracker-status-select option.changes, .tracker-status-select option[value="changes"], #bulkStatus option[value="changes"]{color:#7b1fa2!important;background:#f5eaff!important}
+.tracker-status-select option.sent, .tracker-status-select option[value="sent"], #bulkStatus option[value="sent"]{color:#c05600!important;background:#fff3e0!important}
+.tracker-status-select option.paid, .tracker-status-select option[value="paid"], #bulkStatus option[value="paid"]{color:#0d7340!important;background:#e8f7ec!important}
+.tracker-status-select option.discarded, .tracker-status-select option[value="discarded"], #bulkStatus option[value="discarded"]{color:#c0392b!important;background:#fde9e7!important}
+.tracker-status-select option.paid-date, .tracker-status-select option[value="paid-date"], #bulkStatus option[value="paid-date"]{color:#0d7340!important;background:#e8f7ec!important}
+
+/* Tracker compact status button trigger */
+.tracker-status-trigger{height:26px;padding:0 8px;font-size:11px;font-weight:700;border-radius:6px;cursor:pointer;outline:none;flex:0 0 auto;display:inline-flex;align-items:center;gap:6px;transition:all .15s ease;user-select:none;border:1px solid transparent;background:#f1f4f2;color:#4c5e53}
+.tracker-status-trigger.pending{background:#f1f4f2;color:#4c5e53;border-color:#cbd7d0}
+.tracker-status-trigger.working{background:#eaf2ff;color:#1853db;border-color:#acc9fa}
+.tracker-status-trigger.changes{background:#f5eaff;color:#7b1fa2;border-color:#dcb5f8}
+.tracker-status-trigger.sent{background:#fff3e0;color:#c05600;border-color:#f9cc9d}
+.tracker-status-trigger.paid{background:#e8f7ec;color:#0d7340;border-color:#a3dfb7}
+.tracker-status-trigger.discarded{background:#f1f3f4;color:#757575;border-color:#dadce0}
+.tracker-status-trigger:hover,.tracker-status-trigger[aria-expanded=true]{filter:brightness(0.97);box-shadow:0 1px 4px rgba(0,0,0,0.08)}
+.tracker-status-trigger .status-dot{width:7px;height:7px;border-radius:50%;flex:none}
+.tracker-status-trigger.pending .status-dot{background:#86958a}
+.tracker-status-trigger.working .status-dot{background:#1853db}
+.tracker-status-trigger.changes .status-dot{background:#7b1fa2}
+.tracker-status-trigger.sent .status-dot{background:#c05600}
+.tracker-status-trigger.paid .status-dot{background:#0d7340}
+.tracker-status-trigger.discarded .status-dot{background:#c0392b}
+.tracker-status-trigger .status-chevron{width:11px;height:11px;flex:none;margin-left:2px;color:currentColor;transition:transform .16s ease}
+.tracker-status-trigger[aria-expanded=true] .status-chevron{transform:rotate(180deg)}
 .tracker-view-btn{height:26px!important;padding:2px 8px!important;font-size:10px!important;color:#64806c!important;background:transparent!important;border:1px solid #dce6de!important;border-radius:6px!important;margin-left:auto}
 .tracker-view-btn:hover{border-color:#158650!important;color:#158650!important}
 .tracker-due{font-size:10px;color:#64806c;background:#edf3ee;padding:2px 6px;border-radius:4px}
@@ -330,17 +357,23 @@ table.sheet input.editing{user-select:text}
 .status-chevron{margin-left:auto;width:13px;height:13px;flex:none;color:#557763;transition:transform .16s ease}
 .status-trigger[aria-expanded=true] .status-chevron{transform:rotate(180deg)}
 .status-cell.pending .status-dot,.status-option.pending .status-dot{background:#86958a}
-.status-cell.working .status-dot,.status-option.working .status-dot{background:#3585d6}
-.status-cell.changes .status-dot,.status-option.changes .status-dot{background:#9264d5}
-.status-cell.sent .status-dot,.status-option.sent .status-dot{background:#d4992e}
-.status-cell.paid .status-dot,.status-option.paid .status-dot{background:#279a59}
-.status-cell.discarded .status-dot,.status-option.discarded .status-dot{background:#d66860}
+.status-cell.working .status-dot,.status-option.working .status-dot{background:#1853db}
+.status-cell.changes .status-dot,.status-option.changes .status-dot{background:#7b1fa2}
+.status-cell.sent .status-dot,.status-option.sent .status-dot{background:#c05600}
+.status-cell.paid .status-dot,.status-option.paid .status-dot{background:#0d7340}
+.status-cell.discarded .status-dot,.status-option.discarded .status-dot{background:#c0392b}
 .status-menu{position:fixed;z-index:9;width:172px;padding:6px;background:#fff;border:1px solid #d9e5dc;border-radius:10px;box-shadow:0 14px 36px #10291b30,0 2px 7px #10291b12;display:flex;flex-direction:column;gap:3px}
-.status-option{display:flex;align-items:center;gap:9px;width:100%;height:31px;border:1px solid transparent;border-radius:6px;background:#fff;color:#314c38;text-align:left;padding:0 9px;font-size:11px;font-weight:700}
-.status-option:hover,.status-option:focus-visible{outline:0;border-color:#acc5b3}
-.status-option.pending{background:#eef1ef}.status-option.working{background:#e1effe}.status-option.changes{background:#efe7ff}.status-option.sent{background:#fff1d7}.status-option.paid{background:#e1f3e5}.status-option.discarded{background:#fde9e7}
-.status-option:hover,.status-option.current{border-color:#a8c1af}
-.status-check{margin-left:auto;color:#367b4e}
+.status-option{display:flex;align-items:center;gap:9px;width:100%;height:31px;border:1px solid transparent;border-radius:6px;background:#fff;color:#314c38;text-align:left;padding:0 9px;font-size:11px;font-weight:700;transition:all .12s ease}
+.status-option:hover,.status-option:focus-visible{outline:0;filter:brightness(0.97);transform:translateX(1px)}
+.status-option.pending{background:#f1f4f2;color:#4c5e53}
+.status-option.working{background:#eaf2ff;color:#1853db}
+.status-option.changes{background:#f5eaff;color:#7b1fa2}
+.status-option.sent{background:#fff3e0;color:#c05600}
+.status-option.paid{background:#e8f7ec;color:#0d7340}
+.status-option.discarded{background:#fde9e7;color:#c0392b}
+.status-option.paid-at{background:#e8f7ec;color:#0d7340}
+.status-option:hover,.status-option.current{box-shadow:inset 0 0 0 1px currentColor}
+.status-check{margin-left:auto;color:currentColor;font-weight:900}
 
 /* Consistent affordance for every clickable control. */
 button,select,[role="button"],[role="option"]{cursor:pointer}

@@ -137,4 +137,16 @@ assert.ok(fs.existsSync(iconIco), 'gir-icon.ico exists');
 assert.ok(fs.statSync(iconIco).size > 10000, 'gir-icon.ico has content');
 console.log('✓ Test 6: App logo assets verified');
 
+// Test 7: Verify tracker status triggers and distinct status colors
+assert.ok(trackerHtml.includes('tracker-status-trigger'), 'Tracker renders custom tracker-status-trigger');
+assert.ok(trackerHtml.includes('data-status-menu="i3"'), 'Status trigger binds data-status-menu for row i3');
+const cssContent = fs.readFileSync(path.join(__dirname, '..', 'extras.css'), 'utf8');
+assert.ok(cssContent.includes('.status-option.pending{background:#f1f4f2;color:#4c5e53}'), 'Pending has distinct grey color');
+assert.ok(cssContent.includes('.status-option.working{background:#eaf2ff;color:#1853db}'), 'Working has distinct blue color');
+assert.ok(cssContent.includes('.status-option.changes{background:#f5eaff;color:#7b1fa2}'), 'Changes has distinct purple color');
+assert.ok(cssContent.includes('.status-option.sent{background:#fff3e0;color:#c05600}'), 'Sent has distinct orange color');
+assert.ok(cssContent.includes('.status-option.paid{background:#e8f7ec;color:#0d7340}'), 'Paid has distinct green color');
+assert.ok(cssContent.includes('.status-option.discarded{background:#fde9e7;color:#c0392b}'), 'Discarded has distinct red color');
+console.log('✓ Test 7: Status options have distinct, unique colors per status');
+
 console.log('ALL WORK TRACKER & NAVIGATION TESTS PASSED!');

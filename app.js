@@ -385,10 +385,11 @@ function renderTracker() {
       </div>
       <div class="tracker-card-actions">
         ${showStart&&!isWorking?`<button type="button" class="small-btn blue tracker-start-btn" data-tracker-start="${i.id}">▶ Start work</button>`:showStart&&isWorking?`<span class="pill working tracker-active-badge">● In progress</span>`:''}
-        <select class="tracker-status-select ${i.status}" data-tracker-status="${i.id}" aria-label="Change status">
-          ${['pending','working','changes','sent','paid','discarded'].map(s=>`<option value="${s}" ${i.status===s?'selected':''}>${s==='changes'?'Changes':s[0].toUpperCase()+s.slice(1)}</option>`).join('')}
-          <option value="paid-date">Paid on date…</option>
-        </select>
+        <button type="button" class="tracker-status-trigger ${i.status}" data-status-menu="${i.id}" aria-label="Change status from ${esc(displayStatus(i))}" aria-haspopup="listbox" aria-expanded="false">
+          <span class="status-dot"></span>
+          <span>${esc(displayStatus(i))}</span>
+          <svg class="status-chevron" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="m4.5 6 3.5 3.5L11.5 6" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        </button>
         <button type="button" class="small-btn tracker-view-btn" data-jump-item="${i.id}">View sheet</button>
       </div>
     </div>`;
@@ -419,10 +420,11 @@ function renderTracker() {
       </div>
       <div class="tracker-card-actions">
         ${!isWorking?`<button type="button" class="small-btn blue tracker-start-btn" data-assignee-pick="${i.id}">${i.assigneeId?'Reassign':'Assign'}</button>`:`<span class="pill working tracker-active-badge">● In progress</span>`}
-        <select class="tracker-status-select ${i.status}" data-tracker-status="${i.id}" aria-label="Change status">
-          ${['pending','working','changes','sent','paid','discarded'].map(s=>`<option value="${s}" ${i.status===s?'selected':''}>${s==='changes'?'Changes':s[0].toUpperCase()+s.slice(1)}</option>`).join('')}
-          <option value="paid-date">Paid on date…</option>
-        </select>
+        <button type="button" class="tracker-status-trigger ${i.status}" data-status-menu="${i.id}" aria-label="Change status from ${esc(displayStatus(i))}" aria-haspopup="listbox" aria-expanded="false">
+          <span class="status-dot"></span>
+          <span>${esc(displayStatus(i))}</span>
+          <svg class="status-chevron" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="m4.5 6 3.5 3.5L11.5 6" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        </button>
         <button type="button" class="small-btn tracker-view-btn" data-jump-item="${i.id}">View sheet</button>
       </div>
     </div>`;
@@ -740,7 +742,11 @@ function bindMain() {
   $$('[data-check]').forEach(b=>{b.onclick=e=>e.stopPropagation();b.onchange=()=>{b.checked?selected.add(b.dataset.check):selected.delete(b.dataset.check);selectionAnchor=b.dataset.check;refreshSelection();};});
   const all=$('#selectAll'); if(all) all.onchange=()=>{$$('[data-check]').forEach(b=>all.checked?selected.add(b.dataset.check):selected.delete(b.dataset.check));refreshSelection();};
   $$('[data-cell]').forEach(el=>{ el.onchange=()=>editCell(el.dataset.id,el.dataset.cell,el.value); if(el.tagName==='INPUT') el.onpaste=e=>pasteGrid(e,el); });
-  $$('[data-status-menu]').forEach(button=>button.onclick=()=>{selectSheetRow(button.dataset.statusMenu,false,false);openStatusMenu(button,button.dataset.statusMenu);});
+  $$('[data-status-menu]').forEach(button=>button.onclick=e=>{
+    e.stopPropagation();
+    if(tab==='sheet')selectSheetRow(button.dataset.statusMenu,false,false);
+    openStatusMenu(button,button.dataset.statusMenu);
+  });
   $$('[data-assignee-pick]').forEach(b=>b.onclick=()=>assignPersonDialog(b.dataset.assigneePick));
   $('#avatarUpload')?.addEventListener('change',e=>{if(e.target.files?.[0])saveAvatar(e.target.files[0]);});
   $('#companyLogoUpload')?.addEventListener('change',e=>{if(e.target.files?.[0])saveCompanyLogo(e.target.files[0]);});
@@ -786,11 +792,16 @@ function openStatusMenu(trigger,id){
   const statuses=['pending','working','changes','sent','paid','discarded'];
   const menu=document.createElement('div');menu.className='status-menu';menu.setAttribute('role','listbox');menu.setAttribute('aria-label','Choose status');
   menu.innerHTML=statuses.map(status=>`<button type="button" class="status-option ${status} ${item.status===status?'current':''}" data-set-status="${status}" role="option" aria-selected="${item.status===status}"><span class="status-dot"></span><span>${status==='changes'?'Changes':status[0].toUpperCase()+status.slice(1)}</span>${item.status===status?'<span class="status-check">✓</span>':''}</button>`).join('') +
-    `<button type="button" class="status-option paid" data-paid-at="${item.id}" role="option"><span class="status-dot"></span><span>Paid on date…</span></button>`;
+    `<button type="button" class="status-option paid-at" data-paid-at="${item.id}" role="option"><span class="status-dot"></span><span>Paid on date…</span></button>`;
   document.body.appendChild(menu);
   const rect=trigger.getBoundingClientRect();
   menu.style.left=Math.max(8,Math.min(rect.left,innerWidth-menu.offsetWidth-8))+'px';
-  menu.style.top=Math.max(8,Math.min(rect.bottom+4,innerHeight-menu.offsetHeight-8))+'px';
+  const menuHeight=menu.offsetHeight||245;
+  if(innerHeight-rect.bottom<menuHeight&&rect.top>menuHeight){
+    menu.style.top=Math.max(8,rect.top-menuHeight-4)+'px';
+  }else{
+    menu.style.top=Math.max(8,Math.min(rect.bottom+4,innerHeight-menuHeight-8))+'px';
+  }
   const outside=e=>{if(!menu.contains(e.target)&&e.target!==trigger)closeStatusMenu();};
   activeStatusMenu={menu,trigger,outside};trigger.setAttribute('aria-expanded','true');
   menu.querySelectorAll('[data-set-status]').forEach(button=>button.onclick=()=>{const next=button.dataset.setStatus;closeStatusMenu();if(next!==item.status)editCell(id,'status',next);});
