@@ -28,6 +28,56 @@ function unfinishedCount(clientId) { return data.items.filter(i=>i.clientId===cl
 function selectionLabel(){const total=data.items.filter(i=>selected.has(i.id)).reduce((sum,i)=>sum+num(i.quotedTotal),0);return selected.size?`${selected.size} selected · Total ${money(total)}`:'0 selected';}
 function avatar(id,name,size='') { const src=data.members.find(m=>m.userId===id)?.avatarData || (id===currentUserId()?data.settings.avatarData:''); return src&&/^data:image\/(?:png|jpeg|webp);base64,/i.test(src)?`<img class="avatar-image ${size}" src="${esc(src)}" alt="${esc(name)}">`:`<span>${esc(initials(name))}</span>`; }
 function billedIds() { return new Set(data.invoices.flatMap(inv => inv.itemIds || [])); }
+function receiptEffectiveItem(r) {
+  if (r.referenceKind === 'item' && r.referenceId) return data.items.find(i => i.id === r.referenceId) || null;
+  if (r.source === 'app' && r.sourceKey && r.sourceKey.startsWith('app:')) {
+    const id = r.sourceKey.slice(4);
+    return data.items.find(i => i.id === id) || null;
+  }
+  return null;
+}
+function receiptEffectiveAmount(r) {
+  const item = receiptEffectiveItem(r);
+  if (item) {
+    if (item.status !== 'paid') return 0;
+    return Math.max(0, effectiveItemValue(item) - num(item.advanceAmount));
+  }
+  if (r.referenceKind === 'invoice' && r.referenceId) {
+    const inv = data.invoices.find(x => x.id === r.referenceId);
+    if (inv) {
+      if (inv.status !== 'paid') return 0;
+      return Math.max(0, num(inv.finalAmount) - invoiceAdvance(inv));
+    }
+  }
+  if (r.referenceKind === 'deal' && r.referenceId) {
+    const g = data.groups.find(x => x.id === r.referenceId);
+    const dealItems = data.items.filter(i => i.groupId === r.referenceId && i.status !== 'discarded');
+    if (dealItems.length && dealItems.every(i => i.status === 'paid')) {
+      const total = dealItems.reduce((sum, i) => sum + num(i.quotedTotal), 0);
+      const agreed = g && g.agreedAmount != null && g.agreedAmount !== '' ? num(g.agreedAmount) : total;
+      const advances = dealItems.reduce((sum, i) => sum + num(i.advanceAmount), 0);
+      return Math.max(0, agreed - advances);
+    }
+  }
+  return num(r.amount);
+}
+function receiptEffectiveDescription(r) {
+  const item = receiptEffectiveItem(r);
+  if (item) return item.service || r.description || 'Payment';
+  if (r.referenceKind === 'invoice' && r.referenceId) {
+    const inv = data.invoices.find(x => x.id === r.referenceId);
+    if (inv) return `Invoice ${inv.number}`;
+  }
+  return r.description || (r.source === 'historical_workbook' ? 'Historical payment' : 'Payment');
+}
+function receiptEffectiveClientName(r) {
+  const item = receiptEffectiveItem(r);
+  if (item) {
+    const client = data.clients.find(c => c.id === item.clientId);
+    if (client?.name) return client.name;
+  }
+  return r.clientName || 'Client';
+}
 function financials() {
   const billed = billedIds(), amount = { revenue:0, awaiting:0, estimated:0, quoted:0, advances:0, openAdvances:0, discarded:0, closed:0, months:{}, sentItems:[], outstandingItems:[] };
   const month = (date,field,value) => { if(!value)return;const key=/^\d{4}-(0[1-9]|1[0-2])-\d{2}$/.test(date||'')?date.slice(0,7):'Date unknown'; const m=amount.months[key] ||= {received:0,closed:0,advances:0,discarded:0};m[field]+=value; };
@@ -55,9 +105,15 @@ function financials() {
     else {const due=Math.max(0,value-advance);amount.revenue+=advance;amount.openAdvances+=advance;amount.estimated+=due;if(due>0)amount.outstandingItems.push({clientId:i.clientId,itemIds:[i.id],balance:due,status:i.status});if(i.status==='sent'){amount.awaiting+=due;amount.sentItems.push({id:i.id,clientId:i.clientId,balance:due});}month(i.advanceReceivedAt,'received',advance);month(i.advanceReceivedAt,'advances',advance);}
   }
   if (Array.isArray(data.receipts) && data.receipts.length) {
-    amount.revenue=data.receipts.reduce((sum,r)=>sum+num(r.amount),0);
+    amount.revenue=0;
     amount.months={};
-    for(const receipt of data.receipts)month(receipt.receivedMonth,'received',num(receipt.amount));
+    for(const receipt of data.receipts){
+      const val=typeof receiptEffectiveAmount==='function'?receiptEffectiveAmount(receipt):num(receipt.amount);
+      const itm=typeof receiptEffectiveItem==='function'?receiptEffectiveItem(receipt):null;
+      if(val<=0&&itm&&itm.status!=='paid')continue;
+      amount.revenue+=val;
+      month(receipt.receivedMonth,'received',val);
+    }
   }
   return amount;
 }
@@ -220,13 +276,27 @@ function renderGroups() {
 function renderRevenue() {
   const f=financials(), receipts=[...(data.receipts||[])].sort((a,b)=>(b.receivedMonth||'').localeCompare(a.receivedMonth||'')||(b.receivedOn||'').localeCompare(a.receivedOn||''));
   const months=new Map();
-  for(const r of receipts){const key=(r.receivedMonth||'').slice(0,7);const month=months.get(key)||{total:0,receipts:[]};month.total+=num(r.amount);month.receipts.push(r);months.set(key,month);}
+  for(const r of receipts){
+    const amt=receiptEffectiveAmount(r);
+    const itm=receiptEffectiveItem(r);
+    if(amt<=0&&itm&&itm.status!=='paid')continue;
+    const key=(r.receivedMonth||'').slice(0,7);
+    const month=months.get(key)||{total:0,receipts:[]};
+    month.total+=amt;
+    month.receipts.push({
+      ...r,
+      effectiveAmount: amt,
+      effectiveDescription: receiptEffectiveDescription(r),
+      effectiveClientName: receiptEffectiveClientName(r)
+    });
+    months.set(key,month);
+  }
   const monthName=key=>esc(new Date(key+'-01T00:00:00').toLocaleDateString('en-IN',{month:'long',year:'numeric'}));
   return `<div class="section-top"><div><h2>Revenue</h2><p>Money received is recorded by payment date and client. Estimated incoming is unpaid active work.</p></div></div>
     <div class="cards"><div class="card green"><div class="card-label">Received</div><div class="card-value">${money(f.revenue)}</div><div class="card-foot">Recorded cash receipts</div></div><div class="card blue"><div class="card-label">Paid work value</div><div class="card-value">${money(f.closed)}</div><div class="card-foot">Value marked paid on worksheets</div></div><div class="card amber"><div class="card-label">Open-work advances</div><div class="card-value">${money(f.openAdvances)}</div><div class="card-foot">Already received; included in historical receipts where recorded</div></div><div class="card"><div class="card-label">Discarded project value</div><div class="card-value">${money(f.discarded)}</div><div class="card-foot">Excluded from income estimates</div></div></div>
     <div class="cards"><div class="card amber"><div class="card-label">Work sent expected</div><div class="card-value">${money(f.awaiting)}</div><div class="card-foot">Sent or invoiced balances still due</div></div><div class="card blue"><div class="card-label">Estimated incoming</div><div class="card-value">${money(f.estimated)}</div><div class="card-foot">All unpaid active work, including sent</div></div></div>
     <div class="panel"><h3>Revenue by month</h3><p class="muted">Historical payments come from the supplied revenue workbook. New payments appear here when work is marked Paid.</p>${months.size?`<table class="table-list"><thead><tr><th>MONTH</th><th>PAYMENTS</th><th>RECEIVED</th></tr></thead><tbody>${[...months].map(([key,m])=>`<tr><td><strong>${monthName(key)}</strong></td><td>${m.receipts.length}</td><td><strong>${money(m.total)}</strong></td></tr>`).join('')}</tbody></table>`:'<p class="muted">No payment receipts recorded.</p>'}</div>
-    <div class="panel"><h3>Payment history</h3><p class="muted">Client, amount and receipt date for every recorded payment. A month-only date means the source day could not be verified.</p>${[...months].map(([key,m])=>`<details class="revenue-month"><summary><strong>${monthName(key)}</strong><span>${m.receipts.length} payments · ${money(m.total)}</span></summary><table class="table-list"><thead><tr><th>DATE</th><th>CLIENT</th><th>PAYMENT</th><th>AMOUNT</th></tr></thead><tbody>${m.receipts.map(r=>`<tr><td>${r.receivedOn?fmtDate(r.receivedOn):'Day unconfirmed'}</td><td>${esc(r.clientName)}</td><td>${esc(r.description|| (r.source==='historical_workbook'?'Historical payment':'Payment'))}</td><td><strong>${money(r.amount)}</strong></td></tr>`).join('')}</tbody></table></details>`).join('')||'<p class="muted">No payments yet.</p>'}</div>
+    <div class="panel"><h3>Payment history</h3><p class="muted">Client, amount and receipt date for every recorded payment. A month-only date means the source day could not be verified.</p>${[...months].map(([key,m])=>`<details class="revenue-month"><summary><strong>${monthName(key)}</strong><span>${m.receipts.length} payments · ${money(m.total)}</span></summary><table class="table-list"><thead><tr><th>DATE</th><th>CLIENT</th><th>PAYMENT</th><th>AMOUNT</th></tr></thead><tbody>${m.receipts.map(r=>`<tr><td>${r.receivedOn?fmtDate(r.receivedOn):'Day unconfirmed'}</td><td>${esc(r.effectiveClientName||r.clientName)}</td><td>${esc(r.effectiveDescription||r.description|| (r.source==='historical_workbook'?'Historical payment':'Payment'))}</td><td><strong>${money(r.effectiveAmount!=null?r.effectiveAmount:r.amount)}</strong></td></tr>`).join('')}</tbody></table></details>`).join('')||'<p class="muted">No payments yet.</p>'}</div>
     ${renderOutstandingPanel(f)}`;
 }
 function renderOutstandingPanel(f=financials()) {
@@ -390,12 +460,25 @@ function editCell(id, key, value) {
   if(key==='quantity'||key==='rate') { i.manualTotal=false; i.quotedTotal=num(i.quantity)*num(i.rate); }
   if(key==='quotedTotal')i.manualTotal=true;
   mutate('items',i);
+  if(i.status==='paid'||data.receipts?.some(r=>(r.referenceKind==='item'&&r.referenceId===i.id)||(r.source==='app'&&r.sourceKey==='app:'+i.id))) {
+    syncItemReceipt(i);
+  }
 }
 function pasteGrid(e,el) {
   const text=e.clipboardData.getData('text/plain'); if(!text.includes('\t')&&!text.includes('\n'))return;
   e.preventDefault(); const columns=['serial','workDate','service','quantity','rate','quotedTotal','status','advanceAmount','assigneeId','remarks']; const startCol=columns.indexOf(el.dataset.cell); if(startCol<0)return;
   const rows=text.trimEnd().split(/\r?\n/).map(r=>r.split('\t')); const items=groupedSheetItems(clientItems()); let start=items.findIndex(i=>i.id===el.dataset.id);
-  for(const cells of rows) { let item=items[start]; if(!item){item=newItem(activeClient,items.length);items.push(item);data.items.push(item);} const beforeStatus=item.status,beforeAdvance=num(item.advanceAmount);cells.forEach((v,c)=>{const key=columns[startCol+c];if(!key)return;if(['quantity','rate','quotedTotal','advanceAmount'].includes(key))v=Math.max(0,num(v));if(key==='status')v=v.trim()==='-'?'discarded':v.trim().toLowerCase()||'pending';if(key==='advanceAmount'&&v>0&&!item.advanceReceivedAt)item.advanceReceivedAt=today();item[key]=v;}); if(!item.manualTotal && cells.length && !cells.some((_,c)=>columns[startCol+c]==='quotedTotal'))item.quotedTotal=num(item.quantity)*num(item.rate);if(item.status==='paid'&&beforeStatus!=='paid'){recordPaidItems([{...item,status:beforeStatus}]);item.paidAt=today();item.paidAtTs=new Date().toISOString();}else if(item.status!=='paid'&&num(item.advanceAmount)>beforeAdvance)createReceipt(item.clientId,num(item.advanceAmount)-beforeAdvance,`Advance · ${item.service}`,'advance',item.id);enqueue('items',item.id);start++; }
+  for(const cells of rows) {
+    let item=items[start]; if(!item){item=newItem(activeClient,items.length);items.push(item);data.items.push(item);}
+    const beforeStatus=item.status,beforeAdvance=num(item.advanceAmount);
+    cells.forEach((v,c)=>{const key=columns[startCol+c];if(!key)return;if(['quantity','rate','quotedTotal','advanceAmount'].includes(key))v=Math.max(0,num(v));if(key==='status')v=v.trim()==='-'?'discarded':v.trim().toLowerCase()||'pending';if(key==='advanceAmount'&&v>0&&!item.advanceReceivedAt)item.advanceReceivedAt=today();item[key]=v;});
+    if(!item.manualTotal && cells.length && !cells.some((_,c)=>columns[startCol+c]==='quotedTotal'))item.quotedTotal=num(item.quantity)*num(item.rate);
+    if(item.status==='paid'&&beforeStatus!=='paid'){recordPaidItems([{...item,status:beforeStatus}]);item.paidAt=today();item.paidAtTs=new Date().toISOString();}
+    else if(item.status==='paid'){syncItemReceipt(item);}
+    else if(item.status!=='paid'&&beforeStatus==='paid'){const r=(data.receipts||[]).find(x=>(x.referenceKind==='item'&&x.referenceId===item.id)||(x.source==='app'&&x.sourceKey==='app:'+item.id));if(r)removeReceipt(r.id);}
+    else if(item.status!=='paid'&&num(item.advanceAmount)>beforeAdvance)createReceipt(item.clientId,num(item.advanceAmount)-beforeAdvance,`Advance · ${item.service}`,'advance',item.id);
+    enqueue('items',item.id);start++;
+  }
   save();scheduleSync();
   toast(`Pasted ${rows.length} row${rows.length===1?'':'s'}`);render();
 }
@@ -414,10 +497,27 @@ function createReceipt(clientId,amount,description,referenceKind,referenceId,sta
 }
 function recordPaidItems(items,context=null,stamp=new Date().toISOString()){
   const unpaid=items.filter(i=>i.status!=='paid'&&i.status!=='discarded');if(!unpaid.length)return;
-  const amount=unpaid.reduce((sum,i)=>sum+Math.max(0,effectiveItemValue(i)-num(i.advanceAmount)),0);
-  const sameDeal=unpaid.every(i=>i.groupId&&i.groupId===unpaid[0].groupId),sameProject=unpaid.every(i=>i.projectGroupId&&i.projectGroupId===unpaid[0].projectGroupId);
-  const group=context||(sameDeal?{kind:'deal',id:unpaid[0].groupId,label:data.groups.find(g=>g.id===unpaid[0].groupId)?.label}:sameProject?{kind:'project',id:unpaid[0].projectGroupId,label:data.projectGroups.find(g=>g.id===unpaid[0].projectGroupId)?.label}:null);
-  createReceipt(unpaid[0].clientId,amount,group?.label|| (unpaid.length===1?unpaid[0].service:`${unpaid.length} services`),group?.kind|| (unpaid.length===1?'item':'selection'),group?.id|| (unpaid.length===1?unpaid[0].id:null),stamp);
+  if(context){
+    const amount=unpaid.reduce((sum,i)=>sum+Math.max(0,effectiveItemValue(i)-num(i.advanceAmount)),0);
+    createReceipt(unpaid[0].clientId,amount,context.label||'Group deal',context.kind,context.id,stamp);
+    return;
+  }
+  const sameDeal=unpaid.every(i=>i.groupId&&i.groupId===unpaid[0].groupId&&i.groupId!=null);
+  const sameProject=unpaid.every(i=>i.projectGroupId&&i.projectGroupId===unpaid[0].projectGroupId&&i.projectGroupId!=null);
+  if(sameDeal){
+    const g=data.groups?.find(x=>x.id===unpaid[0].groupId);
+    const amount=unpaid.reduce((sum,i)=>sum+Math.max(0,effectiveItemValue(i)-num(i.advanceAmount)),0);
+    createReceipt(unpaid[0].clientId,amount,g?.label||'Group deal','deal',unpaid[0].groupId,stamp);
+  } else if(sameProject){
+    const pg=data.projectGroups?.find(x=>x.id===unpaid[0].projectGroupId);
+    const amount=unpaid.reduce((sum,i)=>sum+Math.max(0,effectiveItemValue(i)-num(i.advanceAmount)),0);
+    createReceipt(unpaid[0].clientId,amount,pg?.label||'Project','project',unpaid[0].projectGroupId,stamp);
+  } else {
+    for(const item of unpaid){
+      const amount=Math.max(0,effectiveItemValue(item)-num(item.advanceAmount));
+      createReceipt(item.clientId,amount,item.service||'Work row','item',item.id,stamp);
+    }
+  }
 }
 function assign(ids) { ids.forEach(id=>{const i=data.items.find(x=>x.id===id);if(!i||i.status==='discarded')return;if(i.status==='sent'){i.status='changes';i.revisionCount=(i.revisionCount||0)+1;}else if(i.status!=='changes')i.status='working';i.paidAt=null;i.paidAtTs=null;i.assigneeId=currentUserId();queue('items',id);});selected.clear();render(); }
 function markSent(ids) { bulkSetStatus('sent',ids); }
@@ -430,9 +530,61 @@ function bulkSetStatus(next,idsOverride=null,context=null) {
     const invoiced=new Set(invoices.flatMap(inv=>inv.itemIds||[]));
     for(const inv of invoices)if(inv.status==='issued'){createReceipt(inv.clientId,Math.max(0,num(inv.finalAmount)-invoiceAdvance(inv)),`Invoice ${inv.number}`,'invoice',inv.id,stamp);inv.status='paid';inv.paidAt=today();inv.paidAtTs=stamp;inv.updatedAt=stamp;enqueue('invoices',inv.id);}
     recordPaidItems(items.filter(i=>!invoiced.has(i.id)),context,stamp);
+  } else {
+    for(const item of items){
+      if(item.status==='paid'){
+        const r=(data.receipts||[]).find(x=>(x.referenceKind==='item'&&x.referenceId===item.id)||(x.source==='app'&&x.sourceKey==='app:'+item.id));
+        if(r)removeReceipt(r.id);
+      }
+    }
   }
   for(const item of items){let status=next;if(next==='working'&&item.status==='sent'){status='changes';item.revisionCount=(item.revisionCount||0)+1;}else if(next==='changes'&&item.status!=='changes')item.revisionCount=(item.revisionCount||0)+1;if(['working','changes'].includes(status))item.assigneeId ||= currentUserId();if(status==='paid'&&item.status!=='paid'){item.paidAt=today();item.paidAtTs=stamp;}else if(status!=='paid'){item.paidAt=null;item.paidAtTs=null;}item.status=status;item.updatedAt=stamp;enqueue('items',item.id);}
   selected.clear();save();scheduleSync();render();toast(`${items.length} row${items.length===1?'':'s'} updated`);
+}
+function syncItemReceipt(item) {
+  if (!item || !Array.isArray(data.receipts)) return;
+  const r = data.receipts.find(x => 
+    (x.referenceKind === 'item' && x.referenceId === item.id) ||
+    (x.source === 'app' && x.sourceKey === 'app:' + item.id)
+  );
+  if (item.status === 'paid') {
+    const client = data.clients?.find(c => c.id === item.clientId);
+    const amount = Math.max(0, effectiveItemValue(item) - num(item.advanceAmount));
+    const desc = item.service || 'Work row';
+    if (r) {
+      const changed = r.amount !== amount || r.description !== desc || r.referenceId !== item.id;
+      r.amount = amount;
+      r.description = desc;
+      r.referenceKind = 'item';
+      r.referenceId = item.id;
+      if (client?.name) r.clientName = client.name;
+      if (changed) {
+        enqueue('receipts', r.id);
+        save();
+        scheduleSync();
+      }
+    } else {
+      createReceipt(item.clientId, amount, desc, 'item', item.id, item.paidAtTs || new Date().toISOString());
+    }
+  } else if (r) {
+    removeReceipt(r.id);
+  }
+}
+function removeReceipt(id) {
+  if (!id || !Array.isArray(data.receipts)) return;
+  const ix = data.receipts.findIndex(r => r.id === id);
+  if (ix >= 0) data.receipts.splice(ix, 1);
+  if (Array.isArray(data.pending)) data.pending = data.pending.filter(p => !(p.table === 'receipts' && p.id === id));
+  data.pendingDeletes ||= [];
+  if (!data.pendingDeletes.some(d => d.table === 'receipts' && d.id === id)) {
+    data.pendingDeletes.push({table: 'receipts', id});
+  }
+  save();
+  scheduleSync();
+  if (typeof clientApi !== 'undefined' && clientApi && session && data.settings?.workspaceId) {
+    clientApi.from('payment_receipts').delete().eq('id', id).eq('workspace_id', data.settings.workspaceId)
+      .then(({error}) => { if (error) console.error('Supabase delete payment_receipt error:', error); });
+  }
 }
 function modal(title,body,footer='',wide=false) { $('#modalRoot').innerHTML=`<div class="modal-backdrop"><div class="modal ${wide?'wide-modal':''}"><div class="modal-head"><div><h2>${title}</h2></div><button class="close" id="closeModal">×</button></div>${body}${footer}</div></div>`;$('#closeModal').onclick=closeModal;$('.modal-backdrop').onclick=e=>{if(e.target.classList.contains('modal-backdrop'))closeModal();}; }
 function closeModal(){ $('#modalRoot').innerHTML=''; }
@@ -523,7 +675,7 @@ async function migrateImport() {
 }
 function newClientDialog(){modal('New client','<div class="field"><label>Client name</label><input id="newClientName" autofocus></div>','<div class="modal-actions"><button class="small-btn" id="cancelClient">Cancel</button><button class="small-btn blue" id="saveClient">Create client</button></div>');$('#cancelClient').onclick=closeModal;$('#saveClient').onclick=()=>{const name=inputValue('newClientName');if(!name)return;const c={id:uid(),name,billing:{name,address:'',email:'',phone:'',taxId:''},sortOrder:data.clients.length};mutate('clients',c);activeClient=c.id;tab='sheet';closeModal();render();};}
 function billingDialog(id=activeClient){const c=data.clients.find(client=>client.id===id);if(!c)return;const b=c.billing||{};modal('Client billing details',`<p>Shown on invoices for ${esc(c.name)}.</p><div class="field"><label>Billing name</label><input id="billName" value="${esc(b.name||c.name)}"></div><div class="field"><label>Address</label><textarea id="billAddress" rows="3">${esc(b.address||'')}</textarea></div><div class="field-grid"><div class="field"><label>Email</label><input id="billEmail" value="${esc(b.email||'')}"></div><div class="field"><label>Phone</label><input id="billPhone" value="${esc(b.phone||'')}"></div></div><div class="field"><label>Tax / GST ID</label><input id="billTax" value="${esc(b.taxId||'')}"></div>`,`<div class="modal-actions"><button class="small-btn blue" id="saveBilling">Save</button></div>`);$('#saveBilling').onclick=()=>{c.billing={name:inputValue('billName'),address:inputValue('billAddress'),email:inputValue('billEmail'),phone:inputValue('billPhone'),taxId:inputValue('billTax')};mutate('clients',c);closeModal();};}
-function groupDialog(id){const chosen=id?data.items.filter(i=>i.groupId===id):data.items.filter(i=>selected.has(i.id));if(!chosen.length)return;const existing=id?data.groups.find(g=>g.id===id):null;const quote=chosen.reduce((n,i)=>n+num(i.quotedTotal),0);modal(existing?'Edit grouped deal':'Group selected rows',`<p>${chosen.length} rows · Original quote ${money(quote)}</p><div class="field"><label>Group name</label><input id="groupLabel" value="${esc(existing?.label||'Agreed deal')}"></div><div class="field"><label>Agreed final amount</label><input id="groupAmount" type="number" min="0" step="0.01" placeholder="Enter negotiated amount" value="${existing?.agreedAmount??''}"></div><div class="notice">This amount replaces the sum of row totals in revenue and payment estimates. Individual rows stay visible for work tracking.</div>`,`<div class="modal-actions"><button class="small-btn blue" id="saveGroup">Save group</button></div>`);$('#saveGroup').onclick=()=>{const value=inputValue('groupAmount');const g=existing||{id:uid(),clientId:activeClient};g.label=inputValue('groupLabel')||'Agreed deal';g.agreedAmount=value===''?null:num(value);if(!existing)chosen.forEach(i=>{i.groupId=g.id;queue('items',i.id);});mutate('groups',g);selected.clear();closeModal();toast('Deal group saved');};}
+function groupDialog(id){const chosen=id?data.items.filter(i=>i.groupId===id):data.items.filter(i=>selected.has(i.id));if(!chosen.length)return;const existing=id?data.groups.find(g=>g.id===id):null;const quote=chosen.reduce((n,i)=>n+num(i.quotedTotal),0);modal(existing?'Edit grouped deal':'Group selected rows',`<p>${chosen.length} rows · Original quote ${money(quote)}</p><div class="field"><label>Group name</label><input id="groupLabel" value="${esc(existing?.label||'Agreed deal')}"></div><div class="field"><label>Agreed final amount</label><input id="groupAmount" type="number" min="0" step="0.01" placeholder="Enter negotiated amount" value="${existing?.agreedAmount??''}"></div><div class="notice">This amount replaces the sum of row totals in revenue and payment estimates. Individual rows stay visible for work tracking.</div>`,`<div class="modal-actions"><button class="small-btn blue" id="saveGroup">Save group</button></div>`);$('#saveGroup').onclick=()=>{const value=inputValue('groupAmount');const g=existing||{id:uid(),clientId:activeClient};g.label=inputValue('groupLabel')||'Agreed deal';g.agreedAmount=value===''?null:num(value);if(!existing)chosen.forEach(i=>{i.groupId=g.id;queue('items',i.id);});mutate('groups',g);for(const i of data.items.filter(item=>item.groupId===g.id&&item.status==='paid'))syncItemReceipt(i);selected.clear();closeModal();toast('Deal group saved');};}
 function projectGroupDialog() {
   const chosen=data.items.filter(i=>selected.has(i.id));if(!chosen.length)return;
   if(new Set(chosen.map(i=>i.clientId)).size!==1){toast('Select rows from one client');return;}
@@ -628,15 +780,22 @@ async function flushPending() {
   if(syncing||!clientApi||!session||!data.settings.workspaceId)return;
   syncing=true;let successful=false;
   try {
+    if(Array.isArray(data.pendingDeletes)&&data.pendingDeletes.length){
+      const deletes=[...data.pendingDeletes];
+      for(const del of deletes){
+        const {error}=await clientApi.from(remoteTable[del.table]||del.table).delete().eq('id',del.id).eq('workspace_id',data.settings.workspaceId);
+        if(!error){data.pendingDeletes=data.pendingDeletes.filter(d=>!(d.table===del.table&&d.id===del.id));save();}
+      }
+    }
     for(const table of ['clients','groups','projectGroups','items','invoices','receipts']) {
       const queued=data.pending.filter(p=>p.table===table), records=queued.map(p=>data[table].find(x=>x.id===p.id)).filter(Boolean);
-      for(let start=0;start<records.length;start+=100){const chunk=records.slice(start,start+100);const {error}=await clientApi.from(remoteTable[table]).upsert(chunk.map(x=>remoteRow(table,x)),{onConflict:'id',ignoreDuplicates:table==='receipts'});if(error)throw error;const ids=new Set(chunk.map(x=>x.id));data.pending=data.pending.filter(p=>!(p.table===table&&ids.has(p.id)));save();}
+      for(let start=0;start<records.length;start+=100){const chunk=records.slice(start,start+100);const {error}=await clientApi.from(remoteTable[table]).upsert(chunk.map(x=>remoteRow(table,x)),{onConflict:'id'});if(error)throw error;const ids=new Set(chunk.map(x=>x.id));data.pending=data.pending.filter(p=>!(p.table===table&&ids.has(p.id)));save();}
     }
     successful=true;
   } finally { syncing=false; if(successful&&data.pending.length)scheduleSync(); }
 }
 async function fetchAll(table){let out=[];for(let start=0;;start+=1000){const {data:rows,error}=await clientApi.from(table).select('*').eq('workspace_id',data.settings.workspaceId).order('id').range(start,start+999);if(error)throw error;out.push(...rows);if(rows.length<1000)break;}return out;}
-async function pullRemote(){if(!clientApi||!session||!data.settings.workspaceId)return;const ws=data.settings.workspaceId;const [w,m,...tables]=await Promise.all([clientApi.from('workspaces').select('*').eq('id',ws).single(),clientApi.from('members').select('*').eq('workspace_id',ws),...['clients','deal_groups','project_groups','work_items','invoices','payment_receipts'].map(fetchAll)]);if(w.error)throw w.error;if(m.error)throw m.error;data.settings.joinCode=w.data.join_code;if(w.data.business&&Object.keys(w.data.business).length)data.settings.seller={...defaults.settings.seller,...data.settings.seller,...w.data.business};data.members=m.data.map(x=>({userId:x.user_id,displayName:x.display_name,avatarData:x.avatar_data||''}));['clients','groups','projectGroups','items','invoices','receipts'].forEach((table,k)=>{const pending=new Set(data.pending.filter(p=>p.table===table).map(p=>p.id));const locals=data[table].filter(x=>pending.has(x.id));data[table]=tables[k].map(x=>localRow(table,x));for(const local of locals){const ix=data[table].findIndex(x=>x.id===local.id);if(ix<0)data[table].push(local);else data[table][ix]=local;}});if(!activeClient&&data.clients.length)activeClient=data.clients[0].id;save();render();}
+async function pullRemote(){if(!clientApi||!session||!data.settings.workspaceId)return;const ws=data.settings.workspaceId;const [w,m,...tables]=await Promise.all([clientApi.from('workspaces').select('*').eq('id',ws).single(),clientApi.from('members').select('*').eq('workspace_id',ws),...['clients','deal_groups','project_groups','work_items','invoices','payment_receipts'].map(fetchAll)]);if(w.error)throw w.error;if(m.error)throw m.error;data.settings.joinCode=w.data.join_code;if(w.data.business&&Object.keys(w.data.business).length)data.settings.seller={...defaults.settings.seller,...data.settings.seller,...w.data.business};data.members=m.data.map(x=>({userId:x.user_id,displayName:x.display_name,avatarData:x.avatar_data||''}));['clients','groups','projectGroups','items','invoices','receipts'].forEach((table,k)=>{const pending=new Set(data.pending.filter(p=>p.table===table).map(p=>p.id));const pendingDeletes=new Set((data.pendingDeletes||[]).filter(p=>p.table===table).map(p=>p.id));const locals=data[table].filter(x=>pending.has(x.id));data[table]=tables[k].filter(x=>!pendingDeletes.has(x.id)).map(x=>localRow(table,x));for(const local of locals){const ix=data[table].findIndex(x=>x.id===local.id);if(ix<0)data[table].push(local);else data[table][ix]=local;}});if(!activeClient&&data.clients.length)activeClient=data.clients[0].id;save();render();}
 function subscribe(){if(!clientApi||!session||!data.settings.workspaceId)return;if(channel)clientApi.removeChannel(channel);let timer;channel=clientApi.channel('gir-ledger-'+data.settings.workspaceId);for(const table of ['clients','deal_groups','project_groups','work_items','invoices','payment_receipts','members'])channel.on('postgres_changes',{event:'*',schema:'public',table,filter:`workspace_id=eq.${data.settings.workspaceId}`},()=>{clearTimeout(timer);timer=setTimeout(()=>pullRemote().catch(e=>toast('Live refresh failed: '+e.message)),250);});channel.subscribe(status=>{if(status==='CHANNEL_ERROR'||status==='TIMED_OUT')toast('Live connection interrupted; use Sync now');});}
 async function syncNow(){if(!clientApi||!session){toast('Sign in to Supabase first');return;}if(!data.settings.workspaceId){toast('Create or join a workspace first');return;}try{await flushPending();await pullRemote();subscribe();toast('Workspace synced');}catch(e){toast('Sync failed: '+e.message);}}
 

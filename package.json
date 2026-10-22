@@ -1,7 +1,7 @@
 {
   "name": "gir-studio-desk",
   "productName": "GIR Studio Desk",
-  "version": "0.2.17",
+  "version": "0.2.18",
   "private": true,
   "description": "GIR Studio Desk Windows work ledger",
   "main": "main.cjs",

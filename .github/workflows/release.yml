@@ -30,6 +30,7 @@ jobs:
       - run: node tests/test_import_stage.cjs
       - run: node tests/test_financials.cjs
       - run: node tests/test_receipts.cjs
+      - run: node tests/test_dynamic_sync.cjs
       - run: python tests/test_import.py
       - run: npm run build:win
       - name: Publish GitHub Release
