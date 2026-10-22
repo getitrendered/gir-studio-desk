@@ -33,6 +33,7 @@ const client = new Client({
     if (process.argv.includes('--upgrade')) {
       await client.query('begin');
       await client.query(fs.readFileSync(path.join(__dirname, 'import-migration.sql'), 'utf8'));
+      await client.query(fs.readFileSync(path.join(__dirname, 'revenue-receipts.sql'), 'utf8'));
       await client.query('commit');
       console.log('Supabase import schema upgraded.');
       return;
@@ -44,6 +45,7 @@ const client = new Client({
     await client.query('begin');
     await client.query(fs.readFileSync(path.join(__dirname, 'schema.sql'), 'utf8'));
     await client.query(fs.readFileSync(path.join(__dirname, 'import-migration.sql'), 'utf8'));
+    await client.query(fs.readFileSync(path.join(__dirname, 'revenue-receipts.sql'), 'utf8'));
     await client.query('commit');
     const result = await client.query("select to_regclass('public.workspaces') is not null as workspaces, to_regclass('public.import_batches') is not null as import_batches, to_regprocedure('public.migrate_workbook(uuid,jsonb)') is not null as migrate_workbook");
     console.log('Supabase schema installed:', result.rows[0]);

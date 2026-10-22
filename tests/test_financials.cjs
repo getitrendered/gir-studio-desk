@@ -39,4 +39,9 @@ context.data.items.push({id:'future',quotedTotal:700,status:'paid',workDate:'202
 const future=vm.runInContext('financials()',context);
 assert.equal(future.months['2026-12'],undefined,'future work date must not become a payment month');
 assert.equal(future.months['Date unknown'].received,5000);
+context.data.receipts=[{amount:7500,receivedMonth:'2024-08-01'},{amount:500,receivedMonth:'2024-08-01'}];
+const cash=vm.runInContext('financials()',context);
+assert.equal(cash.revenue,8000,'cash receipts replace inferred ledger revenue');
+assert.equal(cash.months['2024-08'].received,8000,'cash receipts use their recorded month');
+assert.equal(cash.months['Date unknown'],undefined,'historical paid rows are not counted twice');
 console.log('Financial rules passed');
