@@ -954,8 +954,8 @@ function bindMain() {
   $$('[data-preview-advance]').forEach(el=>el.onchange=()=>{const item=importPreview?.clients.flatMap(c=>c.items).find(i=>i.id===el.dataset.previewAdvance);if(item){item.advanceAmount=Math.max(0,num(el.value));render();}});
   const workFilter=$('#workFilter');if(workFilter)workFilter.onchange=()=>{filter=workFilter.value;selected.clear();render();};
   const bulkStatus=$('#bulkStatus');if(bulkStatus)bulkStatus.onchange=()=>{const next=bulkStatus.value;bulkStatus.value='';if(next==='paid-date'){paidAtDialog([...selected]);}else if(next)bulkSetStatus(next);};
-  $('[data-cat-ping]').forEach(b=>b.onclick=e=>{e.stopPropagation();const itm=data.items.find(x=>x.id===b.dataset.catPing);openCatReactionPicker(itm);});
-  $('[data-tracker-start]').forEach(b=>b.onclick=e=>{e.stopPropagation();startTrackerItem(b.dataset.trackerStart);});
+  $$('[data-cat-ping]').forEach(b=>b.onclick=e=>{e.stopPropagation();const itm=data.items.find(x=>x.id===b.dataset.catPing);openCatReactionPicker(itm);});
+  $$('[data-tracker-start]').forEach(b=>b.onclick=e=>{e.stopPropagation();startTrackerItem(b.dataset.trackerStart);});
   $$('[data-tracker-status]').forEach(sel=>sel.onchange=e=>{e.stopPropagation();updateTrackerItemStatus(sel.dataset.trackerStatus,sel.value);});
   $$('[data-check]').forEach(b=>{b.onclick=e=>e.stopPropagation();b.onchange=()=>{b.checked?selected.add(b.dataset.check):selected.delete(b.dataset.check);selectionAnchor=b.dataset.check;refreshSelection();};});
   const all=$('#selectAll'); if(all) all.onchange=()=>{$$('[data-check]').forEach(b=>all.checked?selected.add(b.dataset.check):selected.delete(b.dataset.check));refreshSelection();};
@@ -2552,12 +2552,12 @@ async function pullRemote(){
     ensureBankAccounts();
     syncActiveBankDetails();
   }
-  data.members=m.data.map(x=>({userId:x.user_id,displayName:x.display_name,avatarData:x.avatar_data||''}));
+  data.members=(m?.data||[]).map(x=>({userId:x.user_id,displayName:x.display_name,avatarData:x.avatar_data||''}));
   ['clients','groups','projectGroups','items','invoices','receipts'].forEach((table,k)=>{
     const pending=new Set(data.pending.filter(p=>p.table===table).map(p=>p.id));
     const pendingDeletes=new Set((data.pendingDeletes||[]).filter(p=>p.table===table).map(p=>p.id));
-    const locals=data[table].filter(x=>pending.has(x.id));
-    data[table]=tables[k].filter(x=>!pendingDeletes.has(x.id)).map(x=>localRow(table,x));
+    const locals=(data[table]||[]).filter(x=>pending.has(x.id));
+    data[table]=(tables[k]||[]).filter(x=>!pendingDeletes.has(x.id)).map(x=>localRow(table,x));
     for(const local of locals){
       const ix=data[table].findIndex(x=>x.id===local.id);
       if(ix<0)data[table].push(local);else data[table][ix]=local;

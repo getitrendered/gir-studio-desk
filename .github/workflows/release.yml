@@ -49,4 +49,4 @@ jobs:
           $base = "release/MeowSheet-$version-Setup.exe"
           $assets = @($base, "$base.blockmap", 'release/latest.yml')
           foreach ($asset in $assets) { if (!(Test-Path -LiteralPath $asset)) { throw "Missing release asset: $asset" } }
-          gh release create '${{ github.ref_name }}' @assets --verify-tag --title 'MeowSheet ${{ github.ref_name }}' --notes 'MeowSheet ${{ github.ref_name }}: Auto-refresh expired Supabase JWT session and prune orphaned pending sync items.'
+          gh release create '${{ github.ref_name }}' @assets --verify-tag --title 'MeowSheet ${{ github.ref_name }}' --notes 'MeowSheet ${{ github.ref_name }}: Fix bindMain query selector collection error during render and remote sync.'
