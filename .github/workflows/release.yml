@@ -48,4 +48,4 @@ jobs:
           $base = "release/MeowSheet-$version-Setup.exe"
           $assets = @($base, "$base.blockmap", 'release/latest.yml')
           foreach ($asset in $assets) { if (!(Test-Path -LiteralPath $asset)) { throw "Missing release asset: $asset" } }
-          gh release create '${{ github.ref_name }}' @assets --verify-tag --title 'MeowSheet ${{ github.ref_name }}' --notes 'MeowSheet ${{ github.ref_name }}: Fixed workspace persistence so it never asks for workspace code again, smart foreground/background ping notifications, removed card buttons, and added direct Ping button on team members.'
+          gh release create '${{ github.ref_name }}' @assets --verify-tag --title 'MeowSheet ${{ github.ref_name }}' --notes 'MeowSheet ${{ github.ref_name }}: Cleaned up tracker UI with primary top Cat Reaction Ping button, workspace persistence fix, and smart focus ping notifications.'

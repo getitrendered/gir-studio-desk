@@ -51,7 +51,6 @@ assert(appJs.includes('getCatLottie'), 'app.js must define getCatLottie');
 assert(appJs.includes('openCatReactionPicker'), 'app.js must define openCatReactionPicker');
 assert(appJs.includes('displayCatReactionBanner'), 'app.js must define displayCatReactionBanner');
 assert(appJs.includes('triggerCatPing'), 'app.js must define triggerCatPing');
-assert(appJs.includes('data-ping-member'), 'app.js team panel must contain data-ping-member button');
 assert(appJs.includes('cat-team-ping-btn'), 'app.js tracker must contain cat-team-ping-btn');
 assert(!appJs.includes('data-cat-ping='), 'cards must NOT contain individual cat ping buttons');
 assert(appJs.includes("event: 'cat_reaction'"), 'app.js subscribe() must listen for cat_reaction broadcasts');

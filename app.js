@@ -569,13 +569,10 @@ function renderTracker() {
           .sort((a,b)=>statusRank(a.status)-statusRank(b.status)||(a.dueDate||'9999').localeCompare(b.dueDate||'9999'));
         const inProgress=assigned.filter(i=>['working','changes'].includes(i.status)).length;
         return `<div class="panel">
-          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;flex-wrap:wrap;gap:8px;">
-            <h3 style="margin:0;">
-              <span class="tracker-avatar">${avatar(m.userId,m.displayName)}</span>${esc(m.displayName)}
-              <span class="muted">${assigned.length} assigned${inProgress?` · ${inProgress} in progress`:''}</span>
-            </h3>
-            ${m.userId !== currentUserId() ? `<button type="button" class="cat-team-ping-btn" data-ping-member="${m.userId}" data-ping-name="${esc(m.displayName)}" title="Send animated cat reaction ping to ${esc(m.displayName)}">🐾 Ping ${esc(m.displayName)}</button>` : ''}
-          </div>
+          <h3>
+            <span class="tracker-avatar">${avatar(m.userId,m.displayName)}</span>${esc(m.displayName)}
+            <span class="muted">${assigned.length} assigned${inProgress?` · ${inProgress} in progress`:''}</span>
+          </h3>
           ${assigned.length?assigned.map(i=>renderCard(i,true)).join(''):'<p class="muted">No work assigned right now. Assign work from any worksheet.</p>'}
         </div>`;
       }).join('')}
