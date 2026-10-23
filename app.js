@@ -2407,8 +2407,37 @@ function setupSupabase() {
     clientApi.auth.getSession().then(({data:d,error})=>{authLoading=false;if(error){accessError=error.message;render();return;}session=d.session;if(session){workspaceReady=false;render();resolveWorkspace();}else render();});
   } catch(e){authLoading=false;accessError='Supabase connection failed: '+e.message;render();}
 }
+async function ensureActiveSession() {
+  if (!clientApi) return null;
+  try {
+    const { data: d, error } = await clientApi.auth.getSession();
+    if (error || !d?.session) {
+      const { data: refData, error: refErr } = await clientApi.auth.refreshSession();
+      if (!refErr && refData?.session) {
+        session = refData.session;
+        return session;
+      }
+      return null;
+    }
+    const current = d.session;
+    if (current.expires_at && (current.expires_at * 1000 - Date.now() < 120000)) {
+      const { data: refData, error: refErr } = await clientApi.auth.refreshSession();
+      if (!refErr && refData?.session) {
+        session = refData.session;
+        return session;
+      }
+    }
+    session = current;
+    return session;
+  } catch (err) {
+    console.warn('ensureActiveSession notice:', err);
+    return session;
+  }
+}
 async function resolveWorkspace(){
-  if(workspaceResolving||!clientApi||!session)return;
+  if(workspaceResolving||!clientApi)return;
+  await ensureActiveSession();
+  if(!session)return;
   workspaceResolving=true;
   try{
     const {data:membership,error}=await clientApi.from('members').select('workspace_id,display_name').eq('workspace_id',GIR_WORKSPACE_ID).eq('user_id',session.user.id).maybeSingle();
@@ -2455,7 +2484,9 @@ async function signOut(){if(clientApi)await clientApi.auth.signOut();session=nul
 async function createWorkspace(){if(!clientApi||!session){toast('Sign in first');return;}if(data.settings.workspaceId){toast('Already in a workspace');return;}const id=uid(),code=crypto.randomUUID().replaceAll('-','').slice(0,12).toUpperCase();const {error}=await clientApi.from('workspaces').insert({id,owner_id:session.user.id,name:'GIR Studio',join_code:code,business:data.settings.seller});if(error){toast(error.message);return;}const m=await clientApi.from('members').insert({workspace_id:id,user_id:session.user.id,display_name:data.settings.displayName,avatar_data:data.settings.avatarData||''});if(m.error){toast(m.error.message);return;}data.settings.workspaceId=id;data.settings.joinCode=code;save();render();await syncNow();toast('Workspace created. Share code '+code);}
 function joinDialog(){if(!clientApi||!session){toast('Sign in first');return;}modal('Join a workspace','<p>Enter the code shown on the first PC in Settings.</p><div class="field"><label>Workspace code</label><input id="joinCode" maxlength="12"></div>','<div class="modal-actions"><button class="small-btn blue" id="doJoin">Join workspace</button></div>');$('#doJoin').onclick=async()=>{const {data:id,error}=await clientApi.rpc('join_workspace',{code:inputValue('joinCode'),name:data.settings.displayName});if(error){toast(error.message);return;}data.settings.workspaceId=id;save();closeModal();if(data.settings.avatarData)await clientApi.from('members').update({avatar_data:data.settings.avatarData}).eq('workspace_id',id).eq('user_id',session.user.id);await syncNow();toast('Joined workspace');};}
 async function flushPending() {
-  if(syncing||!clientApi||!session||!data.settings.workspaceId)return;
+  if(syncing||!clientApi||!data.settings.workspaceId)return;
+  await ensureActiveSession();
+  if(!session)return;
   syncing=true;let successful=false;
   try {
     if(Array.isArray(data.pendingDeletes)&&data.pendingDeletes.length){
@@ -2466,14 +2497,78 @@ async function flushPending() {
       }
     }
     for(const table of ['clients','groups','projectGroups','items','invoices','receipts']) {
-      const queued=data.pending.filter(p=>p.table===table), records=queued.map(p=>data[table].find(x=>x.id===p.id)).filter(Boolean);
-      for(let start=0;start<records.length;start+=100){const chunk=records.slice(start,start+100);const {error}=await clientApi.from(remoteTable[table]).upsert(chunk.map(x=>remoteRow(table,x)),{onConflict:'id'});if(error)throw error;const ids=new Set(chunk.map(x=>x.id));data.pending=data.pending.filter(p=>!(p.table===table&&ids.has(p.id)));save();}
+      const queued=data.pending.filter(p=>p.table===table);
+      if(!queued.length) continue;
+      
+      const records = [];
+      const orphanedIds = new Set();
+      for (const p of queued) {
+        const rec = (data[table] || []).find(x => x.id === p.id);
+        if (rec) records.push(rec);
+        else orphanedIds.add(p.id);
+      }
+      
+      // Clear orphaned IDs that were already deleted or missing locally
+      if (orphanedIds.size > 0) {
+        data.pending = data.pending.filter(p => !(p.table === table && orphanedIds.has(p.id)));
+        save();
+      }
+
+      for(let start=0;start<records.length;start+=100){
+        const chunk=records.slice(start,start+100);
+        const {error}=await clientApi.from(remoteTable[table]).upsert(chunk.map(x=>remoteRow(table,x)),{onConflict:'id'});
+        if(error)throw error;
+        const ids=new Set(chunk.map(x=>x.id));
+        data.pending=data.pending.filter(p=>!(p.table===table&&ids.has(p.id)));
+        save();
+      }
     }
     successful=true;
   } finally { syncing=false; if(successful&&data.pending.length)scheduleSync(); }
 }
 async function fetchAll(table){let out=[];for(let start=0;;start+=1000){const {data:rows,error}=await clientApi.from(table).select('*').eq('workspace_id',data.settings.workspaceId).order('id').range(start,start+999);if(error)throw error;out.push(...rows);if(rows.length<1000)break;}return out;}
-async function pullRemote(){if(!clientApi||!session||!data.settings.workspaceId)return;const ws=data.settings.workspaceId;const [w,m,...tables]=await Promise.all([clientApi.from('workspaces').select('*').eq('id',ws).single(),clientApi.from('members').select('*').eq('workspace_id',ws),...['clients','deal_groups','project_groups','work_items','invoices','payment_receipts'].map(fetchAll)]);if(w.error)throw w.error;if(m.error)throw m.error;data.settings.joinCode=w.data.join_code;if(w.data.business&&Object.keys(w.data.business).length){const localAccounts=(data.settings.seller.bankAccounts||[]).slice();const localActiveId=data.settings.seller.activeBankAccountId;data.settings.seller={...defaults.settings.seller,...data.settings.seller,...w.data.business};if(!w.data.business.bankAccounts?.length&&localAccounts.length){data.settings.seller.bankAccounts=localAccounts;data.settings.seller.activeBankAccountId=localActiveId||localAccounts[0].id;}if(!data.settings.workspaceId)data.settings.workspaceId=GIR_WORKSPACE_ID;ensureBankAccounts();syncActiveBankDetails();}data.members=m.data.map(x=>({userId:x.user_id,displayName:x.display_name,avatarData:x.avatar_data||''}));['clients','groups','projectGroups','items','invoices','receipts'].forEach((table,k)=>{const pending=new Set(data.pending.filter(p=>p.table===table).map(p=>p.id));const pendingDeletes=new Set((data.pendingDeletes||[]).filter(p=>p.table===table).map(p=>p.id));const locals=data[table].filter(x=>pending.has(x.id));data[table]=tables[k].filter(x=>!pendingDeletes.has(x.id)).map(x=>localRow(table,x));for(const local of locals){const ix=data[table].findIndex(x=>x.id===local.id);if(ix<0)data[table].push(local);else data[table][ix]=local;}});if(!activeClient || !data.clients.some(c=>c.id===activeClient))activeClient=sortedClients()[0]?.id||null;lastSyncTime=Date.now();save();render();updateSyncUI();}
+async function pullRemote(){
+  if(!clientApi||!data.settings.workspaceId)return;
+  await ensureActiveSession();
+  if(!session)return;
+  const ws=data.settings.workspaceId;
+  const [w,m,...tables]=await Promise.all([
+    clientApi.from('workspaces').select('*').eq('id',ws).single(),
+    clientApi.from('members').select('*').eq('workspace_id',ws),
+    ...['clients','deal_groups','project_groups','work_items','invoices','payment_receipts'].map(fetchAll)
+  ]);
+  if(w.error)throw w.error;
+  if(m.error)throw m.error;
+  data.settings.joinCode=w.data.join_code;
+  if(w.data.business&&Object.keys(w.data.business).length){
+    const localAccounts=(data.settings.seller.bankAccounts||[]).slice();
+    const localActiveId=data.settings.seller.activeBankAccountId;
+    data.settings.seller={...defaults.settings.seller,...data.settings.seller,...w.data.business};
+    if(!w.data.business.bankAccounts?.length&&localAccounts.length){
+      data.settings.seller.bankAccounts=localAccounts;
+      data.settings.seller.activeBankAccountId=localActiveId||localAccounts[0].id;
+    }
+    if(!data.settings.workspaceId)data.settings.workspaceId=GIR_WORKSPACE_ID;
+    ensureBankAccounts();
+    syncActiveBankDetails();
+  }
+  data.members=m.data.map(x=>({userId:x.user_id,displayName:x.display_name,avatarData:x.avatar_data||''}));
+  ['clients','groups','projectGroups','items','invoices','receipts'].forEach((table,k)=>{
+    const pending=new Set(data.pending.filter(p=>p.table===table).map(p=>p.id));
+    const pendingDeletes=new Set((data.pendingDeletes||[]).filter(p=>p.table===table).map(p=>p.id));
+    const locals=data[table].filter(x=>pending.has(x.id));
+    data[table]=tables[k].filter(x=>!pendingDeletes.has(x.id)).map(x=>localRow(table,x));
+    for(const local of locals){
+      const ix=data[table].findIndex(x=>x.id===local.id);
+      if(ix<0)data[table].push(local);else data[table][ix]=local;
+    }
+  });
+  if(!activeClient || !data.clients.some(c=>c.id===activeClient))activeClient=sortedClients()[0]?.id||null;
+  lastSyncTime=Date.now();
+  save();
+  render();
+  updateSyncUI();
+}
 function subscribe(){
   if(!clientApi||!session||!data.settings.workspaceId)return;
   if(channel)clientApi.removeChannel(channel);
@@ -2543,7 +2638,9 @@ function updateSyncUI(){
   }
 }
 async function syncNow(){
-  if(!clientApi||!session){toast('Sign in to Supabase first');return;}
+  if(!clientApi){toast('Connecting to Supabase...');return;}
+  await ensureActiveSession();
+  if(!session){toast('Session expired. Please sign in to Supabase in Settings');return;}
   if(!data.settings.workspaceId){toast('Create or join a workspace first');return;}
   syncing=true;updateSyncUI();
   try{
@@ -2553,7 +2650,23 @@ async function syncNow(){
     lastSyncTime=Date.now();
     toast('Workspace synced');
   }catch(e){
-    toast('Sync failed: '+e.message);
+    if(e?.message?.includes('JWT expired')||e?.code==='PGRST303'){
+      try{
+        const {data:refData}=await clientApi.auth.refreshSession();
+        if(refData?.session){
+          session=refData.session;
+          await flushPending();
+          await pullRemote();
+          subscribe();
+          lastSyncTime=Date.now();
+          toast('Workspace synced');
+          return;
+        }
+      }catch(retryErr){
+        console.warn('Retry refresh error:', retryErr);
+      }
+    }
+    toast('Sync failed: '+(e.message||'Unknown error'));
   }finally{
     syncing=false;
     updateSyncUI();
