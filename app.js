@@ -49,8 +49,22 @@ function goBack() {
   updateBackBtn();
 }
 
-function toast(message) { const el = $('#toast'); el.textContent = message; el.classList.add('show'); clearTimeout(toastTimer); toastTimer = setTimeout(() => el.classList.remove('show'), 3000); }
-function save() { window.desk.write(data).catch(e => toast('Could not save locally: ' + e.message)); }
+function toast(message) { const el = $('#toast'); if(!el)return; el.textContent = message; el.classList.add('show'); clearTimeout(toastTimer); toastTimer = setTimeout(() => el.classList.remove('show'), 3000); }
+let saveTimer = null;
+function save() {
+  clearTimeout(saveTimer);
+  saveTimer = setTimeout(() => {
+    if (window.desk?.write) {
+      window.desk.write(data).catch(e => toast('Could not save locally: ' + e.message));
+    }
+  }, 60);
+}
+function saveImmediate() {
+  clearTimeout(saveTimer);
+  if (window.desk?.write) {
+    return window.desk.write(data).catch(e => toast('Could not save locally: ' + e.message));
+  }
+}
 function enqueue(table,id) { const key=table+':'+id; if(!data.pending.some(p=>p.key===key))data.pending.push({key,table,id}); }
 function scheduleSync(){if(!clientApi||!session||!data.settings.workspaceId)return;clearTimeout(syncTimer);syncTimer=setTimeout(()=>flushPending().catch(e=>toast('Sync waiting: '+e.message)),400);}
 function queue(table, id) { enqueue(table,id); save(); scheduleSync(); }
@@ -62,16 +76,41 @@ function currentUserId() { return session?.user?.id || 'local-me'; }
 function person(id) { return data.members.find(m => m.userId === id)?.displayName || (id === 'local-me' ? data.settings.displayName : id === 'local-partner' ? data.settings.localPartner : 'Team member'); }
 function initials(name) { return String(name || '?').split(/\s+/).map(s => s[0]).join('').slice(0,2).toUpperCase(); }
 function unfinishedCount(clientId) { return data.items.filter(i=>i.clientId===clientId && !['sent','paid','discarded'].includes(i.status)).length; }
+function allClientActivities() {
+  const map = new Map();
+  for (let c of (data.clients||[])) map.set(c.id, { pending: 0, sent: 0, active: 0 });
+  const items = data.items || [];
+  for (let i = 0; i < items.length; i++) {
+    const item = items[i];
+    const act = map.get(item.clientId);
+    if (!act) continue;
+    if (item.status === 'pending' || item.status === 'working' || item.status === 'changes') {
+      act.pending++;
+      act.active++;
+    } else if (item.status === 'sent') {
+      act.sent++;
+      act.active++;
+    }
+  }
+  return map;
+}
 function clientActivity(clientId) {
-  const items = data.items.filter(i => i.clientId === clientId);
-  const pending = items.filter(i => ['pending', 'working', 'changes'].includes(i.status)).length;
-  const sent = items.filter(i => i.status === 'sent').length;
+  let pending = 0, sent = 0;
+  const items = data.items || [];
+  for (let i = 0; i < items.length; i++) {
+    const item = items[i];
+    if (item.clientId === clientId) {
+      if (item.status === 'pending' || item.status === 'working' || item.status === 'changes') pending++;
+      else if (item.status === 'sent') sent++;
+    }
+  }
   return { pending, sent, active: pending + sent };
 }
 function sortedClients() {
+  const acts = allClientActivities();
   return [...data.clients].sort((a, b) => {
-    const actA = clientActivity(a.id);
-    const actB = clientActivity(b.id);
+    const actA = acts.get(a.id) || { pending: 0, sent: 0 };
+    const actB = acts.get(b.id) || { pending: 0, sent: 0 };
     if (actA.pending !== actB.pending) return actB.pending - actA.pending;
     if (actA.sent !== actB.sent) return actB.sent - actA.sent;
     return (a.sortOrder || 0) - (b.sortOrder || 0) || a.name.localeCompare(b.name);
@@ -218,11 +257,13 @@ function bindAccess(){
   $('#joinForm')?.addEventListener('submit',async e=>{e.preventDefault();const code=inputValue('accessCode').toUpperCase();const {data:id,error}=await clientApi.rpc('join_gir_workspace',{code,name:data.settings.displayName||session.user.user_metadata?.display_name||'Team member'});if(error){accessError=error.message;render();return;}if(id!==GIR_WORKSPACE_ID){accessError='This code does not match the MeowSheet workspace';render();return;}data.settings.workspaceId=id;workspaceReady=true;accessError='';save();await syncNow();});
 }
 function renderClients() {
-  const nav=$('#clientList'), position=nav.scrollLeft;
+  const nav=$('#clientList'), position=nav?.scrollLeft || 0;
+  if(!nav)return;
   const list = sortedClients();
+  const acts = allClientActivities();
   if(!activeClient && list.length) activeClient = list[0].id;
   nav.innerHTML = list.map(c => {
-    const act = clientActivity(c.id);
+    const act = acts.get(c.id) || { pending: 0, sent: 0 };
     const badges = [];
     if(act.pending > 0) badges.push(`<small class="pending-badge" title="${act.pending} pending tasks">${act.pending}</small>`);
     if(act.sent > 0) badges.push(`<small class="sent-badge" title="${act.sent} sent awaiting payment">${act.sent} sent</small>`);
@@ -266,38 +307,105 @@ function blankRowHtml(order) {
   return `<tr class="blank-row" data-blank-row="${order}"><td class="row-selector"></td><td class="serial-cell">${order+1}</td>${cell('workDate')}${cell('service')}${cell('quantity')}${cell('rate')}${cell('quotedTotal')}<td class="status-cell"></td>${cell('advanceAmount')}<td class="assignee-cell"></td>${cell('remarks')}</tr>`;
 }
 function groupedSheetItems(items) {
-  const seen=new Set(),ordered=[];
-  const append=group=>{for(const item of items)if(!seen.has(item.id)&&group(item)){seen.add(item.id);ordered.push(item);}};
-  for(const item of items){
-    if(seen.has(item.id))continue;
-    if(item.projectGroupId){
-      const project=item.projectGroupId;
-      for(const nested of items.filter(i=>i.projectGroupId===project)){
-        if(nested.groupId){const deal=nested.groupId;append(i=>i.projectGroupId===project&&i.groupId===deal);}
-        else append(i=>i.id===nested.id);
+  if (!items || !items.length) return [];
+  const seen = new Set();
+  const ordered = [];
+  
+  const projectItemsMap = new Map();
+  const standaloneDealItemsMap = new Map();
+  
+  for (let idx = 0; idx < items.length; idx++) {
+    const item = items[idx];
+    if (item.projectGroupId) {
+      if (!projectItemsMap.has(item.projectGroupId)) projectItemsMap.set(item.projectGroupId, []);
+      projectItemsMap.get(item.projectGroupId).push(item);
+    } else if (item.groupId) {
+      if (!standaloneDealItemsMap.has(item.groupId)) standaloneDealItemsMap.set(item.groupId, []);
+      standaloneDealItemsMap.get(item.groupId).push(item);
+    }
+  }
+
+  for (let idx = 0; idx < items.length; idx++) {
+    const item = items[idx];
+    if (seen.has(item.id)) continue;
+
+    if (item.projectGroupId) {
+      const pid = item.projectGroupId;
+      const projItems = projectItemsMap.get(pid) || [];
+      const projDealMap = new Map();
+      for (let p = 0; p < projItems.length; p++) {
+        const pItem = projItems[p];
+        const did = pItem.groupId || '';
+        if (!projDealMap.has(did)) projDealMap.set(did, []);
+        projDealMap.get(did).push(pItem);
       }
-    } else if(item.groupId){const deal=item.groupId;append(i=>!i.projectGroupId&&i.groupId===deal);}
-    else append(i=>i.id===item.id);
+      for (let p = 0; p < projItems.length; p++) {
+        const pItem = projItems[p];
+        if (seen.has(pItem.id)) continue;
+        const did = pItem.groupId || '';
+        const cluster = projDealMap.get(did) || [pItem];
+        for (let c = 0; c < cluster.length; c++) {
+          const ci = cluster[c];
+          if (!seen.has(ci.id)) {
+            seen.add(ci.id);
+            ordered.push(ci);
+          }
+        }
+      }
+    } else if (item.groupId) {
+      const did = item.groupId;
+      const dealCluster = standaloneDealItemsMap.get(did) || [item];
+      for (let c = 0; c < dealCluster.length; c++) {
+        const ci = dealCluster[c];
+        if (!seen.has(ci.id)) {
+          seen.add(ci.id);
+          ordered.push(ci);
+        }
+      }
+    } else {
+      seen.add(item.id);
+      ordered.push(item);
+    }
   }
   return ordered;
 }
 function renderSheet() {
   const cl=currentClient();
   if(!cl)return `<div class="empty"><h3>No client yet</h3><p>Create a client using the + button beside the bottom tabs.</p></div>`;
-  const all=clientItems(),items=groupedSheetItems(all.filter(i=>filter==='all'||i.status===filter));
+  const all=clientItems();
+  const filtered = filter==='all' ? all : all.filter(i=>i.status===filter);
+  const items=groupedSheetItems(filtered);
   let rows='',projectsSeen=new Set(),dealsSeen=new Set();
+
+  const projectGroupMap = new Map((data.projectGroups||[]).map(g => [g.id, g]));
+  const dealGroupMap = new Map((data.groups||[]).map(g => [g.id, g]));
+
+  const projectItemsMap = new Map();
+  const dealItemsMap = new Map();
+  for (let idx = 0; idx < all.length; idx++) {
+    const it = all[idx];
+    if (it.projectGroupId) {
+      if (!projectItemsMap.has(it.projectGroupId)) projectItemsMap.set(it.projectGroupId, []);
+      projectItemsMap.get(it.projectGroupId).push(it);
+    }
+    if (it.groupId) {
+      if (!dealItemsMap.has(it.groupId)) dealItemsMap.set(it.groupId, []);
+      dealItemsMap.get(it.groupId).push(it);
+    }
+  }
+
   for(const i of items){
-    const project=data.projectGroups.find(g=>g.id===i.projectGroupId);
+    const project = i.projectGroupId ? projectGroupMap.get(i.projectGroupId) : null;
     if(project&&!projectsSeen.has(project.id)){
       projectsSeen.add(project.id);
-      rows+=groupHeader('project',project,all.filter(x=>x.projectGroupId===project.id));
+      rows+=groupHeader('project',project,projectItemsMap.get(project.id)||[]);
     }
     if(project&&collapsedGroups.has('project:'+project.id))continue;
-    const deal=data.groups.find(g=>g.id===i.groupId);
+    const deal = i.groupId ? dealGroupMap.get(i.groupId) : null;
     const dealHeaderKey=`${project?.id||''}:${deal?.id||''}`;
     if(deal&&!dealsSeen.has(dealHeaderKey)){
       dealsSeen.add(dealHeaderKey);
-      rows+=groupHeader('deal',deal,all.filter(x=>x.groupId===deal.id));
+      rows+=groupHeader('deal',deal,dealItemsMap.get(deal.id)||[]);
     }
     if(deal&&collapsedGroups.has('deal:'+deal.id))continue;
     const own=['working','changes'].includes(i.status)&&i.assigneeId===currentUserId();
@@ -312,7 +420,7 @@ function renderSheet() {
       ${value('remarks',i.remarks||'')}</tr>`;
   }
   if(filter==='all')rows+=Array.from({length:blankRows},(_,n)=>blankRowHtml(all.length+n)).join('');
-  return `<div class="sheet-shell"><div class="sheet-toolbar"><div class="actions"><button class="small-btn blue" data-action="assign" ${selected.size?'':'disabled'}>● Start work</button><button class="small-btn" data-action="complete" ${selected.size?'':'disabled'}>✓ Mark sent</button><button class="small-btn" data-action="invoice" ${selected.size?'':'disabled'}>▣ Create invoice</button><button class="small-btn" data-action="group" ${selected.size>1?'':'disabled'}>Group deal</button><button class="small-btn" data-action="project-group" ${selected.size?'':'disabled'}>Group project</button><select id="bulkStatus" aria-label="Set selected rows status" ${selected.size?'':'disabled'}><option value="">Set status…</option>${['pending','working','changes','sent','paid','discarded'].map(s=>`<option value="${s}">${s[0].toUpperCase()+s.slice(1)}</option>`).join('')}<option value="paid-date">Paid on date…</option></select><select id="workFilter" aria-label="Filter work">${['all','pending','working','changes','sent','paid','discarded'].map(s=>`<option value="${s}" ${filter===s?'selected':''}>${s==='all'?'All work':s[0].toUpperCase()+s.slice(1)}</option>`).join('')}</select></div><span class="hint" id="selectedCount">${selectionLabel()}</span></div>
+  return `<div class="sheet-shell"><div class="sheet-toolbar"><div class="actions"><button class="small-btn blue" data-action="assign" ${selected.size?'':'disabled'}>● Start work</button><button class="small-btn" data-action="complete" ${selected.size?'':'disabled'}>✓ Mark sent</button><button class="small-btn" data-action="invoice" ${selected.size?'':'disabled'}>▣ Create invoice</button><button class="small-btn danger" data-action="delete" title="Delete selected row(s) (Del)" ${selected.size?'':'disabled'}>🗑 Delete row</button><button class="small-btn" data-action="undo" title="Undo (Ctrl+Z)" ${undoStack.length?'':'disabled'}>↶ Undo</button><button class="small-btn" data-action="redo" title="Redo (Ctrl+Y)" ${redoStack.length?'':'disabled'}>↷ Redo</button><button class="small-btn" data-action="group" ${selected.size>1?'':'disabled'}>Group deal</button><button class="small-btn" data-action="project-group" ${selected.size?'':'disabled'}>Group project</button><select id="bulkStatus" aria-label="Set selected rows status" ${selected.size?'':'disabled'}><option value="">Set status…</option>${['pending','working','changes','sent','paid','discarded'].map(s=>`<option value="${s}">${s[0].toUpperCase()+s.slice(1)}</option>`).join('')}<option value="paid-date">Paid on date…</option></select><select id="workFilter" aria-label="Filter work">${['all','pending','working','changes','sent','paid','discarded'].map(s=>`<option value="${s}" ${filter===s?'selected':''}>${s==='all'?'All work':s[0].toUpperCase()+s.slice(1)}</option>`).join('')}</select></div><span class="hint" id="selectedCount">${selectionLabel()}</span></div>
     <div class="sheet-viewport"><table class="sheet"><thead><tr><th class="row-selector"><input type="checkbox" id="selectAll" aria-label="Select visible rows"></th><th>SR</th><th>DATE</th><th>SERVICE PROVIDED</th><th>QTY</th><th>RATE</th><th>TOTAL</th><th>STATUS</th><th>ADVANCE</th><th>ASSIGNED</th><th>REMARKS</th></tr></thead><tbody>${rows}</tbody></table></div></div>`;
 }
 
@@ -860,6 +968,11 @@ function bindMain() {
         `<button id="contextPaste" ${hasClipboard?'':'disabled'}><span class="context-icon">📋</span><span>Paste row</span><kbd>Ctrl+V</kbd></button>`+
         `<button id="contextDuplicate"><span class="context-icon">⧉</span><span>Duplicate row</span><kbd>Ctrl+D</kbd></button>`+
         `<div class="context-divider"></div>`+
+        `<button id="contextDelete" class="context-danger"><span class="context-icon">🗑</span><span>${selected.size>1?`Delete ${selected.size} rows`:'Delete row'}</span><kbd>Del</kbd></button>`+
+        `<div class="context-divider"></div>`+
+        `<button id="contextUndo" ${undoStack.length?'':'disabled'}><span class="context-icon">↶</span><span>Undo</span><kbd>Ctrl+Z</kbd></button>`+
+        `<button id="contextRedo" ${redoStack.length?'':'disabled'}><span class="context-icon">↷</span><span>Redo</span><kbd>Ctrl+Y</kbd></button>`+
+        `<div class="context-divider"></div>`+
         `<button id="contextMoveSerial"><span class="context-icon">⇄</span><span>Move to serial #…</span></button>`+
         `<button id="contextMoveUp"><span class="context-icon">↑</span><span>Move row up</span><kbd>Alt+↑</kbd></button>`+
         `<button id="contextMoveDown"><span class="context-icon">↓</span><span>Move row down</span><kbd>Alt+↓</kbd></button>`+
@@ -869,11 +982,14 @@ function bindMain() {
         `<button id="contextInvoice"><span class="context-icon">▣</span><span>Create invoice</span></button>`;
       document.body.appendChild(menu);
       menu.style.left=Math.max(8,Math.min(e.clientX,innerWidth-230))+'px';
-      menu.style.top=Math.max(8,Math.min(e.clientY,innerHeight-350))+'px';
+      menu.style.top=Math.max(8,Math.min(e.clientY,innerHeight-450))+'px';
       $('#contextCut').onclick=()=>{menu.remove();copySelectedRows(true);};
       $('#contextCopy').onclick=()=>{menu.remove();copySelectedRows(false);};
       if($('#contextPaste'))$('#contextPaste').onclick=()=>{menu.remove();pasteCopiedRows(rowId);};
       $('#contextDuplicate').onclick=()=>{menu.remove();duplicateSelectedRow(rowId);};
+      $('#contextDelete').onclick=()=>{menu.remove();deleteSelectedRows([...selected]);};
+      if($('#contextUndo'))$('#contextUndo').onclick=()=>{menu.remove();undo();};
+      if($('#contextRedo'))$('#contextRedo').onclick=()=>{menu.remove();redo();};
       $('#contextMoveSerial').onclick=()=>{menu.remove();moveRowDialog(rowId);};
       $('#contextMoveUp').onclick=()=>{menu.remove();moveRowByDelta(rowId,-1);};
       $('#contextMoveDown').onclick=()=>{menu.remove();moveRowByDelta(rowId,1);};
@@ -887,16 +1003,20 @@ function bindMain() {
     row.onclick=e=>{const field=e.target.closest('td')?.querySelector('[data-blank-cell]');selectionCell=field?{blankOrder:Number(row.dataset.blankRow),key:field.dataset.blankCell}:null;};
     row.ondblclick=e=>{const field=e.target.closest('td')?.querySelector('[data-blank-cell]');if(field)activateSheetField(field);};
     row.oncontextmenu=e=>{
-      if(!rowClipboard.items.length)return;
       e.preventDefault();
       const blankOrder=Number(row.dataset.blankRow);
       const menu=$('#contextMenu')||document.createElement('div');
       menu.id='contextMenu';menu.className='context-menu';
-      menu.innerHTML=`<button id="contextPasteBlank"><span class="context-icon">📋</span><span>Paste row here</span><kbd>Ctrl+V</kbd></button>`;
+      menu.innerHTML=`<button id="contextPasteBlank" ${rowClipboard.items.length?'':'disabled'}><span class="context-icon">📋</span><span>Paste row here</span><kbd>Ctrl+V</kbd></button>`+
+        `<div class="context-divider"></div>`+
+        `<button id="contextUndoBlank" ${undoStack.length?'':'disabled'}><span class="context-icon">↶</span><span>Undo</span><kbd>Ctrl+Z</kbd></button>`+
+        `<button id="contextRedoBlank" ${redoStack.length?'':'disabled'}><span class="context-icon">↷</span><span>Redo</span><kbd>Ctrl+Y</kbd></button>`;
       document.body.appendChild(menu);
       menu.style.left=Math.max(8,Math.min(e.clientX,innerWidth-220))+'px';
-      menu.style.top=Math.max(8,Math.min(e.clientY,innerHeight-60))+'px';
-      $('#contextPasteBlank').onclick=()=>{menu.remove();pasteCopiedRows(null,blankOrder);};
+      menu.style.top=Math.max(8,Math.min(e.clientY,innerHeight-140))+'px';
+      if($('#contextPasteBlank'))$('#contextPasteBlank').onclick=()=>{menu.remove();pasteCopiedRows(null,blankOrder);};
+      if($('#contextUndoBlank'))$('#contextUndoBlank').onclick=()=>{menu.remove();undo();};
+      if($('#contextRedoBlank'))$('#contextRedoBlank').onclick=()=>{menu.remove();redo();};
       setTimeout(()=>document.addEventListener('click',()=>menu.remove(),{once:true}),0);
     };
   });
@@ -952,14 +1072,20 @@ function openStatusMenu(trigger,id){
   setTimeout(()=>{if(activeStatusMenu?.menu===menu)document.addEventListener('pointerdown',outside,true);},0);
 }
 function refreshSelection() {
-  $$('[data-row]').forEach(row=>row.classList.toggle('selected',selected.has(row.dataset.row)));
-  $$('[data-row]').forEach(row=>row.classList.toggle('selection-start',row.classList.contains('selected')&&!row.previousElementSibling?.classList.contains('selected')));
+  const rows=$$('[data-row]');
+  for(let idx=0;idx<rows.length;idx++){
+    const row=rows[idx];
+    const isSel=selected.has(row.dataset.row);
+    row.classList.toggle('selected',isSel);
+    row.classList.toggle('selection-start',isSel&&!rows[idx-1]?.classList.contains('selected'));
+  }
   $$('[data-check]').forEach(box=>box.checked=selected.has(box.dataset.check));
   const count=$('#selectedCount');if(count)count.textContent=selectionLabel();
   const bulk=$('#bulkStatus');if(bulk)bulk.disabled=!selected.size;
-  for(const action of ['assign','complete','invoice']){const button=$(`[data-action="${action}"]`);if(button)button.disabled=!selected.size;}
+  for(const action of ['assign','complete','invoice','delete']){const button=$(`[data-action="${action}"]`);if(button)button.disabled=!selected.size;}
   const group=$('[data-action="group"]');if(group)group.disabled=selected.size<2;
   const project=$('[data-action="project-group"]');if(project)project.disabled=!selected.size;
+  updateUndoRedoUI();
 }
 function selectSheetRow(id,shift=false,add=false) {
   const rows=$$('[data-row]').map(row=>row.dataset.row);
@@ -1066,12 +1192,157 @@ function copySelectedRows(isCut=false) {
   return true;
 }
 
+const undoStack = [];
+const redoStack = [];
+const MAX_UNDO_STACK = 50;
+
+function snapshotState() {
+  return JSON.stringify({
+    items: data.items,
+    groups: data.groups,
+    projectGroups: data.projectGroups,
+    receipts: data.receipts,
+    pendingDeletes: data.pendingDeletes,
+    activeClient,
+    selected: [...selected]
+  });
+}
+
+function pushUndo(actionName = 'Action') {
+  try {
+    undoStack.push({
+      name: actionName,
+      state: snapshotState()
+    });
+    if (undoStack.length > MAX_UNDO_STACK) undoStack.shift();
+    redoStack.length = 0;
+    updateUndoRedoUI();
+  } catch (e) {
+    console.error('Failed to capture undo state:', e);
+  }
+}
+
+function undo() {
+  if (tab !== 'sheet' && tab !== 'tracker') return false;
+  if (!undoStack.length) {
+    toast('Nothing to undo');
+    return false;
+  }
+  const current = snapshotState();
+  const step = undoStack.pop();
+  redoStack.push({
+    name: step.name,
+    state: current
+  });
+  restoreState(step.state);
+  updateUndoRedoUI();
+  toast(`Undone: ${step.name} (Ctrl+Z)`);
+  return true;
+}
+
+function redo() {
+  if (tab !== 'sheet' && tab !== 'tracker') return false;
+  if (!redoStack.length) {
+    toast('Nothing to redo');
+    return false;
+  }
+  const current = snapshotState();
+  const step = redoStack.pop();
+  undoStack.push({
+    name: step.name,
+    state: current
+  });
+  restoreState(step.state);
+  updateUndoRedoUI();
+  toast(`Redone: ${step.name} (Ctrl+Y)`);
+  return true;
+}
+
+function restoreState(jsonString) {
+  try {
+    const snap = JSON.parse(jsonString);
+    data.items = snap.items || [];
+    data.groups = snap.groups || [];
+    data.projectGroups = snap.projectGroups || [];
+    data.receipts = snap.receipts || [];
+    data.pendingDeletes = snap.pendingDeletes || [];
+    if (snap.activeClient && data.clients.some(c => c.id === snap.activeClient)) {
+      activeClient = snap.activeClient;
+    }
+    selected = new Set((snap.selected || []).filter(id => data.items.some(i => i.id === id)));
+    data.items.forEach(i => enqueue('items', i.id));
+    save();
+    render();
+    scheduleSync();
+  } catch (e) {
+    console.error('Failed to restore undo state:', e);
+    toast('Could not restore state');
+  }
+}
+
+function updateUndoRedoUI() {
+  const undoBtn = $('[data-action="undo"]');
+  if (undoBtn) undoBtn.disabled = !undoStack.length;
+  const redoBtn = $('[data-action="redo"]');
+  if (redoBtn) redoBtn.disabled = !redoStack.length;
+}
+
+function deleteSelectedRows(idsToDelete = null) {
+  if (tab !== 'sheet') return false;
+  const targetIds = idsToDelete 
+    ? (Array.isArray(idsToDelete) ? idsToDelete : [idsToDelete]) 
+    : [...selected];
+  
+  if (!targetIds.length) {
+    toast('Select row(s) to delete');
+    return false;
+  }
+
+  const count = targetIds.length;
+  pushUndo(count === 1 ? 'Delete row' : `Delete ${count} rows`);
+
+  data.pendingDeletes ||= [];
+  targetIds.forEach(id => {
+    if (!data.pendingDeletes.some(d => d.table === 'items' && d.id === id)) {
+      data.pendingDeletes.push({ table: 'items', id });
+    }
+    data.pending = data.pending.filter(p => !(p.table === 'items' && p.id === id));
+  });
+
+  const deleteSet = new Set(targetIds);
+  data.items = data.items.filter(i => !deleteSet.has(i.id));
+
+  const remaining = clientItems(activeClient);
+  remaining.forEach((item, idx) => {
+    item.sortOrder = idx;
+    item.serial = cleanSerial(String(idx + 1));
+    item.updatedAt = new Date().toISOString();
+    enqueue('items', item.id);
+  });
+
+  targetIds.forEach(id => selected.delete(id));
+  if (selectionCell && targetIds.includes(selectionCell.id)) selectionCell = null;
+  if (rowClipboard.sourceRowIds.some(id => targetIds.includes(id))) {
+    rowClipboard.sourceRowIds = rowClipboard.sourceRowIds.filter(id => !targetIds.includes(id));
+    if (!rowClipboard.sourceRowIds.length) rowClipboard.mode = 'copy';
+  }
+
+  save();
+  render();
+  scheduleSync();
+  toast(count === 1 ? 'Row deleted (Ctrl+Z to undo)' : `${count} rows deleted (Ctrl+Z to undo)`);
+  return true;
+}
+
 function pasteCopiedRows(targetId=null,targetBlankOrder=null) {
   if (tab!=='sheet') return false;
   if (!rowClipboard.items.length) {
     toast('No rows in clipboard to paste');
     return false;
   }
+  const isCut=rowClipboard.mode==='cut';
+  pushUndo(isCut ? 'Move row (pasted from cut)' : 'Paste rows');
+
   const items=groupedSheetItems(clientItems());
   let targetIndex=-1;
   if (targetId) {
@@ -1085,7 +1356,6 @@ function pasteCopiedRows(targetId=null,targetBlankOrder=null) {
     targetIndex=items.length;
   }
 
-  const isCut=rowClipboard.mode==='cut';
   const copiedItems=rowClipboard.items;
 
   copiedItems.forEach((copied,offset)=>{
@@ -1106,7 +1376,8 @@ function pasteCopiedRows(targetId=null,targetBlankOrder=null) {
     target.assigneeId=copied.assigneeId||'';
     target.remarks=copied.remarks||'';
     target.dueDate=copied.dueDate||'';
-    mutate('items',target);
+    target.updatedAt=new Date().toISOString();
+    enqueue('items',target.id);
   });
 
   if (isCut&&rowClipboard.sourceRowIds.length) {
@@ -1124,7 +1395,8 @@ function pasteCopiedRows(targetId=null,targetBlankOrder=null) {
         src.assigneeId='';
         src.remarks='';
         src.dueDate='';
-        mutate('items',src);
+        src.updatedAt=new Date().toISOString();
+        enqueue('items',src.id);
       }
     });
     rowClipboard.mode='copy';
@@ -1136,6 +1408,7 @@ function pasteCopiedRows(targetId=null,targetBlankOrder=null) {
 
   save();
   render();
+  scheduleSync();
   return true;
 }
 
@@ -1143,6 +1416,7 @@ function duplicateSelectedRow(itemId) {
   const all=clientItems(activeClient);
   const index=all.findIndex(i=>i.id===itemId);
   if (index<0) return;
+  pushUndo('Duplicate row');
   const original=all[index];
   const duplicate=structuredClone(original);
   duplicate.id=uid();
@@ -1152,10 +1426,12 @@ function duplicateSelectedRow(itemId) {
   all.forEach((item,idx)=>{
     item.sortOrder=idx;
     item.serial=cleanSerial(String(idx+1));
-    queue('items',item.id);
+    item.updatedAt=new Date().toISOString();
+    enqueue('items',item.id);
   });
   save();
   render();
+  scheduleSync();
   setTimeout(()=>{
     const el=document.querySelector(`[data-row="${duplicate.id}"]`);
     el?.scrollIntoView({block:'center',behavior:'smooth'});
@@ -1171,17 +1447,20 @@ function moveRowToPosition(itemId,targetPosition) {
   const newIndex=Math.max(0,Math.min(all.length-1,targetPosition-1));
   if (currentIndex===newIndex) return;
 
+  pushUndo('Move row to #' + targetPosition);
   const [moved]=all.splice(currentIndex,1);
   all.splice(newIndex,0,moved);
 
   all.forEach((item,idx)=>{
     item.sortOrder=idx;
     item.serial=cleanSerial(String(idx+1));
-    queue('items',item.id);
+    item.updatedAt=new Date().toISOString();
+    enqueue('items',item.id);
   });
 
   save();
   render();
+  scheduleSync();
   setTimeout(()=>{
     const el=document.querySelector(`[data-row="${itemId}"]`);
     el?.scrollIntoView({block:'center',behavior:'smooth'});
@@ -1746,6 +2025,9 @@ async function saveSettings(){
 function actions(action) {
   if(action==='import')return importWorkbook();
   if(action==='migrate')return migrateImport();
+  if(action==='undo')return undo();
+  if(action==='redo')return redo();
+  if(action==='delete')return deleteSelectedRows([...selected]);
   if(action==='add-row'){const i=newItem(activeClient,clientItems().length);mutate('items',i);setTimeout(()=>document.querySelector(`[data-id="${i.id}"][data-cell="service"]`)?.focus(),80);return;}
   if(action==='assign')return assign([...selected]); if(action==='complete')return markSent([...selected]); if(action==='invoice')return invoiceDialog(); if(action==='group')return groupDialog();
   if(action==='project-group')return projectGroupDialog();
@@ -2028,6 +2310,15 @@ document.addEventListener('keydown',e=>{
     if(!isEditing){
       const isCtrl=e.ctrlKey||e.metaKey;
       const key=e.key.toLowerCase();
+      if(isCtrl&&!e.shiftKey&&key==='z'){
+        e.preventDefault();undo();return;
+      }
+      if((isCtrl&&key==='y')||(isCtrl&&e.shiftKey&&key==='z')){
+        e.preventDefault();redo();return;
+      }
+      if((e.key==='Delete'||e.key==='Del')&&selected.size){
+        e.preventDefault();deleteSelectedRows([...selected]);return;
+      }
       if(isCtrl&&key==='c'&&selected.size){
         e.preventDefault();copySelectedRows(false);return;
       }
@@ -2052,6 +2343,9 @@ document.addEventListener('keydown',e=>{
     }
   }
 });
+if (typeof window !== 'undefined' && window.addEventListener) {
+  window.addEventListener('beforeunload', () => saveImmediate());
+}
 document.addEventListener('paste',e=>{
   if(tab!=='sheet'||activeStatusMenu||$('#modalRoot').children.length)return;
   if(e.target?.matches?.('[data-cell],[data-blank-cell]'))return;

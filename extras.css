@@ -517,6 +517,10 @@ button:disabled,select:disabled,[role="button"][aria-disabled="true"],[role="opt
 .tracker-assignee-badge{display:inline-flex;align-items:center;gap:5px;font-size:11px;color:#2c4033;background:#f0f6f2;padding:2px 8px;border-radius:12px;border:1px solid #dce7df}
 .tracker-assignee-avatar{display:inline-flex;width:16px;height:16px;border-radius:50%;overflow:hidden;flex:none}
 .tracker-assignee-avatar img, .tracker-assignee-avatar span{width:100%;height:100%;display:flex;align-items:center;justify-content:center;font-size:9px}
-.tracker-unassigned-tag{display:inline-block;font-size:11px;color:#856404;background:#fff3cd;padding:2px 8px;border-radius:12px;border:1px solid #ffeeba}
-.pill.unassigned-badge{background:#eef1f4;color:#495057;border:1px solid #dde2e5}
+.context-menu button.context-danger{color:#c53030}
+.context-menu button.context-danger:hover:not(:disabled){background:#fff0f0;color:#9b1c1c}
+.context-menu button.context-danger .context-icon{color:#c53030}
+.small-btn.danger{background:#fff1f1;color:#c53030;border-color:#fad2d2}
+.small-btn.danger:hover:not(:disabled){background:#fee2e2;color:#991b1b;border-color:#f87171}
+.small-btn.danger:disabled{opacity:.4;cursor:not-allowed}
 
