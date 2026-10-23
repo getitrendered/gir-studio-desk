@@ -1,7 +1,7 @@
 {
   "name": "meowsheet",
   "productName": "MeowSheet",
-  "version": "0.2.31",
+  "version": "0.2.32",
   "private": true,
   "description": "MeowSheet Windows work ledger",
   "main": "main.cjs",
@@ -33,8 +33,10 @@
       "style.css",
       "extras.css",
       "assets/gir-icon.png",
-      "import-xlsx.ps1",
-      "vendor/supabase.js"
+      "assets/gir-icon.ico",
+      "assets/cats/**",
+      "vendor/**",
+      "import-xlsx.ps1"
     ],
     "asarUnpack": [
       "import-xlsx.ps1"

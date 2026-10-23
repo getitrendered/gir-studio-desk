@@ -36,6 +36,7 @@ jobs:
       - run: node tests/test_meowsheet_rebrand.cjs
       - run: node tests/test_row_copy_paste_move.cjs
       - run: node tests/test_row_delete_undo_redo.cjs
+      - run: node tests/test_cat_reactions.cjs
       - run: python tests/test_import.py
       - run: npm run build:win
       - name: Publish GitHub Release
@@ -47,4 +48,4 @@ jobs:
           $base = "release/MeowSheet-$version-Setup.exe"
           $assets = @($base, "$base.blockmap", 'release/latest.yml')
           foreach ($asset in $assets) { if (!(Test-Path -LiteralPath $asset)) { throw "Missing release asset: $asset" } }
-          gh release create '${{ github.ref_name }}' @assets --verify-tag --title 'MeowSheet ${{ github.ref_name }}' --notes 'MeowSheet ${{ github.ref_name }}: Full rebrand to MeowSheet with enhanced work tracker, bank accounts manager, and interactive monthly revenue details.'
+          gh release create '${{ github.ref_name }}' @assets --verify-tag --title 'MeowSheet ${{ github.ref_name }}' --notes 'MeowSheet ${{ github.ref_name }}: Live animated 60fps Cat Reaction and Team Ping system with Orange and Midnight Black cats, live Supabase broadcasts, and desktop notifications.'

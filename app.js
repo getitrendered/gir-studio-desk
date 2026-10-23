@@ -7,7 +7,7 @@ const num = v => Number(String(v ?? '').replace(/[^0-9.-]/g, '')) || 0;
 const esc = v => String(v ?? '').replace(/[&<>"']/g, c => ({ '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;' }[c]));
 const cleanSerial = v => { if (v == null || v === '') return ''; const s = String(v).trim(), n = Number(s); if (!isNaN(n) && Number.isInteger(n) && !s.includes('e') && !s.includes('E')) return String(n); return s.replace(/\.0+$/, ''); };
 const fmtDate = d => { if (!d) return '—'; const x = new Date(d + 'T00:00:00'); return Number.isNaN(x.getTime()) ? d : x.toLocaleDateString('en-IN', { day:'numeric', month:'short', year:'numeric' }); };
-const defaults = { clients:[], groups:[], projectGroups:[], items:[], invoices:[], receipts:[], members:[], pending:[], settings:{ seller:{ name:'GIR — Get It Rendered', address:'', email:'', phone:'', taxId:'', bankDetails:'', bankAccounts:[], activeBankAccountId:'', logoData:'' }, url:'https://isdxybpeagloikchhsbp.supabase.co', key:'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImlzZHh5YnBlYWdsb2lrY2hoc2JwIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTI1NzkzMjcsImV4cCI6MjEwODE1NTMyN30.ll1YG9uyrTqmLzE90miCk-O1Ab5VkBPfqrCPDDUc5u8', workspaceId:'', displayName:'Samuel', localPartner:'Mezrid', zoom:100 } };
+const defaults = { clients:[], groups:[], projectGroups:[], items:[], invoices:[], receipts:[], members:[], pending:[], settings:{ seller:{ name:'GIR — Get It Rendered', address:'', email:'', phone:'', taxId:'', bankDetails:'', bankAccounts:[], activeBankAccountId:'', logoData:'' }, url:'https://isdxybpeagloikchhsbp.supabase.co', key:'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImlzZHh5YnBlYWdsb2lrY2hoc2JwIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTI1NzkzMjcsImV4cCI6MjEwODE1NTMyN30.ll1YG9uyrTqmLzE90miCk-O1Ab5VkBPfqrCPDDUc5u8', workspaceId:'', displayName:'Samuel', localPartner:'Mezrid', catType:'orange', zoom:100 } };
 const GIR_WORKSPACE_ID='17f39873-e10f-4bdf-93ee-1f92b3e25251';
 let data = structuredClone(defaults), tab = 'sheet', lastRenderedTab = null, lastRenderedClient = null, activeClient = null, selected = new Set(), selectionAnchor = null, selectionCell = null, collapsedGroups = new Set(), blankRows = 60, highlightUser = null, filter = 'all', clientApi = null, session = null, channel = null, syncing = false, toastTimer, syncTimer, lastSyncTime = Date.now(), importPreview = null, previewClientIndex = 0, migrating = false;
 let authLoading=true,workspaceReady=false,workspaceResolving=false,accessMode='signin',accessError='',activeStatusMenu=null;
@@ -506,6 +506,7 @@ function renderTracker() {
           <span>${esc(displayStatus(i))}</span>
           <svg class="status-chevron" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="m4.5 6 3.5 3.5L11.5 6" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
         </button>
+        <button type="button" class="small-btn cat-ping-btn" data-cat-ping="${i.id}" title="Send animated cat reaction">🐾 Ping</button>
         <button type="button" class="small-btn tracker-view-btn" data-jump-item="${i.id}">View sheet</button>
       </div>
     </div>`;
@@ -541,6 +542,7 @@ function renderTracker() {
           <span>${esc(displayStatus(i))}</span>
           <svg class="status-chevron" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="m4.5 6 3.5 3.5L11.5 6" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
         </button>
+        <button type="button" class="small-btn cat-ping-btn" data-cat-ping="${i.id}" title="Send animated cat reaction">🐾 Ping</button>
         <button type="button" class="small-btn tracker-view-btn" data-jump-item="${i.id}">View sheet</button>
       </div>
     </div>`;
@@ -551,7 +553,7 @@ function renderTracker() {
         <h2>Work Tracker</h2>
         <p>Live team assignments, progress, and pending work across clients.</p>
       </div>
-      <span class="pill working">${working.length} in progress</span>
+      <div style="display:flex;align-items:center;gap:10px;"><button type="button" class="cat-team-ping-btn" data-action="cat-quick-ping" title="Send a Cat Reaction ping to your teammate">🐾 Cat Reaction Ping</button><span class="pill working">${working.length} in progress</span></div>
     </div>
     <div class="tracker-grid">
       ${members.map(m=>{
@@ -862,7 +864,7 @@ function renderBankAccountsList() {
   </div>`;
 }
 
-function renderSettings() { const s=data.settings; return `<div class="section-top"><div><h2>Workspace settings</h2><p>Business details, people and Supabase connection.</p></div></div><div class="grid-2"><div class="panel"><h3>Business on invoices</h3><div class="field"><label>Business name</label><input data-setting="seller.name" value="${esc(s.seller.name)}"></div><div class="field"><label>Address</label><textarea data-setting="seller.address" rows="3">${esc(s.seller.address)}</textarea></div><div class="field-grid"><div class="field"><label>Email</label><input data-setting="seller.email" value="${esc(s.seller.email)}"></div><div class="field"><label>Phone</label><input data-setting="seller.phone" value="${esc(s.seller.phone)}"></div></div><div class="field"><label>Tax / GST ID (optional)</label><input data-setting="seller.taxId" value="${esc(s.seller.taxId)}"></div><label class="invoice-logo-upload"><span class="invoice-logo-preview">${s.seller.logoData?`<img src="${esc(s.seller.logoData)}" alt="Company logo">`:`<img src="assets/gir-icon.png" alt="Default MeowSheet logo">`}</span><span>Choose company logo</span><input id="companyLogoUpload" type="file" accept="image/png,image/jpeg,image/webp" hidden></label>${renderBankAccountsList()}<button class="small-btn blue" data-action="save-settings" style="margin-top:6px;">Save business details</button></div><div class="panel"><h3>Your team</h3><label class="avatar-upload"><span class="avatar">${avatar(currentUserId(),s.displayName)}</span><span>Choose your avatar image</span><input id="avatarUpload" type="file" accept="image/png,image/jpeg,image/webp" hidden></label><div class="field"><label>Your display name</label><input data-setting="displayName" value="${esc(s.displayName)}"></div>${!session?`<div class="field"><label>Second person (local view)</label><input data-setting="localPartner" value="${esc(s.localPartner)}"></div>`:''}<button class="small-btn blue" data-action="save-settings">Save names</button><div class="notice">When connected, both people sign in with their own Supabase accounts. Assignments and updates then appear live on both PCs.</div></div></div>
+function renderSettings() { const s=data.settings; return `<div class="section-top"><div><h2>Workspace settings</h2><p>Business details, people and Supabase connection.</p></div></div><div class="grid-2"><div class="panel"><h3>Business on invoices</h3><div class="field"><label>Business name</label><input data-setting="seller.name" value="${esc(s.seller.name)}"></div><div class="field"><label>Address</label><textarea data-setting="seller.address" rows="3">${esc(s.seller.address)}</textarea></div><div class="field-grid"><div class="field"><label>Email</label><input data-setting="seller.email" value="${esc(s.seller.email)}"></div><div class="field"><label>Phone</label><input data-setting="seller.phone" value="${esc(s.seller.phone)}"></div></div><div class="field"><label>Tax / GST ID (optional)</label><input data-setting="seller.taxId" value="${esc(s.seller.taxId)}"></div><label class="invoice-logo-upload"><span class="invoice-logo-preview">${s.seller.logoData?`<img src="${esc(s.seller.logoData)}" alt="Company logo">`:`<img src="assets/gir-icon.png" alt="Default MeowSheet logo">`}</span><span>Choose company logo</span><input id="companyLogoUpload" type="file" accept="image/png,image/jpeg,image/webp" hidden></label>${renderBankAccountsList()}<button class="small-btn blue" data-action="save-settings" style="margin-top:6px;">Save business details</button></div><div class="panel"><h3>Your team</h3><label class="avatar-upload"><span class="avatar">${avatar(currentUserId(),s.displayName)}</span><span>Choose your avatar image</span><input id="avatarUpload" type="file" accept="image/png,image/jpeg,image/webp" hidden></label><div class="field"><label>Your display name</label><input data-setting="displayName" value="${esc(s.displayName)}"></div><div class="field"><label>Your Cat Spirit (for animated reactions & pings)</label><select data-setting="catType"><option value="orange" ${s.catType!=='black'?'selected':''}>🐱 Orange Cat (Playful & Energetic)</option><option value="black" ${s.catType==='black'?'selected':''}>🐈‍⬛ Midnight Black Cat (Cool & Mysterious)</option></select></div>${!session?`<div class="field"><label>Second person (local view)</label><input data-setting="localPartner" value="${esc(s.localPartner)}"></div>`:''}<button class="small-btn blue" data-action="save-settings">Save names</button><div class="notice">When connected, both people sign in with their own Supabase accounts. Assignments and updates then appear live on both PCs.</div></div></div>
     <div class="panel"><h3>Supabase connection</h3><div class="field-grid"><div class="field"><label>Project URL</label><input id="supaUrl" placeholder="https://project.supabase.co" value="${esc(s.url)}"></div><div class="field"><label>Publishable / anon key</label><input id="supaKey" type="password" placeholder="Never enter a service-role key" value="${esc(s.key)}"></div></div><div class="actions"><button class="small-btn" data-action="save-connection">Save connection</button>${session?`<span class="pill paid">Signed in as ${esc(session.user.email)}</span><button class="small-btn" data-action="sign-out">Sign out</button>`:`<button class="small-btn blue" data-action="sign-in">Sign in</button><button class="small-btn" data-action="sign-up">Create account</button>`}</div>${session?`<div class="notice">Workspace code: <strong>${esc(s.joinCode||'Create or join a workspace')}</strong> · Share this code with your second team member. Workspace ID: ${esc(s.workspaceId||'none')}</div><div class="actions"><button class="small-btn blue" data-action="sync">Sync now</button></div>`:''}</div><div class="panel"><h3>Desktop app</h3><p class="muted">Changes sync automatically while connected.</p><div class="actions"><button class="small-btn" data-action="sync">Sync now</button><button class="small-btn blue" id="updateBtn">Check for updates</button><span id="appVersion"></span></div><p class="muted" id="updateStatus"></p></div>`; }
 
 function bindMain() {
@@ -939,7 +941,8 @@ function bindMain() {
   $$('[data-preview-advance]').forEach(el=>el.onchange=()=>{const item=importPreview?.clients.flatMap(c=>c.items).find(i=>i.id===el.dataset.previewAdvance);if(item){item.advanceAmount=Math.max(0,num(el.value));render();}});
   const workFilter=$('#workFilter');if(workFilter)workFilter.onchange=()=>{filter=workFilter.value;selected.clear();render();};
   const bulkStatus=$('#bulkStatus');if(bulkStatus)bulkStatus.onchange=()=>{const next=bulkStatus.value;bulkStatus.value='';if(next==='paid-date'){paidAtDialog([...selected]);}else if(next)bulkSetStatus(next);};
-  $$('[data-tracker-start]').forEach(b=>b.onclick=e=>{e.stopPropagation();startTrackerItem(b.dataset.trackerStart);});
+  $('[data-cat-ping]').forEach(b=>b.onclick=e=>{e.stopPropagation();const itm=data.items.find(x=>x.id===b.dataset.catPing);openCatReactionPicker(itm);});
+  $('[data-tracker-start]').forEach(b=>b.onclick=e=>{e.stopPropagation();startTrackerItem(b.dataset.trackerStart);});
   $$('[data-tracker-status]').forEach(sel=>sel.onchange=e=>{e.stopPropagation();updateTrackerItemStatus(sel.dataset.trackerStatus,sel.value);});
   $$('[data-check]').forEach(b=>{b.onclick=e=>e.stopPropagation();b.onchange=()=>{b.checked?selected.add(b.dataset.check):selected.delete(b.dataset.check);selectionAnchor=b.dataset.check;refreshSelection();};});
   const all=$('#selectAll'); if(all) all.onchange=()=>{$$('[data-check]').forEach(b=>all.checked?selected.add(b.dataset.check):selected.delete(b.dataset.check));refreshSelection();};
@@ -1679,6 +1682,221 @@ function syncItemReceipt(item) {
     removeReceipt(r.id);
   }
 }
+
+const CAT_REACTIONS = [
+  { key: 'happy', title: 'Happy / Purring', action: 'Purr', message: 'The cat is happy and purring! 😸' },
+  { key: 'working', title: 'Working / Grinding', action: 'Grind', message: 'The cat is grinding and focused! 💡' },
+  { key: 'depressed', title: 'Depressed / Overwhelmed', action: 'Cry', message: 'The cat is crying and overwhelmed! 😿' },
+  { key: 'angry', title: 'Angry / Rage Mode', action: 'Hiss', message: 'The cat is angry and hissing! 😾' },
+  { key: 'sleepy', title: 'Sleepy / Napping', action: 'Zzz', message: 'The cat is taking a quick power nap! 💤' },
+  { key: 'shocked', title: 'Shocked / Alert', action: 'Gasp', message: 'The cat is in shock! Production alert! 🙀' },
+  { key: 'love', title: 'Love / Appreciated', action: 'Heart', message: 'The cat is sending huge love & thanks! 😻' }
+];
+
+let catLottieCache = {};
+async function getCatLottie(color, key) {
+  const cacheKey = color + ':' + key;
+  if (catLottieCache[cacheKey]) return catLottieCache[cacheKey];
+  try {
+    const res = await fetch(`assets/cats/${color}/${key}.json`);
+    const json = await res.json();
+    catLottieCache[cacheKey] = json;
+    return json;
+  } catch (e) {
+    console.error('Failed to load cat lottie:', color, key, e);
+    return null;
+  }
+}
+async function getBlackCatLottie(key) { return getCatLottie('black', key); }
+
+function playCatChime(pitch = 587.33) {
+  try {
+    const ctx = new (window.AudioContext || window.webkitAudioContext)();
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.type = 'sine';
+    osc.frequency.setValueAtTime(pitch, ctx.currentTime);
+    osc.frequency.exponentialRampToValueAtTime(pitch * 1.5, ctx.currentTime + 0.14);
+    gain.gain.setValueAtTime(0.09, ctx.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.38);
+    osc.connect(gain);
+    gain.connect(ctx.destination);
+    osc.start();
+    osc.stop(ctx.currentTime + 0.39);
+  } catch {}
+}
+
+let bannerHideTimer = null;
+function displayCatReactionBanner(payload) {
+  playCatChime(payload.catType === 'black' ? 659.25 : 523.25);
+  let banner = document.getElementById('catLiveBanner');
+  if (!banner) {
+    banner = document.createElement('div');
+    banner.id = 'catLiveBanner';
+    banner.className = 'cat-live-banner';
+    banner.onclick = () => banner.classList.remove('show');
+    document.body.appendChild(banner);
+  }
+  
+  const isBlack = payload.catType === 'black';
+  banner.className = 'cat-live-banner ' + (isBlack ? 'banner-black' : '');
+  
+  banner.innerHTML = `
+    <div class="cat-banner-anim" id="catBannerAnimBox"></div>
+    <div class="cat-banner-text">
+      <strong>${esc(payload.senderName || 'Teammate')} pinged you!</strong>
+      <p>${esc(payload.message || 'Cat reaction sent!')}</p>
+    </div>
+  `;
+  
+  const animBox = document.getElementById('catBannerAnimBox');
+  const catColor = payload.catType === 'black' ? 'black' : 'orange';
+  if (window.bodymovin) {
+    getCatLottie(catColor, payload.reactionKey).then(data => {
+      if (data && animBox) {
+        animBox.innerHTML = '';
+        window.bodymovin.loadAnimation({
+          container: animBox,
+          renderer: 'svg',
+          loop: true,
+          autoplay: true,
+          animationData: data
+        });
+      }
+    });
+  } else {
+    animBox.innerHTML = `<img src="assets/cats/orange/${payload.reactionKey}.webp" alt="Cat reaction">`;
+  }
+  
+  clearTimeout(bannerHideTimer);
+  requestAnimationFrame(() => banner.classList.add('show'));
+  bannerHideTimer = setTimeout(() => {
+    banner.classList.remove('show');
+  }, 4500);
+}
+
+async function triggerCatPing(reactionKey, catColor, contextItem = null) {
+  const r = CAT_REACTIONS.find(x => x.key === reactionKey) || CAT_REACTIONS[0];
+  const myName = data.settings.displayName || 'Me';
+  const partnerName = data.settings.localPartner || 'Teammate';
+  
+  let msg = r.message;
+  if (contextItem && contextItem.service) {
+    msg = `"${contextItem.service}" · ${r.message}`;
+  }
+  
+  const payload = {
+    senderId: currentUserId(),
+    senderName: myName,
+    catType: catColor,
+    reactionKey: r.key,
+    title: r.title,
+    action: r.action,
+    message: msg,
+    timestamp: Date.now()
+  };
+  
+  // Show locally
+  displayCatReactionBanner(payload);
+  desktopNotify(`🐾 ${myName} · ${r.title}`, msg);
+  
+  // Broadcast to partner over Supabase channel
+  if (channel) {
+    try {
+      await channel.send({
+        type: 'broadcast',
+        event: 'cat_reaction',
+        payload
+      });
+    } catch (e) {
+      console.warn('Cat reaction broadcast error:', e);
+    }
+  }
+  
+  toast(`🐾 Sent ${r.action} ping to ${partnerName}!`);
+}
+
+function openCatReactionPicker(contextItem = null) {
+  let chosenCat = data.settings.catType || (data.settings.displayName?.toLowerCase().includes('mezrid') ? 'black' : 'orange');
+  const targetText = contextItem ? `on <strong>${esc(contextItem.service || 'work item')}</strong>` : `to your teammate`;
+
+  const renderPickerContent = () => `
+    <div class="cat-type-toggle-bar">
+      <button type="button" class="cat-toggle-pill ${chosenCat==='orange'?'active-orange':''}" id="pickerCatOrange">🐱 Orange Cat</button>
+      <button type="button" class="cat-toggle-pill ${chosenCat==='black'?'active-black':''}" id="pickerCatBlack">🐈‍⬛ Midnight Black Cat</button>
+    </div>
+    <p class="muted" style="text-align:center;font-size:12px;margin-bottom:10px;">Select an animated cat state to ping ${targetText}:</p>
+    <div class="cat-picker-grid">
+      ${CAT_REACTIONS.map(r => `
+        <div class="cat-picker-item ${chosenCat==='black'?'black-cat-active':''}" data-cat-pick="${r.key}">
+          <div class="cat-picker-anim" id="picker-anim-${r.key}">
+            <div class="lottie-slot" style="width:68px;height:68px;"></div>
+          </div>
+          <div class="cat-picker-title">${esc(r.title.split('/')[0].trim())}</div>
+          <div class="cat-picker-action">${esc(r.action)} 🐾</div>
+        </div>
+      `).join('')}
+    </div>
+  `;
+
+  modal('🐾 Animated Cat Reaction & Team Ping', renderPickerContent(), '');
+
+  function initPickerAnimations() {
+    if (window.bodymovin) {
+      CAT_REACTIONS.forEach(r => {
+        const slot = document.querySelector('#picker-anim-' + r.key + ' .lottie-slot');
+        if (slot) {
+          getCatLottie(chosenCat, r.key).then(animData => {
+            if (animData && slot.parentElement) {
+              slot.innerHTML = '';
+              window.bodymovin.loadAnimation({
+                container: slot,
+                renderer: 'svg',
+                loop: true,
+                autoplay: true,
+                animationData: animData
+              });
+            }
+          });
+        }
+      });
+    }
+
+    const oBtn = document.getElementById('pickerCatOrange');
+    if (oBtn) oBtn.onclick = () => {
+      chosenCat = 'orange';
+      data.settings.catType = 'orange';
+      save();
+      updateModalBody();
+    };
+    const bBtn = document.getElementById('pickerCatBlack');
+    if (bBtn) bBtn.onclick = () => {
+      chosenCat = 'black';
+      data.settings.catType = 'black';
+      save();
+      updateModalBody();
+    };
+
+    document.querySelectorAll('[data-cat-pick]').forEach(el => {
+      el.onclick = () => {
+        const key = el.dataset.catPick;
+        closeModal();
+        triggerCatPing(key, chosenCat, contextItem);
+      };
+    });
+  }
+
+  function updateModalBody() {
+    const bodyEl = document.querySelector('#modalRoot .modal-body');
+    if (bodyEl) {
+      bodyEl.innerHTML = renderPickerContent();
+      initPickerAnimations();
+    }
+  }
+
+  initPickerAnimations();
+}
+
 function desktopNotify(title,body){
   try{
     if(window.desk?.notify){
@@ -2031,6 +2249,7 @@ function actions(action) {
   if(action==='add-row'){const i=newItem(activeClient,clientItems().length);mutate('items',i);setTimeout(()=>document.querySelector(`[data-id="${i.id}"][data-cell="service"]`)?.focus(),80);return;}
   if(action==='assign')return assign([...selected]); if(action==='complete')return markSent([...selected]); if(action==='invoice')return invoiceDialog(); if(action==='group')return groupDialog();
   if(action==='project-group')return projectGroupDialog();
+  if(action==='cat-quick-ping')return openCatReactionPicker();
   if(action==='billing')return billingDialog(); if(action==='save-settings')return saveSettings();
   if(action==='save-connection'){data.settings.url=inputValue('supaUrl').replace(/\/$/,'');data.settings.key=inputValue('supaKey');save();setupSupabase();render();toast('Connection saved');return;}
   if(action==='sign-in')return signInDialog(); if(action==='sign-up')return signUpDialog(); if(action==='sign-out')return signOut(); if(action==='create-workspace')return createWorkspace(); if(action==='join-workspace')return joinDialog(); if(action==='sync')return syncNow();
@@ -2192,6 +2411,8 @@ function subscribe(){
   if(channel)clientApi.removeChannel(channel);
   let timer;
   channel=clientApi.channel('gir-ledger-'+data.settings.workspaceId);
+  channel.on('broadcast', { event: 'cat_reaction' }, ({ payload }) => { if(!payload || payload.senderId === currentUserId()) return; displayCatReactionBanner(payload); desktopNotify('🐾 ' + (payload.senderName || 'Teammate'), payload.message || 'Cat reaction sent!'); });
+  
   for(const table of ['clients','deal_groups','project_groups','work_items','invoices','payment_receipts','members']){
     channel.on('postgres_changes',{event:'*',schema:'public',table,filter:`workspace_id=eq.${data.settings.workspaceId}`},(payload)=>{
       if(table==='work_items'&&payload?.new){
