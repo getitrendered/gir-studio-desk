@@ -34,6 +34,7 @@ jobs:
       - run: node tests/test_dynamic_sync.cjs
       - run: node tests/test_tracker_and_nav.cjs
       - run: node tests/test_meowsheet_rebrand.cjs
+      - run: node tests/test_row_copy_paste_move.cjs
       - run: python tests/test_import.py
       - run: npm run build:win
       - name: Publish GitHub Release

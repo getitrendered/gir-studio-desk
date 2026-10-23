@@ -124,8 +124,10 @@ try {
       $advance = (TextCell $row.cells[$advanceColumn] $strings).Trim()
       if ($status -match '^[\-–—]$') { $status = 'discarded' }
       elseif ($status -notin @('paid','sent','pending','working')) { $status = 'pending' }
+      $sr = (& $read 'serial').Trim()
+      if ($sr -match '^\d+\.0+$') { $sr = [string][int][double]$sr }
       $items += [pscustomobject]@{
-        sourceRow = $row.index; serial = (& $read 'serial'); date = (ExcelDate (& $read 'date') $date1904)
+        sourceRow = $row.index; serial = $sr; date = (ExcelDate (& $read 'date') $date1904)
         service = $service; quantity = (& $read 'quantity'); rate = (& $read 'rate'); total = $total
         status = $status; remarks = (& $read 'remarks'); advance = $advance
         advanceCell = $(if ($advance) { Attr $row.cells[$advanceColumn] 'r' } else { '' })

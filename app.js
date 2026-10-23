@@ -5,6 +5,7 @@ const today = () => { const d = new Date(); return `${d.getFullYear()}-${String(
 const money = n => '₹' + Number(n || 0).toLocaleString('en-IN', { maximumFractionDigits: 2 });
 const num = v => Number(String(v ?? '').replace(/[^0-9.-]/g, '')) || 0;
 const esc = v => String(v ?? '').replace(/[&<>"']/g, c => ({ '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;' }[c]));
+const cleanSerial = v => { if (v == null || v === '') return ''; const s = String(v).trim(), n = Number(s); if (!isNaN(n) && Number.isInteger(n) && !s.includes('e') && !s.includes('E')) return String(n); return s.replace(/\.0+$/, ''); };
 const fmtDate = d => { if (!d) return '—'; const x = new Date(d + 'T00:00:00'); return Number.isNaN(x.getTime()) ? d : x.toLocaleDateString('en-IN', { day:'numeric', month:'short', year:'numeric' }); };
 const defaults = { clients:[], groups:[], projectGroups:[], items:[], invoices:[], receipts:[], members:[], pending:[], settings:{ seller:{ name:'GIR — Get It Rendered', address:'', email:'', phone:'', taxId:'', bankDetails:'', bankAccounts:[], activeBankAccountId:'', logoData:'' }, url:'https://isdxybpeagloikchhsbp.supabase.co', key:'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImlzZHh5YnBlYWdsb2lrY2hoc2JwIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTI1NzkzMjcsImV4cCI6MjEwODE1NTMyN30.ll1YG9uyrTqmLzE90miCk-O1Ab5VkBPfqrCPDDUc5u8', workspaceId:'', displayName:'Samuel', localPartner:'Mezrid', zoom:100 } };
 const GIR_WORKSPACE_ID='17f39873-e10f-4bdf-93ee-1f92b3e25251';
@@ -17,6 +18,7 @@ const openTrackerClients = new Set();
 let trackerClientsInitialized = false;
 let trackerClientFilter = 'active';
 let trackerClientSearch = '';
+let rowClipboard = { mode: null, items: [], sourceRowIds: [] };
 
 function recordNav(prevTab, prevClient) {
   if (isNavigatingBack || !prevTab) return;
@@ -303,7 +305,7 @@ function renderSheet() {
     const value=(key,v,extra='')=>`<td><input data-cell="${key}" data-id="${i.id}" value="${esc(v??'')}" title="${esc(v??'')}" ${extra} readonly></td>`;
     rows+=`<tr data-row="${i.id}" class="${selected.has(i.id)?'selected':''} ${i.groupId?'grouped':''} ${i.status==='paid'&&i.groupId?'paid-group':''} ${i.status==='discarded'?'discarded-row':''} ${own?'working-own':''} ${other?'working-other':''} ${i.service?'has-entry':''}">
       <td class="row-selector"><input type="checkbox" data-check="${i.id}" ${selected.has(i.id)?'checked':''}></td>
-      ${value('serial',i.serial||i.sortOrder+1)}${value('workDate',i.workDate||'')}${value('service',i.service)}${value('quantity',i.quantity)}${value('rate',i.rate)}${value('quotedTotal',i.quotedTotal,'class="money-cell"')}
+      ${value('serial',cleanSerial(i.serial??(i.sortOrder+1)))}${value('workDate',i.workDate||'')}${value('service',i.service)}${value('quantity',i.quantity)}${value('rate',i.rate)}${value('quotedTotal',i.quotedTotal,'class="money-cell"')}
       <td class="status-cell ${i.status}"><button type="button" class="status-trigger" data-status-menu="${i.id}" aria-label="Change status from ${esc(displayStatus(i))}" aria-haspopup="listbox" aria-expanded="false"><span class="status-dot"></span><span>${esc(displayStatus(i))}</span><svg class="status-chevron" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="m4.5 6 3.5 3.5L11.5 6" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg></button></td>
       ${value('advanceAmount',i.advanceAmount||0,'class="money-cell"')}
       <td class="assignee-cell"><button type="button" class="assignee-button" data-assignee-pick="${i.id}" title="${esc(i.assigneeId?person(i.assigneeId):'Assign person')}">${i.assigneeId?avatar(i.assigneeId,person(i.assigneeId)):'<span>＋</span>'}</button></td>
@@ -846,9 +848,58 @@ function bindMain() {
     row.onmousedown=e=>{if(e.button===0&&e.shiftKey&&!e.target.closest('button, input.editing, input[type=checkbox]'))e.preventDefault();};
     row.onclick=e=>{if(e.target.closest('button')||e.target.matches('[type=checkbox]'))return;const field=e.target.closest('td')?.querySelector('[data-cell]');selectionCell=field?{id:row.dataset.row,key:field.dataset.cell}:null;selectSheetRow(row.dataset.row,e.shiftKey,e.ctrlKey||e.metaKey);};
     row.ondblclick=e=>{const td=e.target.closest('td'),field=td?.querySelector('[data-cell]');if(field)activateSheetField(field);};
-    row.oncontextmenu=e=>{e.preventDefault();if(!selected.has(row.dataset.row))selectSheetRow(row.dataset.row,false,false);const menu=$('#contextMenu')||document.createElement('div');menu.id='contextMenu';menu.className='context-menu';menu.innerHTML='<button id="contextInvoice">▣ &nbsp; Create invoice</button><button id="contextAssign">● &nbsp; Start work</button><button id="contextSent">✓ &nbsp; Mark sent</button>';document.body.appendChild(menu);menu.style.left=Math.min(e.clientX,innerWidth-190)+'px';menu.style.top=Math.min(e.clientY,innerHeight-135)+'px';$('#contextInvoice').onclick=()=>{menu.remove();invoiceDialog();};$('#contextAssign').onclick=()=>{menu.remove();assign([...selected]);};$('#contextSent').onclick=()=>{menu.remove();markSent([...selected]);};setTimeout(()=>document.addEventListener('click',()=>menu.remove(),{once:true}),0);};
+    row.oncontextmenu=e=>{
+      e.preventDefault();
+      if(!selected.has(row.dataset.row))selectSheetRow(row.dataset.row,false,false);
+      const rowId=row.dataset.row;
+      const hasClipboard=rowClipboard.items.length>0;
+      const menu=$('#contextMenu')||document.createElement('div');
+      menu.id='contextMenu';menu.className='context-menu';
+      menu.innerHTML=`<button id="contextCut"><span class="context-icon">✂</span><span>Cut row</span><kbd>Ctrl+X</kbd></button>`+
+        `<button id="contextCopy"><span class="context-icon">⎘</span><span>Copy row</span><kbd>Ctrl+C</kbd></button>`+
+        `<button id="contextPaste" ${hasClipboard?'':'disabled'}><span class="context-icon">📋</span><span>Paste row</span><kbd>Ctrl+V</kbd></button>`+
+        `<button id="contextDuplicate"><span class="context-icon">⧉</span><span>Duplicate row</span><kbd>Ctrl+D</kbd></button>`+
+        `<div class="context-divider"></div>`+
+        `<button id="contextMoveSerial"><span class="context-icon">⇄</span><span>Move to serial #…</span></button>`+
+        `<button id="contextMoveUp"><span class="context-icon">↑</span><span>Move row up</span><kbd>Alt+↑</kbd></button>`+
+        `<button id="contextMoveDown"><span class="context-icon">↓</span><span>Move row down</span><kbd>Alt+↓</kbd></button>`+
+        `<div class="context-divider"></div>`+
+        `<button id="contextAssign"><span class="context-icon">●</span><span>Start work</span></button>`+
+        `<button id="contextSent"><span class="context-icon">✓</span><span>Mark sent</span></button>`+
+        `<button id="contextInvoice"><span class="context-icon">▣</span><span>Create invoice</span></button>`;
+      document.body.appendChild(menu);
+      menu.style.left=Math.max(8,Math.min(e.clientX,innerWidth-230))+'px';
+      menu.style.top=Math.max(8,Math.min(e.clientY,innerHeight-350))+'px';
+      $('#contextCut').onclick=()=>{menu.remove();copySelectedRows(true);};
+      $('#contextCopy').onclick=()=>{menu.remove();copySelectedRows(false);};
+      if($('#contextPaste'))$('#contextPaste').onclick=()=>{menu.remove();pasteCopiedRows(rowId);};
+      $('#contextDuplicate').onclick=()=>{menu.remove();duplicateSelectedRow(rowId);};
+      $('#contextMoveSerial').onclick=()=>{menu.remove();moveRowDialog(rowId);};
+      $('#contextMoveUp').onclick=()=>{menu.remove();moveRowByDelta(rowId,-1);};
+      $('#contextMoveDown').onclick=()=>{menu.remove();moveRowByDelta(rowId,1);};
+      $('#contextAssign').onclick=()=>{menu.remove();assign([...selected]);};
+      $('#contextSent').onclick=()=>{menu.remove();markSent([...selected]);};
+      $('#contextInvoice').onclick=()=>{menu.remove();invoiceDialog();};
+      setTimeout(()=>document.addEventListener('click',()=>menu.remove(),{once:true}),0);
+    };
   });
-  $$('[data-blank-row]').forEach(row=>{row.onclick=e=>{const field=e.target.closest('td')?.querySelector('[data-blank-cell]');selectionCell=field?{blankOrder:Number(row.dataset.blankRow),key:field.dataset.blankCell}:null;};row.ondblclick=e=>{const field=e.target.closest('td')?.querySelector('[data-blank-cell]');if(field)activateSheetField(field);};});
+  $$('[data-blank-row]').forEach(row=>{
+    row.onclick=e=>{const field=e.target.closest('td')?.querySelector('[data-blank-cell]');selectionCell=field?{blankOrder:Number(row.dataset.blankRow),key:field.dataset.blankCell}:null;};
+    row.ondblclick=e=>{const field=e.target.closest('td')?.querySelector('[data-blank-cell]');if(field)activateSheetField(field);};
+    row.oncontextmenu=e=>{
+      if(!rowClipboard.items.length)return;
+      e.preventDefault();
+      const blankOrder=Number(row.dataset.blankRow);
+      const menu=$('#contextMenu')||document.createElement('div');
+      menu.id='contextMenu';menu.className='context-menu';
+      menu.innerHTML=`<button id="contextPasteBlank"><span class="context-icon">📋</span><span>Paste row here</span><kbd>Ctrl+V</kbd></button>`;
+      document.body.appendChild(menu);
+      menu.style.left=Math.max(8,Math.min(e.clientX,innerWidth-220))+'px';
+      menu.style.top=Math.max(8,Math.min(e.clientY,innerHeight-60))+'px';
+      $('#contextPasteBlank').onclick=()=>{menu.remove();pasteCopiedRows(null,blankOrder);};
+      setTimeout(()=>document.addEventListener('click',()=>menu.remove(),{once:true}),0);
+    };
+  });
   $$('[data-blank-cell]').forEach(el=>{el.onchange=()=>materializeBlankRow(el);el.onpaste=e=>pasteBlankGrid(e,el);});
   $$('[data-group-collapse]').forEach(b=>b.onclick=()=>{const id=b.dataset.groupCollapse;collapsedGroups.has(id)?collapsedGroups.delete(id):collapsedGroups.add(id);render();});
   $$('[data-group-add]').forEach(b=>b.onclick=()=>{const group=data.projectGroups.find(g=>g.id===b.dataset.groupAdd);if(!group)return;const item=newItem(group.clientId,clientItems(group.clientId).length);item.projectGroupId=group.id;mutate('items',item);setTimeout(()=>{const row=document.querySelector(`[data-row="${item.id}"]`);row?.scrollIntoView({block:'center'});const field=row?.querySelector('[data-cell="service"]');if(field)activateSheetField(field);},60);});
@@ -978,7 +1029,219 @@ function pasteGrid(e,el) {
   save();scheduleSync();
   toast(`Pasted ${rows.length} row${rows.length===1?'':'s'}`);render();
 }
-function newItem(clientId,order) { return { id:uid(), clientId, groupId:null, projectGroupId:null, sourceRow:null, sortOrder:order, serial:String(order+1), workDate:today(), dueDate:'', service:'', quantity:1, rate:0, quotedTotal:0, advanceAmount:0, status:'pending', revisionCount:0, assigneeId:'', remarks:'', manualTotal:false }; }
+function copySelectedRows(isCut=false) {
+  if (tab!=='sheet'||!selected.size) return false;
+  const allCurrent=groupedSheetItems(clientItems());
+  const selectedItems=allCurrent.filter(i=>selected.has(i.id));
+  if (!selectedItems.length) return false;
+
+  rowClipboard={
+    mode: isCut ? 'cut' : 'copy',
+    items: selectedItems.map(i=>structuredClone(i)),
+    sourceRowIds: selectedItems.map(i=>i.id)
+  };
+
+  const columns=['serial','workDate','service','quantity','rate','quotedTotal','status','advanceAmount','remarks'];
+  const tsv=selectedItems.map(item=>{
+    return columns.map(k=>{
+      if (k==='serial') return cleanSerial(item.serial??(item.sortOrder+1));
+      return item[k]??'';
+    }).join('\t');
+  }).join('\n');
+  try {
+    if (navigator.clipboard&&navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(tsv);
+    }
+  } catch {}
+
+  $$('[data-row]').forEach(r=>r.classList.remove('row-cut-pending'));
+  if (isCut) {
+    rowClipboard.sourceRowIds.forEach(id=>{
+      document.querySelector(`[data-row="${id}"]`)?.classList.add('row-cut-pending');
+    });
+    toast(selectedItems.length===1?'Row cut to clipboard (Ctrl+X)':`${selectedItems.length} rows cut to clipboard`);
+  } else {
+    toast(selectedItems.length===1?'Row copied (Ctrl+C)':`${selectedItems.length} rows copied`);
+  }
+  return true;
+}
+
+function pasteCopiedRows(targetId=null,targetBlankOrder=null) {
+  if (tab!=='sheet') return false;
+  if (!rowClipboard.items.length) {
+    toast('No rows in clipboard to paste');
+    return false;
+  }
+  const items=groupedSheetItems(clientItems());
+  let targetIndex=-1;
+  if (targetId) {
+    targetIndex=items.findIndex(i=>i.id===targetId);
+  } else if (selected.size) {
+    const firstSelected=[...selected][0];
+    targetIndex=items.findIndex(i=>i.id===firstSelected);
+  }
+
+  if (targetIndex<0) {
+    targetIndex=items.length;
+  }
+
+  const isCut=rowClipboard.mode==='cut';
+  const copiedItems=rowClipboard.items;
+
+  copiedItems.forEach((copied,offset)=>{
+    const destIndex=targetIndex+offset;
+    let target=items[destIndex];
+    if (!target) {
+      target=newItem(activeClient,items.length);
+      items.push(target);
+      data.items.push(target);
+    }
+    target.service=copied.service||'';
+    target.quantity=copied.quantity!=null?copied.quantity:1;
+    target.rate=copied.rate!=null?copied.rate:0;
+    target.quotedTotal=copied.quotedTotal!=null?copied.quotedTotal:(num(target.quantity)*num(target.rate));
+    target.manualTotal=!!copied.manualTotal;
+    target.status=copied.status||'pending';
+    target.advanceAmount=copied.advanceAmount||0;
+    target.assigneeId=copied.assigneeId||'';
+    target.remarks=copied.remarks||'';
+    target.dueDate=copied.dueDate||'';
+    mutate('items',target);
+  });
+
+  if (isCut&&rowClipboard.sourceRowIds.length) {
+    rowClipboard.sourceRowIds.forEach(srcId=>{
+      if (copiedItems.some((_,o)=>items[targetIndex+o]?.id===srcId)) return;
+      const src=data.items.find(i=>i.id===srcId);
+      if (src) {
+        src.service='';
+        src.quantity=1;
+        src.rate=0;
+        src.quotedTotal=0;
+        src.manualTotal=false;
+        src.status='pending';
+        src.advanceAmount=0;
+        src.assigneeId='';
+        src.remarks='';
+        src.dueDate='';
+        mutate('items',src);
+      }
+    });
+    rowClipboard.mode='copy';
+    $$('[data-row]').forEach(r=>r.classList.remove('row-cut-pending'));
+    toast('Row moved (pasted from cut)');
+  } else {
+    toast(copiedItems.length===1?'Row pasted (Ctrl+V)':`${copiedItems.length} rows pasted`);
+  }
+
+  save();
+  render();
+  return true;
+}
+
+function duplicateSelectedRow(itemId) {
+  const all=clientItems(activeClient);
+  const index=all.findIndex(i=>i.id===itemId);
+  if (index<0) return;
+  const original=all[index];
+  const duplicate=structuredClone(original);
+  duplicate.id=uid();
+  duplicate.updatedAt=new Date().toISOString();
+  all.splice(index+1,0,duplicate);
+  data.items.push(duplicate);
+  all.forEach((item,idx)=>{
+    item.sortOrder=idx;
+    item.serial=cleanSerial(String(idx+1));
+    queue('items',item.id);
+  });
+  save();
+  render();
+  setTimeout(()=>{
+    const el=document.querySelector(`[data-row="${duplicate.id}"]`);
+    el?.scrollIntoView({block:'center',behavior:'smooth'});
+    selectSheetRow(duplicate.id,false,false);
+  },60);
+  toast('Row duplicated (Ctrl+D)');
+}
+
+function moveRowToPosition(itemId,targetPosition) {
+  const all=clientItems(activeClient);
+  const currentIndex=all.findIndex(i=>i.id===itemId);
+  if (currentIndex<0) return;
+  const newIndex=Math.max(0,Math.min(all.length-1,targetPosition-1));
+  if (currentIndex===newIndex) return;
+
+  const [moved]=all.splice(currentIndex,1);
+  all.splice(newIndex,0,moved);
+
+  all.forEach((item,idx)=>{
+    item.sortOrder=idx;
+    item.serial=cleanSerial(String(idx+1));
+    queue('items',item.id);
+  });
+
+  save();
+  render();
+  setTimeout(()=>{
+    const el=document.querySelector(`[data-row="${itemId}"]`);
+    el?.scrollIntoView({block:'center',behavior:'smooth'});
+    selectSheetRow(itemId,false,false);
+  },60);
+  toast(`Moved row to serial #${newIndex+1}`);
+}
+
+function moveRowByDelta(itemId,delta) {
+  const all=clientItems(activeClient);
+  const currentIndex=all.findIndex(i=>i.id===itemId);
+  if (currentIndex<0) return;
+  const targetIndex=currentIndex+delta;
+  if (targetIndex<0||targetIndex>=all.length) return;
+  moveRowToPosition(itemId,targetIndex+1);
+}
+
+function moveRowDialog(itemId) {
+  const all=clientItems(activeClient);
+  const index=all.findIndex(i=>i.id===itemId);
+  if (index<0) return;
+  const currentSerial=cleanSerial(all[index].serial??(index+1));
+  const item=all[index];
+  modal('Move row position', `
+    <div style="display:flex;flex-direction:column;gap:12px;">
+      <p style="margin:0;font-size:13px;color:#283e30;">
+        Moving: <strong>#${currentSerial} · ${esc(item.service||'Untitled row')}</strong>
+      </p>
+      <div class="field">
+        <label for="moveRowSerialInput">Enter new serial number (1 to ${all.length}):</label>
+        <input id="moveRowSerialInput" type="number" min="1" max="${all.length}" value="${currentSerial}" autofocus>
+      </div>
+    </div>
+  `, `
+    <div class="modal-actions">
+      <button type="button" class="small-btn" id="cancelMoveRow">Cancel</button>
+      <button type="button" class="small-btn blue" id="confirmMoveRow">Move row</button>
+    </div>
+  `);
+
+  $('#cancelMoveRow').onclick=closeModal;
+  const handleMove=()=>{
+    const val=Number($('#moveRowSerialInput')?.value);
+    if (!val||val<1||val>all.length) {
+      toast(`Please enter a valid serial number between 1 and ${all.length}`);
+      return;
+    }
+    closeModal();
+    moveRowToPosition(itemId,val);
+  };
+  $('#confirmMoveRow').onclick=handleMove;
+  $('#moveRowSerialInput')?.addEventListener('keydown',e=>{
+    if (e.key==='Enter') {
+      e.preventDefault();
+      handleMove();
+    }
+  });
+}
+
+function newItem(clientId,order) { return { id:uid(), clientId, groupId:null, projectGroupId:null, sourceRow:null, sortOrder:order, serial:cleanSerial(String(order+1)), workDate:today(), dueDate:'', service:'', quantity:1, rate:0, quotedTotal:0, advanceAmount:0, status:'pending', revisionCount:0, assigneeId:'', remarks:'', manualTotal:false }; }
 function effectiveItemValue(item){
   const group=data.groups.find(g=>g.id===item.groupId);
   if(!group||group.agreedAmount==null||group.agreedAmount==='')return num(item.quotedTotal);
@@ -1559,7 +1822,7 @@ function remoteRow(table, x) {
   if(table==='clients')return {id:x.id,workspace_id:ws,name:x.name,billing:x.billing||{},sort_order:x.sortOrder||0};
   if(table==='groups')return {id:x.id,workspace_id:ws,client_id:x.clientId,label:x.label,agreed_amount:x.agreedAmount};
   if(table==='projectGroups')return {id:x.id,workspace_id:ws,client_id:x.clientId,label:x.label};
-  if(table==='items')return {id:x.id,workspace_id:ws,client_id:x.clientId,group_id:x.groupId||null,project_group_id:x.projectGroupId||null,source_row:x.sourceRow||null,sort_order:x.sortOrder||0,serial:String(x.serial||''),work_date:validDate(x.workDate),due_date:validDate(x.dueDate),service:x.service||'',quantity:num(x.quantity),rate:num(x.rate),quoted_total:num(x.quotedTotal),advance_amount:num(x.advanceAmount),advance_received_at:validDate(x.advanceReceivedAt),paid_at:validDate(x.paidAt),paid_at_ts:x.paidAtTs||null,status:x.status,revision_count:x.revisionCount||0,assignee_id:x.assigneeId==='local-me'?currentUserId():isUuid(x.assigneeId)?x.assigneeId:null,remarks:x.remarks||'',updated_at:x.updatedAt||new Date().toISOString()};
+  if(table==='items')return {id:x.id,workspace_id:ws,client_id:x.clientId,group_id:x.groupId||null,project_group_id:x.projectGroupId||null,source_row:x.sourceRow||null,sort_order:x.sortOrder||0,serial:cleanSerial(String(x.serial||'')),work_date:validDate(x.workDate),due_date:validDate(x.dueDate),service:x.service||'',quantity:num(x.quantity),rate:num(x.rate),quoted_total:num(x.quotedTotal),advance_amount:num(x.advanceAmount),advance_received_at:validDate(x.advanceReceivedAt),paid_at:validDate(x.paidAt),paid_at_ts:x.paidAtTs||null,status:x.status,revision_count:x.revisionCount||0,assignee_id:x.assigneeId==='local-me'?currentUserId():isUuid(x.assigneeId)?x.assigneeId:null,remarks:x.remarks||'',updated_at:x.updatedAt||new Date().toISOString()};
   if(table==='invoices')return {id:x.id,workspace_id:ws,client_id:x.clientId,number:x.number,issue_date:validDate(x.issueDate)||today(),paid_at:validDate(x.paidAt),paid_at_ts:x.paidAtTs||null,item_ids:x.itemIds,lines:x.lines,subtotal:num(x.subtotal),discount:num(x.discount),final_amount:num(x.finalAmount),advance_amount:invoiceAdvance(x),status:x.status,seller:x.seller,buyer:x.buyer};
   if(table==='receipts')return {id:x.id,workspace_id:ws,client_id:x.clientId||null,client_name:x.clientName,amount:num(x.amount),received_month:x.receivedMonth,received_on:x.receivedOn||null,received_at:x.receivedAt||null,source:x.source,source_key:x.sourceKey,reference_kind:x.referenceKind||null,reference_id:x.referenceId||null,description:x.description||'',source_file:x.sourceFile||null,source_row:x.sourceRow||null,original_date:x.originalDate||null,date_quality:x.dateQuality||'exact'};
 }
@@ -1567,7 +1830,7 @@ function localRow(table,x) {
   if(table==='clients')return {id:x.id,name:x.name,billing:x.billing||{},sortOrder:x.sort_order};
   if(table==='groups')return {id:x.id,clientId:x.client_id,label:x.label,agreedAmount:x.agreed_amount};
   if(table==='projectGroups')return {id:x.id,clientId:x.client_id,label:x.label};
-  if(table==='items')return {id:x.id,clientId:x.client_id,groupId:x.group_id,projectGroupId:x.project_group_id,sourceRow:x.source_row,sortOrder:x.sort_order,serial:x.serial||String((x.sort_order||0)+1),workDate:x.work_date||'',dueDate:x.due_date||'',service:x.service,quantity:num(x.quantity),rate:num(x.rate),quotedTotal:num(x.quoted_total),advanceAmount:num(x.advance_amount),advanceReceivedAt:x.advance_received_at||null,paidAt:x.paid_at||null,paidAtTs:x.paid_at_ts||null,status:x.status,revisionCount:x.revision_count,assigneeId:x.assignee_id||'',remarks:x.remarks||'',manualTotal:true,updatedAt:x.updated_at};
+  if(table==='items')return {id:x.id,clientId:x.client_id,groupId:x.group_id,projectGroupId:x.project_group_id,sourceRow:x.source_row,sortOrder:x.sort_order,serial:cleanSerial(x.serial)||cleanSerial(String((x.sort_order||0)+1)),workDate:x.work_date||'',dueDate:x.due_date||'',service:x.service,quantity:num(x.quantity),rate:num(x.rate),quotedTotal:num(x.quoted_total),advanceAmount:num(x.advance_amount),advanceReceivedAt:x.advance_received_at||null,paidAt:x.paid_at||null,paidAtTs:x.paid_at_ts||null,status:x.status,revisionCount:x.revision_count,assigneeId:x.assignee_id||'',remarks:x.remarks||'',manualTotal:true,updatedAt:x.updated_at};
   if(table==='invoices')return {id:x.id,clientId:x.client_id,number:x.number,issueDate:x.issue_date,paidAt:x.paid_at||null,paidAtTs:x.paid_at_ts||null,itemIds:x.item_ids||[],lines:x.lines||[],subtotal:num(x.subtotal),discount:num(x.discount),finalAmount:num(x.final_amount),advanceAmount:num(x.advance_amount),status:x.status,seller:x.seller||{},buyer:x.buyer||{}};
   if(table==='receipts')return {id:x.id,clientId:x.client_id,clientName:x.client_name,amount:num(x.amount),receivedMonth:x.received_month,receivedOn:x.received_on,receivedAt:x.received_at,source:x.source,sourceKey:x.source_key,referenceKind:x.reference_kind,referenceId:x.reference_id,description:x.description,sourceFile:x.source_file,sourceRow:x.source_row,originalDate:x.original_date,dateQuality:x.date_quality};
 }
@@ -1745,16 +2008,65 @@ async function updateApp(){
   } catch(error){toast('Update failed: '+error.message);}
 }
 $$('#tabs button').forEach(b=>b.onclick=()=>{tab=b.dataset.tab;selected.clear();render();});
-document.addEventListener('keydown',e=>{if(e.ctrlKey&&(e.key==='+'||e.key==='='||e.key==='-')){e.preventDefault();data.settings.zoom=Math.max(70,Math.min(150,data.settings.zoom+(e.key==='-'?-10:10)));save();render();}if(e.key==='Escape'){closeStatusMenu();closeModal();}});
+document.addEventListener('keydown',e=>{
+  if(e.ctrlKey&&(e.key==='+'||e.key==='='||e.key==='-')){
+    e.preventDefault();
+    data.settings.zoom=Math.max(70,Math.min(150,data.settings.zoom+(e.key==='-'?-10:10)));
+    save();render();return;
+  }
+  if(e.key==='Escape'){
+    closeStatusMenu();closeModal();
+    if(rowClipboard.mode==='cut'){
+      rowClipboard.mode='copy';
+      $$('[data-row]').forEach(r=>r.classList.remove('row-cut-pending'));
+    }
+    return;
+  }
+  if(tab==='sheet'&&!$('#modalRoot').children.length){
+    const focused=document.activeElement;
+    const isEditing=focused?.matches('input:not([readonly]),textarea,select')||focused?.isContentEditable;
+    if(!isEditing){
+      const isCtrl=e.ctrlKey||e.metaKey;
+      const key=e.key.toLowerCase();
+      if(isCtrl&&key==='c'&&selected.size){
+        e.preventDefault();copySelectedRows(false);return;
+      }
+      if(isCtrl&&key==='x'&&selected.size){
+        e.preventDefault();copySelectedRows(true);return;
+      }
+      if(isCtrl&&key==='v'&&rowClipboard.items.length){
+        e.preventDefault();
+        const targetId=selected.size?[...selected][0]:null;
+        pasteCopiedRows(targetId,selectionCell?.blankOrder);
+        return;
+      }
+      if(isCtrl&&key==='d'&&selected.size){
+        e.preventDefault();duplicateSelectedRow([...selected][0]);return;
+      }
+      if(e.altKey&&e.key==='ArrowUp'&&selected.size){
+        e.preventDefault();moveRowByDelta([...selected][0],-1);return;
+      }
+      if(e.altKey&&e.key==='ArrowDown'&&selected.size){
+        e.preventDefault();moveRowByDelta([...selected][0],1);return;
+      }
+    }
+  }
+});
 document.addEventListener('paste',e=>{
-  if(tab!=='sheet'||!selectionCell||activeStatusMenu||$('#modalRoot').children.length)return;
+  if(tab!=='sheet'||activeStatusMenu||$('#modalRoot').children.length)return;
   if(e.target?.matches?.('[data-cell],[data-blank-cell]'))return;
   const focused=document.activeElement;
   if(focused?.matches('input:not([readonly]),textarea,select')||focused?.isContentEditable)return;
+  if(rowClipboard.items.length&&selected.size){
+    e.preventDefault();
+    pasteCopiedRows([...selected][0],selectionCell?.blankOrder);
+    return;
+  }
+  if(!selectionCell)return;
   const value=e.clipboardData?.getData('text/plain');if(!value)return;
   if(selectionCell.blankOrder!=null){pasteBlankGrid(e,{dataset:{blankOrder:String(selectionCell.blankOrder),blankCell:selectionCell.key}});return;}
   if(!selectionCell.id)return;
   if(value.includes('\t')||value.includes('\n'))pasteGrid(e,{dataset:{id:selectionCell.id,cell:selectionCell.key}});
   else{e.preventDefault();editCell(selectionCell.id,selectionCell.key,value);}
 });
-(async()=>{try{const saved=await window.desk.read();if(saved)data={...structuredClone(defaults),...saved,settings:{...structuredClone(defaults.settings),...(saved.settings||{}),seller:{...defaults.settings.seller,...(saved.settings?.seller||{})}}};ensureBankAccounts();syncActiveBankDetails();const topClient=sortedClients()[0]?.id;if(topClient)activeClient=topClient;render();setupSupabase();}catch(e){render();toast('Could not load local data: '+e.message);}})();
+(async()=>{try{const saved=await window.desk.read();if(saved)data={...structuredClone(defaults),...saved,settings:{...structuredClone(defaults.settings),...(saved.settings||{}),seller:{...defaults.settings.seller,...(saved.settings?.seller||{})}}};(data.items||[]).forEach(i=>{if(i.serial)i.serial=cleanSerial(i.serial);});ensureBankAccounts();syncActiveBankDetails();const topClient=sortedClients()[0]?.id;if(topClient)activeClient=topClient;render();setupSupabase();}catch(e){render();toast('Could not load local data: '+e.message);}})();

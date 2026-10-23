@@ -1,7 +1,7 @@
 {
   "name": "meowsheet",
   "productName": "MeowSheet",
-  "version": "0.2.28",
+  "version": "0.2.29",
   "private": true,
   "description": "MeowSheet Windows work ledger",
   "main": "main.cjs",
