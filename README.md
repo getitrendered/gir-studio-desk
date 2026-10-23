@@ -1,6 +1,6 @@
-# GIR Studio Desk
+# MeowSheet
 
-A compact Windows work ledger for GIR. Each worksheet in an imported `.xlsx` workbook becomes a client. Rows become work items; consecutive yellow rows become a deal group. The desktop app keeps a local copy so it opens immediately, then syncs with Supabase when connected.
+A compact Windows work ledger. Each worksheet in an imported `.xlsx` workbook becomes a client. Rows become work items; consecutive yellow rows become a deal group. The desktop app keeps a local copy so it opens immediately, then syncs with Supabase when connected.
 
 ## Product rules
 
@@ -16,16 +16,16 @@ A compact Windows work ledger for GIR. Each worksheet in an imported `.xlsx` wor
 
 ## Run
 
-Install the latest `GIR-Studio-Desk-*-Setup.exe` from GitHub Releases. The Supabase project URL and anon key are preconfigured. On first launch, sign in or create an account and confirm the email if prompted. An existing GIR member enters the worksheet automatically. A new teammate enters the code shown in **Settings** on an existing member's PC to join the one GIR workspace and open the migrated clients. Keep both PCs connected for live status updates. Do **not** enter a database password or service-role key in the app.
+Install the latest `MeowSheet-*-Setup.exe` from GitHub Releases. The Supabase project URL and anon key are preconfigured. On first launch, sign in or create an account and confirm the email if prompted. An existing workspace member enters the worksheet automatically. A new teammate enters the code shown in **Settings** on an existing member's PC to join the workspace and open the migrated clients. Keep both PCs connected for live status updates. Do **not** enter a database password or service-role key in the app.
 
-Local data is stored in `%APPDATA%/gir-studio-desk/ledger.json`. Back up that file before replacing the PC. The app syncs worksheet rows, groups, billing details, and team avatars to Supabase.
+Local data is stored in `%APPDATA%/meowsheet/ledger.json` (automatically migrated from legacy `gir-studio-desk` if present). Back up that file before replacing the PC. The app syncs worksheet rows, groups, billing details, and team avatars to Supabase.
 
 ## Build
 
-`npm ci` followed by `npm run build:win` produces the Windows installer, its blockmap, and `latest.yml` in `release/`. The installed app checks GitHub Releases when it starts and every six hours. In **Settings**, **Check for updates** finds a release, **Download update** retrieves it, and **Restart to install** applies it. Local worksheet data stays in `%APPDATA%/gir-studio-desk/ledger.json` across app updates.
+`npm ci` followed by `npm run build:win` produces the Windows installer, its blockmap, and `latest.yml` in `release/`. The installed app checks GitHub Releases when it starts and every six hours. In **Settings**, **Check for updates** finds a release, **Download update** retrieves it, and **Restart to install** applies it. Local worksheet data stays in `%APPDATA%/meowsheet/ledger.json` across app updates.
 
 `build-portable.ps1` still produces the older ZIP-style portable folder for local testing. Portable copies do not self-update; install the release installer to receive in-app updates.
-The Desktop folder's `Install GIR Studio Desk.cmd` launches the locally built release installer when one is present.
+The Desktop folder's `Install MeowSheet.cmd` launches the locally built release installer when one is present.
 
 To publish a future version, bump `package.json`'s version, commit and push, then push a matching tag such as `v0.3.0`. GitHub Actions builds the installer and publishes the installer, blockmap, and `latest.yml` to the release. The update feed is fixed to `getitrendered/gir-studio-desk` in the build configuration. Do not rename or transfer that repository while users have the app installed.
 

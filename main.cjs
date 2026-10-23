@@ -4,8 +4,20 @@ const path = require('node:path');
 const { spawn } = require('node:child_process');
 const crypto = require('node:crypto');
 
-app.setAppUserModelId('com.gir.studiodesk');
-app.setPath('userData', path.join(app.getPath('appData'), 'gir-studio-desk'));
+app.setAppUserModelId('com.meowsheet.app');
+const legacyUserData = path.join(app.getPath('appData'), 'gir-studio-desk');
+const targetUserData = path.join(app.getPath('appData'), 'meowsheet');
+try {
+  if (!fs.existsSync(targetUserData) && fs.existsSync(legacyUserData)) {
+    fs.cpSync(legacyUserData, targetUserData, { recursive: true });
+  } else if (fs.existsSync(path.join(legacyUserData, 'ledger.json')) && !fs.existsSync(path.join(targetUserData, 'ledger.json'))) {
+    fs.mkdirSync(targetUserData, { recursive: true });
+    fs.copyFileSync(path.join(legacyUserData, 'ledger.json'), path.join(targetUserData, 'ledger.json'));
+  }
+} catch (err) {
+  console.error('Data migration notice:', err);
+}
+app.setPath('userData', targetUserData);
 let win;
 let updater;
 let updateState = { status: 'unavailable', version: app.getVersion(), message: 'Install a release build to receive updates.' };
@@ -36,7 +48,7 @@ function initUpdates() {
 }
 function createWindow() {
   win = new BrowserWindow({ width: 1600, height: 980, minWidth: 1080, minHeight: 660, show: false,
-    backgroundColor: '#f7f8fa', title: 'GIR Studio Desk', icon: path.join(__dirname, 'assets', 'gir-icon.png'),
+    backgroundColor: '#f7f8fa', title: 'MeowSheet', icon: path.join(__dirname, 'assets', 'gir-icon.png'),
     webPreferences: { preload: path.join(__dirname, 'preload.cjs'), contextIsolation: true, nodeIntegration: false, sandbox: true } });
   win.setMenuBarVisibility(false);
   win.loadFile(path.join(__dirname, 'index.html'));
@@ -68,7 +80,7 @@ ipcMain.handle('print-invoice', async () => { if (!win) return; await win.webCon
 ipcMain.handle('show-notification', (_e, { title, body }) => {
   if (Notification && Notification.isSupported()) {
     new Notification({
-      title: title || 'GIR Studio Desk',
+      title: title || 'MeowSheet',
       body: body || '',
       icon: path.join(__dirname, 'assets', 'gir-icon.png')
     }).show();
