@@ -37,6 +37,7 @@ jobs:
       - run: node tests/test_row_copy_paste_move.cjs
       - run: node tests/test_row_delete_undo_redo.cjs
       - run: node tests/test_cat_reactions.cjs
+      - run: node tests/test_smart_notifications.cjs
       - run: python tests/test_import.py
       - run: npm run build:win
       - name: Publish GitHub Release
@@ -48,4 +49,4 @@ jobs:
           $base = "release/MeowSheet-$version-Setup.exe"
           $assets = @($base, "$base.blockmap", 'release/latest.yml')
           foreach ($asset in $assets) { if (!(Test-Path -LiteralPath $asset)) { throw "Missing release asset: $asset" } }
-          gh release create '${{ github.ref_name }}' @assets --verify-tag --title 'MeowSheet ${{ github.ref_name }}' --notes 'MeowSheet ${{ github.ref_name }}: Cleaned up tracker UI with primary top Cat Reaction Ping button, workspace persistence fix, and smart focus ping notifications.'
+          gh release create '${{ github.ref_name }}' @assets --verify-tag --title 'MeowSheet ${{ github.ref_name }}' --notes 'MeowSheet ${{ github.ref_name }}: Modern smart notification routing between in-app UI and native Windows desktop notifications with zero duplication.'

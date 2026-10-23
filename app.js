@@ -50,6 +50,21 @@ function goBack() {
 }
 
 function toast(message) { const el = $('#toast'); if(!el)return; el.textContent = message; el.classList.add('show'); clearTimeout(toastTimer); toastTimer = setTimeout(() => el.classList.remove('show'), 3000); }
+function showInAppNotification(title, body = '', icon = '🔔') {
+  const el = $('#toast'); if(!el)return;
+  el.innerHTML = `
+    <div style="display:flex;align-items:center;gap:10px;text-align:left;">
+      <span style="font-size:16px;flex:none;">${esc(icon)}</span>
+      <div style="display:flex;flex-direction:column;gap:2px;overflow:hidden;">
+        <strong style="font-size:12px;color:#fff;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${esc(title)}</strong>
+        ${body ? `<span style="font-size:11px;color:#cbd5e1;line-height:1.3;">${esc(body)}</span>` : ''}
+      </div>
+    </div>
+  `;
+  el.classList.add('show');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => el.classList.remove('show'), 3500);
+}
 let saveTimer = null;
 function save() {
   clearTimeout(saveTimer);
@@ -1796,7 +1811,6 @@ async function triggerCatPing(reactionKey, catColor, contextItem = null, targetP
   
   // Show locally
   displayCatReactionBanner(payload);
-  desktopNotify(`🐾 ${myName} · ${r.title}`, msg);
   
   // Broadcast to partner over Supabase channel
   if (channel) {
@@ -1896,14 +1910,57 @@ function openCatReactionPicker(contextItem = null, targetName = null) {
   initPickerAnimations();
 }
 
-function desktopNotify(title,body){
-  try{
-    if(window.desk?.notify){
-      window.desk.notify(title,body);
-    } else if(typeof Notification!=='undefined'&&Notification.permission==='granted'){
-      new Notification(title,{body});
+// Low-level Windows desktop notification trigger
+function sendNativeDesktopNotification(title, body) {
+  try {
+    if (window.desk?.notify) {
+      window.desk.notify(title, body);
+    } else if (typeof Notification !== 'undefined' && Notification.permission === 'granted') {
+      new Notification(title, { body });
     }
-  }catch(err){console.warn('Desktop notification error:',err);}
+  } catch (err) {
+    console.warn('Native desktop notification error:', err);
+  }
+}
+
+// Dynamic focus and window state inspection at notification arrival time
+async function isAppActivelyUsed() {
+  let isAppFocused = false;
+  try {
+    if (window.desk?.isFocused) {
+      isAppFocused = await window.desk.isFocused();
+    } else {
+      isAppFocused = document.hasFocus() && !document.hidden;
+    }
+  } catch {
+    isAppFocused = false;
+  }
+  return isAppFocused;
+}
+
+// Centralized Smart Notification Engine
+// Routes each notification strictly to EITHER In-App UI OR Windows Notification (Never Both)
+async function smartNotify({ title, body, icon = '🔔', catPayload = null }) {
+  const isAppActive = await isAppActivelyUsed();
+
+  if (isAppActive) {
+    // App is open, visible, and actively focused by user -> In-app UI only
+    if (catPayload) {
+      displayCatReactionBanner(catPayload);
+    } else {
+      showInAppNotification(title, body, icon);
+    }
+  } else {
+    // App is minimized, blurred, or in background -> Native Windows notification only
+    const nativeTitle = title || (catPayload ? `🐾 ${catPayload.senderName || 'Teammate'}` : 'MeowSheet');
+    const nativeBody = body || (catPayload ? (catPayload.message || 'Cat reaction sent!') : '');
+    sendNativeDesktopNotification(nativeTitle, nativeBody);
+  }
+}
+
+// Backward-compatible desktopNotify helper that automatically routes intelligently
+function desktopNotify(title, body, icon = '🔔') {
+  smartNotify({ title, body, icon });
 }
 function startTrackerItem(id){
   const item=data.items.find(x=>x.id===id);if(!item||item.status==='discarded')return;
@@ -2424,23 +2481,11 @@ function subscribe(){
   channel=clientApi.channel('gir-ledger-'+data.settings.workspaceId);
   channel.on('broadcast', { event: 'cat_reaction' }, async ({ payload }) => {
     if(!payload || payload.senderId === currentUserId()) return;
-    
-    // Always display in-app animated banner popup
-    displayCatReactionBanner(payload);
-    
-    // Smart detection: only trigger Windows native notification if user is NOT focused inside the app!
-    let isAppFocused = false;
-    try {
-      if (window.desk?.isFocused) {
-        isAppFocused = await window.desk.isFocused();
-      } else {
-        isAppFocused = document.hasFocus() && !document.hidden;
-      }
-    } catch {}
-    
-    if (!isAppFocused) {
-      desktopNotify('🐾 ' + (payload.senderName || 'Teammate'), payload.message || 'Cat reaction sent!');
-    }
+    await smartNotify({
+      title: '🐾 ' + (payload.senderName || 'Teammate'),
+      body: payload.message || 'Cat reaction sent!',
+      catPayload: payload
+    });
   });
   
   for(const table of ['clients','deal_groups','project_groups','work_items','invoices','payment_receipts','members']){
@@ -2456,13 +2501,13 @@ function subscribe(){
           const workName=item.service||'work item';
           const clientName=client?` (${client.name})`:'';
           if(item.status==='working'){
-            desktopNotify('Work in progress',`${assigneeName} started working on "${workName}"${clientName}`);
+            desktopNotify('Work in progress',`${assigneeName} started working on "${workName}"${clientName}`,'⚡');
           }else if(item.status==='changes'){
-            desktopNotify('Changes requested',`${assigneeName} marked "${workName}"${clientName} for changes`);
+            desktopNotify('Changes requested',`${assigneeName} marked "${workName}"${clientName} for changes`,'✏️');
           }else if(item.status==='sent'){
-            desktopNotify('Work sent',`${assigneeName} marked "${workName}"${clientName} as sent to client`);
+            desktopNotify('Work sent',`${assigneeName} marked "${workName}"${clientName} as sent to client`,'🚀');
           }else if(item.status==='paid'){
-            desktopNotify('Payment recorded',`${assigneeName} marked "${workName}"${clientName} as paid`);
+            desktopNotify('Payment recorded',`${assigneeName} marked "${workName}"${clientName} as paid`,'💰');
           }
         }
       }

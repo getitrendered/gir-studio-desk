@@ -106,16 +106,32 @@ ipcMain.handle('choose-workbook', async () => {
 ipcMain.handle('print-invoice', async () => { if (!win) return; await win.webContents.print({ silent: false, printBackground: true }); });
 ipcMain.handle('show-notification', (_e, { title, body }) => {
   if (Notification && Notification.isSupported()) {
-    new Notification({
+    const notif = new Notification({
       title: title || 'MeowSheet',
       body: body || '',
       icon: path.join(__dirname, 'assets', 'gir-icon.png')
-    }).show();
+    });
+    notif.on('click', () => {
+      if (win && !win.isDestroyed()) {
+        if (win.isMinimized()) win.restore();
+        if (!win.isVisible()) win.show();
+        win.focus();
+      }
+    });
+    notif.show();
     return true;
   }
   return false;
 });
-ipcMain.handle('is-window-focused', () => win ? (win.isFocused() && !win.isMinimized() && win.isVisible()) : false);
+ipcMain.handle('is-window-focused', () => win && !win.isDestroyed() ? (win.isFocused() && !win.isMinimized() && win.isVisible()) : false);
+ipcMain.handle('get-window-state', () => {
+  if (!win || win.isDestroyed()) return { isFocused: false, isMinimized: true, isVisible: false, isActive: false };
+  const isMinimized = win.isMinimized();
+  const isVisible = win.isVisible();
+  const isFocused = win.isFocused();
+  const isActive = isFocused && !isMinimized && isVisible;
+  return { isFocused, isMinimized, isVisible, isActive };
+});
 ipcMain.handle('updates-state', () => updateState);
 ipcMain.handle('updates-check', async () => {
   if (!updater) return updateState;
