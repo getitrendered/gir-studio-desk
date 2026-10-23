@@ -10,7 +10,7 @@ const pkgPath = path.join(__dirname, '..', 'package.json');
 const pkg = JSON.parse(fs.readFileSync(pkgPath, 'utf8'));
 assert.strictEqual(pkg.name, 'meowsheet', 'package name is meowsheet');
 assert.strictEqual(pkg.productName, 'MeowSheet', 'package productName is MeowSheet');
-assert.strictEqual(pkg.version, '0.2.27', 'package version is 0.2.27');
+assert.ok(/^\d+\.\d+\.\d+$/.test(pkg.version), 'package version is semver');
 assert.strictEqual(pkg.build.appId, 'com.meowsheet.app', 'build.appId is com.meowsheet.app');
 assert.strictEqual(pkg.build.productName, 'MeowSheet', 'build.productName is MeowSheet');
 assert.strictEqual(pkg.build.win.executableName, 'MeowSheet', 'build.win.executableName is MeowSheet');

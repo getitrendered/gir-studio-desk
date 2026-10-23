@@ -419,13 +419,42 @@ button:disabled,select:disabled,[role="button"][aria-disabled="true"],[role="opt
 .revenue-month-breakdown table th{background:#f6faf7;font-size:10px;padding:9px 14px}
 .revenue-month-breakdown table td{font-size:12px;padding:9px 14px}
 
-/* Bank accounts manager */
-.bank-accounts-list{display:flex;flex-direction:column;gap:8px}
-.bank-account-card{border:1px solid #dce6de;border-radius:8px;padding:12px 14px;background:#fff;transition:all .15s ease}
-.bank-account-card.active{border-color:#168451;background:#f7fcf8;box-shadow:0 0 0 1px #16845133}
-.bank-account-top{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:8px}
-.bank-account-top label strong{font-size:13px;color:#183624}
-.bank-account-preview{padding-top:6px;border-top:1px dashed #e4ede6}
+/* Bank accounts manager - Modern Studio UI */
+.bank-accounts-manager{margin:18px 0 16px;display:flex;flex-direction:column;gap:10px}
+.bank-manager-header{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;margin-bottom:2px}
+.bank-manager-title{margin:0;font-size:13px;font-weight:750;color:#183424;letter-spacing:-0.2px}
+.bank-manager-sub{margin:2px 0 0;font-size:11px;color:#6b8273}
+.bank-accounts-list{display:flex;flex-direction:column;gap:10px}
+.bank-account-card{border:1px solid #d8e4dc;border-radius:12px;background:#ffffff;padding:14px 16px;transition:all .18s cubic-bezier(0.2,0,0,1);box-shadow:0 1px 3px rgba(0,0,0,0.02);position:relative}
+.bank-account-card:hover{border-color:#b7ccbe;box-shadow:0 4px 14px rgba(22,132,81,0.07)}
+.bank-account-card.is-active{border-color:#168451;background:#f7fbf8;box-shadow:0 3px 12px rgba(22,132,81,0.11),0 0 0 1px #16845133}
+.bank-card-main{display:flex;gap:12px;align-items:flex-start}
+.bank-card-badge-col{flex:none}
+.bank-avatar-icon{width:36px;height:36px;border-radius:10px;background:#eef5f0;color:#285739;display:flex;align-items:center;justify-content:center;transition:all .15s ease}
+.bank-account-card.is-active .bank-avatar-icon{background:#e0f5e8;color:#0f7542}
+.bank-card-content{flex:1;min-width:0;display:flex;flex-direction:column;gap:10px}
+.bank-card-top-row{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}
+.bank-title-area{display:flex;align-items:center;gap:8px;flex-wrap:wrap;min-width:0}
+.bank-account-label{font-size:13.5px;font-weight:750;color:#142a1d;letter-spacing:-0.2px;white-space:nowrap}
+.bank-institution-name{font-size:11.5px;color:#4f6d5b;font-weight:600;background:#eef4f0;border-radius:6px;padding:2px 8px;white-space:nowrap}
+.bank-active-pill{display:inline-flex;align-items:center;gap:5px;background:#e2f5ea;color:#0b6837;font-size:11px;font-weight:700;padding:2px 9px;border-radius:20px;border:1px solid #bce6cd;white-space:nowrap}
+.bank-actions-group{display:flex;align-items:center;gap:6px;margin-left:auto}
+.bank-btn-action{border:1px solid #d4ded7;background:#ffffff;color:#2d4536;border-radius:7px;padding:4px 10px;font-size:11px;font-weight:600;cursor:pointer;transition:all .14s ease;display:inline-flex;align-items:center;gap:4px}
+.bank-btn-action:hover{background:#f3f7f4;border-color:#b5c7bb;color:#11281a}
+.bank-btn-action.activate{background:#edf7f1;border-color:#bce2ce;color:#117444;font-weight:700}
+.bank-btn-action.activate:hover{background:#168451;border-color:#168451;color:#ffffff}
+.bank-meta-chips{display:flex;align-items:stretch;gap:8px;flex-wrap:wrap}
+.bank-chip{background:#f8faf9;border:1px solid #e3ebe6;border-radius:8px;padding:6px 10px;display:inline-flex;align-items:center;gap:7px;font-size:11px;transition:all .15s ease}
+.bank-account-card.is-active .bank-chip{background:#ffffff;border-color:#dce7e0}
+.bank-chip .chip-label{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.4px;color:#7b9384}
+.bank-chip .chip-val{font-weight:700;color:#193524}
+.bank-chip .chip-val.mono{font-family:'SF Mono',Consolas,Menlo,Monaco,monospace;letter-spacing:0.3px;font-size:11px}
+.copy-chip-btn{border:0;background:transparent;color:#8da496;cursor:pointer;padding:2px;margin-left:1px;border-radius:4px;display:inline-flex;align-items:center;transition:all .12s ease}
+.copy-chip-btn:hover{color:#168451;background:#eaf4ee}
+.bank-chip.upi{border-color:#dbe4eb;background:#f6f9fc}
+.bank-chip.upi .chip-label{color:#55728f}
+.bank-custom-notes{font-size:11px;line-height:1.45;color:#4c6b57;background:#fbfdfc;border-left:3px solid #168451;padding:6px 10px;border-radius:0 6px 6px 0;display:flex;gap:6px}
+.bank-empty-state{padding:24px 16px;background:#f9fbf9;border:1.5px dashed #d0dcd2;border-radius:12px;text-align:center}
 
 /* Avatar hover 2x zoom */
 .sheet tr:has(.assignee-button:not([title="Assign person"]):hover){position:relative;z-index:50}
