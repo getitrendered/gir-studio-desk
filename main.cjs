@@ -18,6 +18,33 @@ try {
   console.error('Data migration notice:', err);
 }
 app.setPath('userData', targetUserData);
+
+function cleanupLegacyInstallation() {
+  try {
+    const localAppData = process.env.LOCALAPPDATA || path.join(process.env.USERPROFILE || '', 'AppData', 'Local');
+    const legacyProg = path.join(localAppData, 'Programs', 'gir-studio-desk');
+    const legacyUninstaller = path.join(legacyProg, 'Uninstall GIR Studio Desk.exe');
+    if (fs.existsSync(legacyUninstaller)) {
+      spawn(legacyUninstaller, ['/S', `_?=${legacyProg}`], { detached: true, stdio: 'ignore' }).unref();
+    } else if (fs.existsSync(legacyProg)) {
+      try { fs.rmSync(legacyProg, { recursive: true, force: true }); } catch {}
+    }
+    const desktops = [
+      path.join(process.env.USERPROFILE || '', 'Desktop'),
+      path.join(process.env.USERPROFILE || '', 'OneDrive', 'Desktop')
+    ];
+    desktops.forEach(d => {
+      const oldLnk = path.join(d, 'GIR Studio Desk.lnk');
+      if (fs.existsSync(oldLnk)) {
+        try { fs.unlinkSync(oldLnk); } catch {}
+      }
+    });
+  } catch (err) {
+    console.error('Legacy app cleanup notice:', err);
+  }
+}
+cleanupLegacyInstallation();
+
 let win;
 let updater;
 let updateState = { status: 'unavailable', version: app.getVersion(), message: 'Install a release build to receive updates.' };
