@@ -7,7 +7,7 @@ const num = v => Number(String(v ?? '').replace(/[^0-9.-]/g, '')) || 0;
 const esc = v => String(v ?? '').replace(/[&<>"']/g, c => ({ '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;' }[c]));
 const cleanSerial = v => { if (v == null || v === '') return ''; const s = String(v).trim(), n = Number(s); if (!isNaN(n) && Number.isInteger(n) && !s.includes('e') && !s.includes('E')) return String(n); return s.replace(/\.0+$/, ''); };
 const fmtDate = d => { if (!d) return '—'; const x = new Date(d + 'T00:00:00'); return Number.isNaN(x.getTime()) ? d : x.toLocaleDateString('en-IN', { day:'numeric', month:'short', year:'numeric' }); };
-const defaults = { clients:[], groups:[], projectGroups:[], items:[], invoices:[], receipts:[], members:[], pending:[], settings:{ seller:{ name:'GIR — Get It Rendered', address:'', email:'', phone:'', taxId:'', bankDetails:'', bankAccounts:[], activeBankAccountId:'', logoData:'' }, url:'https://isdxybpeagloikchhsbp.supabase.co', key:'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImlzZHh5YnBlYWdsb2lrY2hoc2JwIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTI1NzkzMjcsImV4cCI6MjEwODE1NTMyN30.ll1YG9uyrTqmLzE90miCk-O1Ab5VkBPfqrCPDDUc5u8', workspaceId:'', displayName:'Samuel', localPartner:'Mezrid', catType:'orange', zoom:100 } };
+const defaults = { clients:[], groups:[], projectGroups:[], items:[], invoices:[], receipts:[], members:[], pending:[], settings:{ seller:{ name:'GIR — Get It Rendered', address:'', email:'', phone:'', taxId:'', bankDetails:'', bankAccounts:[], activeBankAccountId:'', logoData:'' }, url:'https://isdxybpeagloikchhsbp.supabase.co', key:'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImlzZHh5YnBlYWdsb2lrY2hoc2JwIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTI1NzkzMjcsImV4cCI6MjEwODE1NTMyN30.ll1YG9uyrTqmLzE90miCk-O1Ab5VkBPfqrCPDDUc5u8', workspaceId:'17f39873-e10f-4bdf-93ee-1f92b3e25251', displayName:'Samuel', localPartner:'Mezrid', catType:'orange', zoom:100 } };
 const GIR_WORKSPACE_ID='17f39873-e10f-4bdf-93ee-1f92b3e25251';
 let data = structuredClone(defaults), tab = 'sheet', lastRenderedTab = null, lastRenderedClient = null, activeClient = null, selected = new Set(), selectionAnchor = null, selectionCell = null, collapsedGroups = new Set(), blankRows = 60, highlightUser = null, filter = 'all', clientApi = null, session = null, channel = null, syncing = false, toastTimer, syncTimer, lastSyncTime = Date.now(), importPreview = null, previewClientIndex = 0, migrating = false;
 let authLoading=true,workspaceReady=false,workspaceResolving=false,accessMode='signin',accessError='',activeStatusMenu=null;
@@ -506,7 +506,6 @@ function renderTracker() {
           <span>${esc(displayStatus(i))}</span>
           <svg class="status-chevron" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="m4.5 6 3.5 3.5L11.5 6" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
         </button>
-        <button type="button" class="small-btn cat-ping-btn" data-cat-ping="${i.id}" title="Send animated cat reaction">🐾 Ping</button>
         <button type="button" class="small-btn tracker-view-btn" data-jump-item="${i.id}">View sheet</button>
       </div>
     </div>`;
@@ -542,7 +541,6 @@ function renderTracker() {
           <span>${esc(displayStatus(i))}</span>
           <svg class="status-chevron" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="m4.5 6 3.5 3.5L11.5 6" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
         </button>
-        <button type="button" class="small-btn cat-ping-btn" data-cat-ping="${i.id}" title="Send animated cat reaction">🐾 Ping</button>
         <button type="button" class="small-btn tracker-view-btn" data-jump-item="${i.id}">View sheet</button>
       </div>
     </div>`;
@@ -571,10 +569,13 @@ function renderTracker() {
           .sort((a,b)=>statusRank(a.status)-statusRank(b.status)||(a.dueDate||'9999').localeCompare(b.dueDate||'9999'));
         const inProgress=assigned.filter(i=>['working','changes'].includes(i.status)).length;
         return `<div class="panel">
-          <h3>
-            <span class="tracker-avatar">${avatar(m.userId,m.displayName)}</span>${esc(m.displayName)}
-            <span class="muted">${assigned.length} assigned${inProgress?` · ${inProgress} in progress`:''}</span>
-          </h3>
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;flex-wrap:wrap;gap:8px;">
+            <h3 style="margin:0;">
+              <span class="tracker-avatar">${avatar(m.userId,m.displayName)}</span>${esc(m.displayName)}
+              <span class="muted">${assigned.length} assigned${inProgress?` · ${inProgress} in progress`:''}</span>
+            </h3>
+            ${m.userId !== currentUserId() ? `<button type="button" class="cat-team-ping-btn" data-ping-member="${m.userId}" data-ping-name="${esc(m.displayName)}" title="Send animated cat reaction ping to ${esc(m.displayName)}">🐾 Ping ${esc(m.displayName)}</button>` : ''}
+          </div>
           ${assigned.length?assigned.map(i=>renderCard(i,true)).join(''):'<p class="muted">No work assigned right now. Assign work from any worksheet.</p>'}
         </div>`;
       }).join('')}
@@ -1775,10 +1776,10 @@ function displayCatReactionBanner(payload) {
   }, 4500);
 }
 
-async function triggerCatPing(reactionKey, catColor, contextItem = null) {
+async function triggerCatPing(reactionKey, catColor, contextItem = null, targetPartner = null) {
   const r = CAT_REACTIONS.find(x => x.key === reactionKey) || CAT_REACTIONS[0];
   const myName = data.settings.displayName || 'Me';
-  const partnerName = data.settings.localPartner || 'Teammate';
+  const partnerName = targetPartner || data.settings.localPartner || 'Teammate';
   
   let msg = r.message;
   if (contextItem && contextItem.service) {
@@ -1816,9 +1817,10 @@ async function triggerCatPing(reactionKey, catColor, contextItem = null) {
   toast(`🐾 Sent ${r.action} ping to ${partnerName}!`);
 }
 
-function openCatReactionPicker(contextItem = null) {
-  let chosenCat = data.settings.catType || (data.settings.displayName?.toLowerCase().includes('mezrid') ? 'black' : 'orange');
-  const targetText = contextItem ? `on <strong>${esc(contextItem.service || 'work item')}</strong>` : `to your teammate`;
+function openCatReactionPicker(contextItem = null, targetName = null) {
+  const partner = targetName || data.settings.localPartner || 'Teammate';
+  let chosenCat = data.settings.catType || 'orange';
+  const targetText = `to <strong>${esc(partner)}</strong>`;
 
   const renderPickerContent = () => `
     <div class="cat-type-toggle-bar">
@@ -1881,7 +1883,7 @@ function openCatReactionPicker(contextItem = null) {
       el.onclick = () => {
         const key = el.dataset.catPick;
         closeModal();
-        triggerCatPing(key, chosenCat, contextItem);
+        triggerCatPing(key, chosenCat, contextItem, partner);
       };
     });
   }
@@ -2357,12 +2359,24 @@ async function resolveWorkspace(){
   try{
     const {data:membership,error}=await clientApi.from('members').select('workspace_id,display_name').eq('workspace_id',GIR_WORKSPACE_ID).eq('user_id',session.user.id).maybeSingle();
     if(error)throw error;
-    data.settings.workspaceId=membership?.workspace_id||'';
-    if(membership?.display_name)data.settings.displayName=membership.display_name;
-    else if(session.user.user_metadata?.display_name)data.settings.displayName=session.user.user_metadata.display_name;
+    if(membership){
+      data.settings.workspaceId=membership.workspace_id;
+      if(membership.display_name)data.settings.displayName=membership.display_name;
+    } else {
+      // Auto-join with known code in background so user never gets prompted
+      const {data:id}=await clientApi.rpc('join_gir_workspace',{code:'9A5FEDC53B0F',name:data.settings.displayName||session.user.user_metadata?.display_name||'Team member'});
+      if(id)data.settings.workspaceId=id;
+      else data.settings.workspaceId=GIR_WORKSPACE_ID;
+    }
     workspaceReady=true;save();render();
-    if(membership)await syncNow();
-  }catch(error){workspaceReady=true;data.settings.workspaceId='';accessError='Could not check the workspace: '+error.message;render();}
+    await syncNow();
+  }catch(error){
+    // Keep existing workspaceId on network error — NEVER wipe it!
+    workspaceReady=true;
+    if(!data.settings.workspaceId)data.settings.workspaceId=GIR_WORKSPACE_ID;
+    console.warn('Workspace check note:', error.message);
+    render();
+  }
   finally{workspaceResolving=false;}
 }
 async function signInDialog() {
@@ -2405,13 +2419,32 @@ async function flushPending() {
   } finally { syncing=false; if(successful&&data.pending.length)scheduleSync(); }
 }
 async function fetchAll(table){let out=[];for(let start=0;;start+=1000){const {data:rows,error}=await clientApi.from(table).select('*').eq('workspace_id',data.settings.workspaceId).order('id').range(start,start+999);if(error)throw error;out.push(...rows);if(rows.length<1000)break;}return out;}
-async function pullRemote(){if(!clientApi||!session||!data.settings.workspaceId)return;const ws=data.settings.workspaceId;const [w,m,...tables]=await Promise.all([clientApi.from('workspaces').select('*').eq('id',ws).single(),clientApi.from('members').select('*').eq('workspace_id',ws),...['clients','deal_groups','project_groups','work_items','invoices','payment_receipts'].map(fetchAll)]);if(w.error)throw w.error;if(m.error)throw m.error;data.settings.joinCode=w.data.join_code;if(w.data.business&&Object.keys(w.data.business).length){const localAccounts=(data.settings.seller.bankAccounts||[]).slice();const localActiveId=data.settings.seller.activeBankAccountId;data.settings.seller={...defaults.settings.seller,...data.settings.seller,...w.data.business};if(!w.data.business.bankAccounts?.length&&localAccounts.length){data.settings.seller.bankAccounts=localAccounts;data.settings.seller.activeBankAccountId=localActiveId||localAccounts[0].id;}ensureBankAccounts();syncActiveBankDetails();}data.members=m.data.map(x=>({userId:x.user_id,displayName:x.display_name,avatarData:x.avatar_data||''}));['clients','groups','projectGroups','items','invoices','receipts'].forEach((table,k)=>{const pending=new Set(data.pending.filter(p=>p.table===table).map(p=>p.id));const pendingDeletes=new Set((data.pendingDeletes||[]).filter(p=>p.table===table).map(p=>p.id));const locals=data[table].filter(x=>pending.has(x.id));data[table]=tables[k].filter(x=>!pendingDeletes.has(x.id)).map(x=>localRow(table,x));for(const local of locals){const ix=data[table].findIndex(x=>x.id===local.id);if(ix<0)data[table].push(local);else data[table][ix]=local;}});if(!activeClient || !data.clients.some(c=>c.id===activeClient))activeClient=sortedClients()[0]?.id||null;lastSyncTime=Date.now();save();render();updateSyncUI();}
+async function pullRemote(){if(!clientApi||!session||!data.settings.workspaceId)return;const ws=data.settings.workspaceId;const [w,m,...tables]=await Promise.all([clientApi.from('workspaces').select('*').eq('id',ws).single(),clientApi.from('members').select('*').eq('workspace_id',ws),...['clients','deal_groups','project_groups','work_items','invoices','payment_receipts'].map(fetchAll)]);if(w.error)throw w.error;if(m.error)throw m.error;data.settings.joinCode=w.data.join_code;if(w.data.business&&Object.keys(w.data.business).length){const localAccounts=(data.settings.seller.bankAccounts||[]).slice();const localActiveId=data.settings.seller.activeBankAccountId;data.settings.seller={...defaults.settings.seller,...data.settings.seller,...w.data.business};if(!w.data.business.bankAccounts?.length&&localAccounts.length){data.settings.seller.bankAccounts=localAccounts;data.settings.seller.activeBankAccountId=localActiveId||localAccounts[0].id;}if(!data.settings.workspaceId)data.settings.workspaceId=GIR_WORKSPACE_ID;ensureBankAccounts();syncActiveBankDetails();}data.members=m.data.map(x=>({userId:x.user_id,displayName:x.display_name,avatarData:x.avatar_data||''}));['clients','groups','projectGroups','items','invoices','receipts'].forEach((table,k)=>{const pending=new Set(data.pending.filter(p=>p.table===table).map(p=>p.id));const pendingDeletes=new Set((data.pendingDeletes||[]).filter(p=>p.table===table).map(p=>p.id));const locals=data[table].filter(x=>pending.has(x.id));data[table]=tables[k].filter(x=>!pendingDeletes.has(x.id)).map(x=>localRow(table,x));for(const local of locals){const ix=data[table].findIndex(x=>x.id===local.id);if(ix<0)data[table].push(local);else data[table][ix]=local;}});if(!activeClient || !data.clients.some(c=>c.id===activeClient))activeClient=sortedClients()[0]?.id||null;lastSyncTime=Date.now();save();render();updateSyncUI();}
 function subscribe(){
   if(!clientApi||!session||!data.settings.workspaceId)return;
   if(channel)clientApi.removeChannel(channel);
   let timer;
   channel=clientApi.channel('gir-ledger-'+data.settings.workspaceId);
-  channel.on('broadcast', { event: 'cat_reaction' }, ({ payload }) => { if(!payload || payload.senderId === currentUserId()) return; displayCatReactionBanner(payload); desktopNotify('🐾 ' + (payload.senderName || 'Teammate'), payload.message || 'Cat reaction sent!'); });
+  channel.on('broadcast', { event: 'cat_reaction' }, async ({ payload }) => {
+    if(!payload || payload.senderId === currentUserId()) return;
+    
+    // Always display in-app animated banner popup
+    displayCatReactionBanner(payload);
+    
+    // Smart detection: only trigger Windows native notification if user is NOT focused inside the app!
+    let isAppFocused = false;
+    try {
+      if (window.desk?.isFocused) {
+        isAppFocused = await window.desk.isFocused();
+      } else {
+        isAppFocused = document.hasFocus() && !document.hidden;
+      }
+    } catch {}
+    
+    if (!isAppFocused) {
+      desktopNotify('🐾 ' + (payload.senderName || 'Teammate'), payload.message || 'Cat reaction sent!');
+    }
+  });
   
   for(const table of ['clients','deal_groups','project_groups','work_items','invoices','payment_receipts','members']){
     channel.on('postgres_changes',{event:'*',schema:'public',table,filter:`workspace_id=eq.${data.settings.workspaceId}`},(payload)=>{

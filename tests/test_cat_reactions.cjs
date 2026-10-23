@@ -51,10 +51,12 @@ assert(appJs.includes('getCatLottie'), 'app.js must define getCatLottie');
 assert(appJs.includes('openCatReactionPicker'), 'app.js must define openCatReactionPicker');
 assert(appJs.includes('displayCatReactionBanner'), 'app.js must define displayCatReactionBanner');
 assert(appJs.includes('triggerCatPing'), 'app.js must define triggerCatPing');
-assert(appJs.includes('cat-ping-btn'), 'app.js cards must contain cat-ping-btn');
-assert(appJs.includes('cat-team-ping-btn'), 'app.js tracker header must contain cat-team-ping-btn');
+assert(appJs.includes('data-ping-member'), 'app.js team panel must contain data-ping-member button');
+assert(appJs.includes('cat-team-ping-btn'), 'app.js tracker must contain cat-team-ping-btn');
+assert(!appJs.includes('data-cat-ping='), 'cards must NOT contain individual cat ping buttons');
 assert(appJs.includes("event: 'cat_reaction'"), 'app.js subscribe() must listen for cat_reaction broadcasts');
-assert(appJs.includes('Your Cat Spirit'), 'app.js settings must include Cat Spirit selector');
-console.log('✔ app.js Cat Reaction & Team Ping functions verified');
+assert(appJs.includes('isAppFocused'), 'app.js must perform smart focus detection');
+assert(appJs.includes("workspaceId:'17f39873-e10f-4bdf-93ee-1f92b3e25251'"), 'workspaceId must be permanently defaulted to GIR_WORKSPACE_ID');
+console.log('✔ app.js Cat Reaction, smart notification, and workspace persistence verified');
 
 console.log('\nAll Cat Reaction tests passed with flying colors! 🐾');

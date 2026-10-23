@@ -115,6 +115,7 @@ ipcMain.handle('show-notification', (_e, { title, body }) => {
   }
   return false;
 });
+ipcMain.handle('is-window-focused', () => win ? (win.isFocused() && !win.isMinimized() && win.isVisible()) : false);
 ipcMain.handle('updates-state', () => updateState);
 ipcMain.handle('updates-check', async () => {
   if (!updater) return updateState;

@@ -5,6 +5,7 @@ contextBridge.exposeInMainWorld('desk', {
   chooseWorkbook: () => ipcRenderer.invoke('choose-workbook'),
   print: () => ipcRenderer.invoke('print-invoice'),
   notify: (title, body) => ipcRenderer.invoke('show-notification', { title, body }),
+  isFocused: () => ipcRenderer.invoke('is-window-focused'),
   updates: {
     state: () => ipcRenderer.invoke('updates-state'),
     check: () => ipcRenderer.invoke('updates-check'),
