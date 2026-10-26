@@ -92,6 +92,8 @@ let win;
 let tray = null;
 let isQuitting = false;
 let hasShownTrayTip = false;
+let bannerWin = null;
+let bannerTimer = null;
 let updater;
 let updateState = { status: 'unavailable', version: app.getVersion(), message: 'Install a release build to receive updates.' };
 const file = () => path.join(app.getPath('userData'), 'ledger.json');
@@ -113,6 +115,80 @@ function showAndFocusWindow() {
   if (win.isMinimized()) win.restore();
   if (!win.isVisible()) win.show();
   win.focus();
+}
+
+function getBannerWindow() {
+  if (bannerWin && !bannerWin.isDestroyed()) return bannerWin;
+
+  const { screen } = require('electron');
+  const primaryDisplay = screen.getPrimaryDisplay();
+  const { workArea } = primaryDisplay;
+  const width = 380;
+  const height = 96;
+  const x = Math.round(workArea.x + workArea.width - width - 24);
+  const y = Math.round(workArea.y + 24);
+
+  bannerWin = new BrowserWindow({
+    width,
+    height,
+    x,
+    y,
+    frame: false,
+    transparent: true,
+    alwaysOnTop: true,
+    skipTaskbar: true,
+    focusable: false,
+    resizable: false,
+    show: false,
+    backgroundColor: '#00000000',
+    webPreferences: {
+      preload: path.join(__dirname, 'preload.cjs'),
+      contextIsolation: true,
+      nodeIntegration: false
+    }
+  });
+
+  bannerWin.setAlwaysOnTop(true, 'screen-saver');
+  bannerWin.setVisibleOnAllWorkspaces(true);
+  bannerWin.loadFile(path.join(__dirname, 'banner.html'));
+  return bannerWin;
+}
+
+function showDesktopBannerOverlay(payload) {
+  try {
+    const bWin = getBannerWindow();
+    const { screen } = require('electron');
+    const primaryDisplay = screen.getPrimaryDisplay();
+    const { workArea } = primaryDisplay;
+    const width = 380;
+    const height = 96;
+    const x = Math.round(workArea.x + workArea.width - width - 24);
+    const y = Math.round(workArea.y + 24);
+
+    bWin.setBounds({ x, y, width, height });
+
+    const sendAndShow = () => {
+      bWin.webContents.send('display-banner', payload);
+      bWin.showInactive();
+      clearTimeout(bannerTimer);
+      bannerTimer = setTimeout(() => {
+        if (bannerWin && !bannerWin.isDestroyed()) {
+          bannerWin.webContents.send('hide-banner');
+          setTimeout(() => {
+            if (bannerWin && !bannerWin.isDestroyed()) bannerWin.hide();
+          }, 400);
+        }
+      }, 6000);
+    };
+
+    if (bWin.webContents.isLoading()) {
+      bWin.webContents.once('did-finish-load', sendAndShow);
+    } else {
+      sendAndShow();
+    }
+  } catch (err) {
+    console.error('Desktop banner overlay error:', err);
+  }
 }
 
 function createTray() {
@@ -205,6 +281,9 @@ function createWindow() {
     }
   });
   win.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
+  win.on('focus', () => {
+    win.flashFrame(false);
+  });
 
   win.on('close', (event) => {
     if (!isQuitting) {
@@ -262,10 +341,20 @@ ipcMain.handle('choose-workbook', async () => {
   });
 });
 ipcMain.handle('print-invoice', async () => { if (!win) return; await win.webContents.print({ silent: false, printBackground: true }); });
-ipcMain.handle('show-notification', (_e, { title, body }) => {
+ipcMain.handle('show-notification', (_e, { title, body, catPayload }) => {
+  const cleanTitle = title || 'MeowSheet';
+  const cleanBody = body || '';
+
+  // 1. Taskbar flash glow: tells user about new activity even when in another app
+  if (win && !win.isDestroyed()) {
+    win.flashFrame(true);
+  }
+
+  // 2. Heads-Up Display: Always-on-top floating banner sliding down on desktop
+  showDesktopBannerOverlay({ title: cleanTitle, body: cleanBody, catPayload });
+
+  // 3. Native Windows Notification: Logs to Action Center / notification history
   if (Notification && Notification.isSupported()) {
-    const cleanTitle = title || 'MeowSheet';
-    const cleanBody = body || '';
     const iconFile = fs.existsSync(cachedIconPath) ? cachedIconPath : path.join(__dirname, 'assets', 'gir-icon.png');
 
     // Windows Toast XML with scenario="reminder" forces Windows 10/11 Notification Manager
@@ -336,9 +425,19 @@ ipcMain.handle('show-notification', (_e, { title, body }) => {
         fallback.show();
       } catch {}
     }
-    return true;
   }
-  return false;
+  return true;
+});
+ipcMain.handle('focus-app', () => {
+  if (bannerWin && !bannerWin.isDestroyed()) {
+    bannerWin.hide();
+  }
+  showAndFocusWindow();
+});
+ipcMain.handle('hide-banner', () => {
+  if (bannerWin && !bannerWin.isDestroyed()) {
+    bannerWin.hide();
+  }
 });
 ipcMain.handle('is-window-focused', () => win && !win.isDestroyed() ? (win.isFocused() && !win.isMinimized() && win.isVisible()) : false);
 ipcMain.handle('get-window-state', () => {

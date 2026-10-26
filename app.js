@@ -2100,10 +2100,10 @@ function openCatReactionPicker(contextItem = null, targetName = null) {
 }
 
 // Low-level Windows desktop notification trigger
-function sendNativeDesktopNotification(title, body) {
+function sendNativeDesktopNotification(title, body, catPayload = null) {
   try {
     if (window.desk?.notify) {
-      window.desk.notify(title, body);
+      window.desk.notify(title, body, catPayload);
     } else if (typeof Notification !== 'undefined' && Notification.permission === 'granted') {
       new Notification(title, { body });
     }
@@ -2143,7 +2143,7 @@ async function smartNotify({ title, body, icon = '🔔', catPayload = null }) {
     // App is minimized, blurred, or in background -> Native Windows notification only
     const nativeTitle = title || (catPayload ? `🐾 ${catPayload.senderName || 'Teammate'}` : 'MeowSheet');
     const nativeBody = body || (catPayload ? (catPayload.message || 'Cat reaction sent!') : '');
-    sendNativeDesktopNotification(nativeTitle, nativeBody);
+    sendNativeDesktopNotification(nativeTitle, nativeBody, catPayload);
   }
 }
 

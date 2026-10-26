@@ -4,7 +4,19 @@ contextBridge.exposeInMainWorld('desk', {
   write: value => ipcRenderer.invoke('write-store', value),
   chooseWorkbook: () => ipcRenderer.invoke('choose-workbook'),
   print: () => ipcRenderer.invoke('print-invoice'),
-  notify: (title, body) => ipcRenderer.invoke('show-notification', { title, body }),
+  notify: (title, body, catPayload) => ipcRenderer.invoke('show-notification', { title, body, catPayload }),
+  focusApp: () => ipcRenderer.invoke('focus-app'),
+  hideBanner: () => ipcRenderer.invoke('hide-banner'),
+  onDisplayBanner: callback => {
+    const listener = (_event, data) => callback(data);
+    ipcRenderer.on('display-banner', listener);
+    return () => ipcRenderer.removeListener('display-banner', listener);
+  },
+  onHideBanner: callback => {
+    const listener = () => callback();
+    ipcRenderer.on('hide-banner', listener);
+    return () => ipcRenderer.removeListener('hide-banner', listener);
+  },
   isFocused: () => ipcRenderer.invoke('is-window-focused'),
   getWindowState: () => ipcRenderer.invoke('get-window-state'),
   quit: () => ipcRenderer.invoke('app-quit'),
