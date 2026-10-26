@@ -345,7 +345,7 @@ function groupHeader(kind,group,items) {
   const folded=collapsedGroups.has(kind+':'+group.id);
   const detail=kind==='deal'&&group.agreedAmount!=null?` · Agreed ${money(group.agreedAmount)}`:'';
   const status=groupStatus(items);
-  return `<tr class="sheet-group-header ${kind}"><td colspan="11"><div class="group-heading"><button data-group-collapse="${kind}:${group.id}" aria-expanded="${!folded}"><svg class="group-chevron ${folded?'collapsed':''}" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="m3.5 5.75 4.5 4.5 4.5-4.5" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg><strong>${esc(group.label)}</strong><span>${done}/${active.length} complete${detail}</span></button><span class="group-status ${status.toLowerCase().replaceAll(' ','-')}">${status}</span><button class="group-quick" data-group-status="${kind}:${group.id}:sent" ${!active.length?'disabled':''}>Mark sent</button><button class="group-quick" data-group-status="${kind}:${group.id}:paid" ${!active.length?'disabled':''}>Mark paid</button>${kind==='project'?`<button class="group-add" data-group-add="${group.id}" title="Add work under this project">＋ Row</button>`:''}<button class="group-rename" data-group-rename="${kind}:${group.id}" title="Rename group">Rename</button></div></td></tr>`;
+  return `<tr class="sheet-group-header ${kind}"><td colspan="11"><div class="group-heading"><button data-group-collapse="${kind}:${group.id}" aria-expanded="${!folded}"><svg class="group-chevron ${folded?'collapsed':''}" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="m3.5 5.75 4.5 4.5 4.5-4.5" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg><strong>${esc(group.label)}</strong><span>${done}/${active.length} complete${detail}</span></button><span class="group-status ${status.toLowerCase().replaceAll(' ','-')}">${status}</span><button class="group-quick" data-group-status="${kind}:${group.id}:sent" ${!active.length?'disabled':''}>Mark sent</button><button class="group-quick" data-group-status="${kind}:${group.id}:paid" ${!active.length?'disabled':''}>Mark paid</button>${kind==='project'?`<button class="group-add" data-group-add="${group.id}" title="Add work under this project">＋ Row</button>`:''}<button class="group-rename" data-group-rename="${kind}:${group.id}" title="Rename group">Rename</button><button class="group-ungroup" data-group-ungroup="${kind}:${group.id}" title="Ungroup (keep rows, remove group)">Ungroup</button></div></td></tr>`;
 }
 function groupStatus(items){const active=items.filter(i=>i.status!=='discarded');if(!active.length)return 'Discarded';if(active.every(i=>i.status==='paid'))return 'Paid';if(active.every(i=>['sent','paid'].includes(i.status)))return 'Sent';if(active.some(i=>['working','changes'].includes(i.status)))return 'Working';return 'Pending';}
 function blankRowHtml(order) {
@@ -466,7 +466,7 @@ function renderSheet() {
       ${value('remarks',i.remarks||'')}</tr>`;
   }
   if(filter==='all')rows+=Array.from({length:blankRows},(_,n)=>blankRowHtml(all.length+n)).join('');
-  return `<div class="sheet-shell"><div class="sheet-toolbar"><div class="actions"><button class="small-btn blue" data-action="assign" ${selected.size?'':'disabled'}>● Start work</button><button class="small-btn" data-action="complete" ${selected.size?'':'disabled'}>✓ Mark sent</button><button class="small-btn" data-action="invoice" ${selected.size?'':'disabled'}>▣ Create invoice</button><button class="small-btn danger" data-action="delete" title="Delete selected row(s) (Del)" ${selected.size?'':'disabled'}>🗑 Delete row</button><button class="small-btn" data-action="undo" title="Undo (Ctrl+Z)" ${undoStack.length?'':'disabled'}>↶ Undo</button><button class="small-btn" data-action="redo" title="Redo (Ctrl+Y)" ${redoStack.length?'':'disabled'}>↷ Redo</button><button class="small-btn" data-action="group" ${selected.size>1?'':'disabled'}>Group deal</button><button class="small-btn" data-action="project-group" ${selected.size?'':'disabled'}>Group project</button><select id="bulkStatus" aria-label="Set selected rows status" ${selected.size?'':'disabled'}><option value="">Set status…</option>${['pending','working','changes','sent','paid','discarded'].map(s=>`<option value="${s}">${s[0].toUpperCase()+s.slice(1)}</option>`).join('')}<option value="paid-date">Paid on date…</option></select><select id="workFilter" aria-label="Filter work">${['all','pending','working','changes','sent','paid','discarded'].map(s=>`<option value="${s}" ${filter===s?'selected':''}>${s==='all'?'All work':s[0].toUpperCase()+s.slice(1)}</option>`).join('')}</select></div><span class="hint" id="selectedCount">${selectionLabel()}</span></div>
+  return `<div class="sheet-shell"><div class="sheet-toolbar"><div class="actions"><button class="small-btn blue" data-action="assign" ${selected.size?'':'disabled'}>● Start work</button><button class="small-btn" data-action="complete" ${selected.size?'':'disabled'}>✓ Mark sent</button><button class="small-btn" data-action="invoice" ${selected.size?'':'disabled'}>▣ Create invoice</button><button class="small-btn danger" data-action="delete" title="Delete selected row(s) (Del)" ${selected.size?'':'disabled'}>🗑 Delete row</button><button class="small-btn" data-action="undo" title="Undo (Ctrl+Z)" ${undoStack.length?'':'disabled'}>↶ Undo</button><button class="small-btn" data-action="redo" title="Redo (Ctrl+Y)" ${redoStack.length?'':'disabled'}>↷ Redo</button><button class="small-btn" data-action="group" ${selected.size>1?'':'disabled'}>Group deal</button><button class="small-btn" data-action="project-group" ${selected.size?'':'disabled'}>Group project</button><button class="small-btn" data-action="ungroup" ${hasGroupedSelected()?'':'disabled'} title="Ungroup selected row(s)">Ungroup</button><select id="bulkStatus" aria-label="Set selected rows status" ${selected.size?'':'disabled'}><option value="">Set status…</option>${['pending','working','changes','sent','paid','discarded'].map(s=>`<option value="${s}">${s[0].toUpperCase()+s.slice(1)}</option>`).join('')}<option value="paid-date">Paid on date…</option></select><select id="workFilter" aria-label="Filter work">${['all','pending','working','changes','sent','paid','discarded'].map(s=>`<option value="${s}" ${filter===s?'selected':''}>${s==='all'?'All work':s[0].toUpperCase()+s.slice(1)}</option>`).join('')}</select></div><span class="hint" id="selectedCount">${selectionLabel()}</span></div>
     <div class="sheet-viewport"><table class="sheet"><thead><tr><th class="row-selector"><input type="checkbox" id="selectAll" aria-label="Select visible rows"></th><th>SR</th><th>DATE</th><th>SERVICE PROVIDED</th><th>QTY</th><th>RATE</th><th>TOTAL</th><th>STATUS</th><th>ADVANCE</th><th>ASSIGNED</th><th>REMARKS</th></tr></thead><tbody>${rows}</tbody></table></div></div>`;
 }
 
@@ -705,7 +705,7 @@ function renderGroups() {
     const active=rows.filter(i=>i.status!=='discarded');
     const done=active.filter(i=>['sent','paid'].includes(i.status)).length;
     const amount=g.kind==='deal'&&g.agreedAmount!=null?`<span>Agreed ${money(g.agreedAmount)}</span>`:'';
-    return `<div class="group-card"><button class="group-card-open" data-open-group="${g.kind}:${g.id}"><span class="group-badge">${g.kind==='project'?'PROJECT GROUP':'DEAL GROUP'}</span><strong>${esc(g.label)}</strong><small>${esc(data.clients.find(c=>c.id===g.clientId)?.name)} · ${done}/${active.length} complete · ${active.length-done} left · ${groupStatus(rows)}</small>${amount}<div class="bar"><span style="width:${active.length?done/active.length*100:0}%"></span></div></button><div class="group-card-actions"><button class="group-quick" data-group-status="${g.kind}:${g.id}:sent">Mark sent</button><button class="group-quick" data-group-status="${g.kind}:${g.id}:paid">Mark paid</button></div><button class="group-card-rename" data-rename-card="${g.kind}:${g.id}" title="Rename group">Rename</button><div class="group-card-editor" hidden><label>Group name<input value="${esc(g.label)}" aria-label="Group name"></label><div><button type="button" data-save-card="${g.kind}:${g.id}">Save</button><button type="button" data-cancel-card>Cancel</button></div></div></div>`;
+    return `<div class="group-card"><button class="group-card-open" data-open-group="${g.kind}:${g.id}"><span class="group-badge">${g.kind==='project'?'PROJECT GROUP':'DEAL GROUP'}</span><strong>${esc(g.label)}</strong><small>${esc(data.clients.find(c=>c.id===g.clientId)?.name)} · ${done}/${active.length} complete · ${active.length-done} left · ${groupStatus(rows)}</small>${amount}<div class="bar"><span style="width:${active.length?done/active.length*100:0}%"></span></div></button><div class="group-card-actions"><button class="group-quick" data-group-status="${g.kind}:${g.id}:sent">Mark sent</button><button class="group-quick" data-group-status="${g.kind}:${g.id}:paid">Mark paid</button></div><button class="group-card-rename" data-rename-card="${g.kind}:${g.id}" title="Rename group">Rename</button><button class="group-card-rename" data-ungroup-card="${g.kind}:${g.id}" title="Ungroup group" style="margin-left:6px">Ungroup</button><div class="group-card-editor" hidden><label>Group name<input value="${esc(g.label)}" aria-label="Group name"></label><div><button type="button" data-save-card="${g.kind}:${g.id}">Save</button><button type="button" data-cancel-card>Cancel</button></div></div></div>`;
   }).join('');
   return `<div class="section-top"><div><h2>Groups</h2><p>Project folders and negotiated deals across clients.</p></div></div>${groups.length?`<div class="group-grid">${cards}</div>`:'<div class="empty"><h3>No groups yet</h3><p>Select rows on a worksheet to create a project group or grouped deal.</p></div>'}`;
 }function renderClientDetails() {
@@ -1007,6 +1007,7 @@ function bindMain() {
       if(!selected.has(row.dataset.row))selectSheetRow(row.dataset.row,false,false);
       const rowId=row.dataset.row;
       const hasClipboard=rowClipboard.items.length>0;
+      const hasGrouped = hasGroupedSelected();
       const menu=$('#contextMenu')||document.createElement('div');
       menu.id='contextMenu';menu.className='context-menu';
       menu.innerHTML=`<button id="contextCut"><span class="context-icon">✂</span><span>Cut row</span><kbd>Ctrl+X</kbd></button>`+
@@ -1019,6 +1020,7 @@ function bindMain() {
         `<button id="contextUndo" ${undoStack.length?'':'disabled'}><span class="context-icon">↶</span><span>Undo</span><kbd>Ctrl+Z</kbd></button>`+
         `<button id="contextRedo" ${redoStack.length?'':'disabled'}><span class="context-icon">↷</span><span>Redo</span><kbd>Ctrl+Y</kbd></button>`+
         `<div class="context-divider"></div>`+
+        `<button id="contextUngroup" ${hasGrouped?'':'disabled'}><span class="context-icon">⎘</span><span>Ungroup rows</span></button>`+
         `<button id="contextMoveSerial"><span class="context-icon">⇄</span><span>Move to serial #…</span></button>`+
         `<button id="contextMoveUp"><span class="context-icon">↑</span><span>Move row up</span><kbd>Alt+↑</kbd></button>`+
         `<button id="contextMoveDown"><span class="context-icon">↓</span><span>Move row down</span><kbd>Alt+↓</kbd></button>`+
@@ -1036,6 +1038,7 @@ function bindMain() {
       $('#contextDelete').onclick=()=>{menu.remove();deleteSelectedRows([...selected]);};
       if($('#contextUndo'))$('#contextUndo').onclick=()=>{menu.remove();undo();};
       if($('#contextRedo'))$('#contextRedo').onclick=()=>{menu.remove();redo();};
+      if($('#contextUngroup'))$('#contextUngroup').onclick=()=>{menu.remove();ungroupSelectedRows();};
       $('#contextMoveSerial').onclick=()=>{menu.remove();moveRowDialog(rowId);};
       $('#contextMoveUp').onclick=()=>{menu.remove();moveRowByDelta(rowId,-1);};
       $('#contextMoveDown').onclick=()=>{menu.remove();moveRowByDelta(rowId,1);};
@@ -1070,6 +1073,8 @@ function bindMain() {
   $$('[data-group-collapse]').forEach(b=>b.onclick=()=>{const id=b.dataset.groupCollapse;collapsedGroups.has(id)?collapsedGroups.delete(id):collapsedGroups.add(id);render();});
   $$('[data-group-add]').forEach(b=>b.onclick=()=>{const group=data.projectGroups.find(g=>g.id===b.dataset.groupAdd);if(!group)return;const item=newItem(group.clientId,clientItems(group.clientId).length);item.projectGroupId=group.id;mutate('items',item);setTimeout(()=>{const row=document.querySelector(`[data-row="${item.id}"]`);row?.scrollIntoView({block:'center'});const field=row?.querySelector('[data-cell="service"]');if(field)activateSheetField(field);},60);});
   $$('[data-group-rename]').forEach(b=>b.onclick=()=>{const [kind,id]=b.dataset.groupRename.split(':');renameGroup(kind,id);});
+  $$('[data-group-ungroup]').forEach(b=>b.onclick=()=>{const [kind,id]=b.dataset.groupUngroup.split(':');ungroupDialog(kind,id);});
+  $$('[data-ungroup-card]').forEach(b=>b.onclick=()=>{const [kind,id]=b.dataset.ungroupCard.split(':');ungroupDialog(kind,id);});
   $$('[data-group-status]').forEach(b=>b.onclick=()=>{const [kind,id,status]=b.dataset.groupStatus.split(':');const group=(kind==='project'?data.projectGroups:data.groups).find(g=>g.id===id);if(!group)return;const rows=data.items.filter(i=>(kind==='project'?i.projectGroupId:i.groupId)===id&&i.status!=='discarded'&&(status==='paid'?i.status!=='paid':!['sent','paid'].includes(i.status)));if(!rows.length){toast('Group is already '+status);return;}bulkSetStatus(status,rows.map(i=>i.id),{kind,id,label:group.label});});
   const viewport=$('.sheet-viewport');if(tab==='sheet'&&viewport)viewport.onscroll=()=>{if(filter==='all'&&viewport.scrollHeight-viewport.scrollTop-viewport.clientHeight<700){blankRows+=40;render();}};
   $$('[data-group-edit]').forEach(b=>b.onclick=()=>groupDialog(b.dataset.groupEdit));
@@ -1117,6 +1122,13 @@ function openStatusMenu(trigger,id){
   menu.querySelectorAll('[data-paid-at]').forEach(button=>button.onclick=()=>{closeStatusMenu();paidAtDialog([button.dataset.paidAt]);});
   setTimeout(()=>{if(activeStatusMenu?.menu===menu)document.addEventListener('pointerdown',outside,true);},0);
 }
+function hasGroupedSelected() {
+  if (!selected || !selected.size) return false;
+  return Array.from(selected).some(id => {
+    const it = (data.items || []).find(i => i.id === id);
+    return it && (it.groupId || it.projectGroupId);
+  });
+}
 function refreshSelection() {
   const rows=$$('[data-row]');
   for(let idx=0;idx<rows.length;idx++){
@@ -1131,6 +1143,7 @@ function refreshSelection() {
   for(const action of ['assign','complete','invoice','delete']){const button=$(`[data-action="${action}"]`);if(button)button.disabled=!selected.size;}
   const group=$('[data-action="group"]');if(group)group.disabled=selected.size<2;
   const project=$('[data-action="project-group"]');if(project)project.disabled=!selected.size;
+  const ungroup=$('[data-action="ungroup"]');if(ungroup)ungroup.disabled=!hasGroupedSelected();
   updateUndoRedoUI();
 }
 function selectSheetRow(id,shift=false,add=false) {
@@ -2448,6 +2461,7 @@ function actions(action) {
   if(action==='add-row'){const i=newItem(activeClient,clientItems().length);mutate('items',i);setTimeout(()=>document.querySelector(`[data-id="${i.id}"][data-cell="service"]`)?.focus(),80);return;}
   if(action==='assign')return assign([...selected]); if(action==='complete')return markSent([...selected]); if(action==='invoice')return invoiceDialog(); if(action==='group')return groupDialog();
   if(action==='project-group')return projectGroupDialog();
+  if(action==='ungroup')return ungroupSelectedRows();
   if(action==='cat-quick-ping')return openCatReactionPicker();
   if(action==='billing')return billingDialog(); if(action==='save-settings')return saveSettings();
   if(action==='save-connection'){data.settings.url=inputValue('supaUrl').replace(/\/$/,'');data.settings.key=inputValue('supaKey');save();setupSupabase();render();toast('Connection saved');return;}
@@ -2484,14 +2498,161 @@ async function migrateImport() {
 }
 function newClientDialog(){modal('New client','<div class="field"><label>Client name</label><input id="newClientName" autofocus></div>','<div class="modal-actions"><button class="small-btn" id="cancelClient">Cancel</button><button class="small-btn blue" id="saveClient">Create client</button></div>');$('#cancelClient').onclick=closeModal;$('#saveClient').onclick=()=>{const name=inputValue('newClientName');if(!name)return;const c={id:uid(),name,billing:{name,address:'',email:'',phone:'',taxId:''},sortOrder:data.clients.length};mutate('clients',c);activeClient=c.id;tab='sheet';closeModal();render();};}
 function billingDialog(id=activeClient){const c=data.clients.find(client=>client.id===id);if(!c)return;const b=c.billing||{};modal('Client billing details',`<p>Shown on invoices for ${esc(c.name)}.</p><div class="field"><label>Billing name</label><input id="billName" value="${esc(b.name||c.name)}"></div><div class="field"><label>Address</label><textarea id="billAddress" rows="3">${esc(b.address||'')}</textarea></div><div class="field-grid"><div class="field"><label>Email</label><input id="billEmail" value="${esc(b.email||'')}"></div><div class="field"><label>Phone</label><input id="billPhone" value="${esc(b.phone||'')}"></div></div><div class="field"><label>Tax / GST ID</label><input id="billTax" value="${esc(b.taxId||'')}"></div>`,`<div class="modal-actions"><button class="small-btn blue" id="saveBilling">Save</button></div>`);$('#saveBilling').onclick=()=>{c.billing={name:inputValue('billName'),address:inputValue('billAddress'),email:inputValue('billEmail'),phone:inputValue('billPhone'),taxId:inputValue('billTax')};mutate('clients',c);closeModal();};}
-function groupDialog(id){const chosen=id?data.items.filter(i=>i.groupId===id):data.items.filter(i=>selected.has(i.id));if(!chosen.length)return;const existing=id?data.groups.find(g=>g.id===id):null;const quote=chosen.reduce((n,i)=>n+num(i.quotedTotal),0);modal(existing?'Edit grouped deal':'Group selected rows',`<p>${chosen.length} rows · Original quote ${money(quote)}</p><div class="field"><label>Group name</label><input id="groupLabel" value="${esc(existing?.label||'Agreed deal')}"></div><div class="field"><label>Agreed final amount</label><input id="groupAmount" type="number" min="0" step="0.01" placeholder="Enter negotiated amount" value="${existing?.agreedAmount??''}"></div><div class="notice">This amount replaces the sum of row totals in revenue and payment estimates. Individual rows stay visible for work tracking.</div>`,`<div class="modal-actions"><button class="small-btn blue" id="saveGroup">Save group</button></div>`);$('#saveGroup').onclick=()=>{const value=inputValue('groupAmount');const g=existing||{id:uid(),clientId:activeClient};g.label=inputValue('groupLabel')||'Agreed deal';g.agreedAmount=value===''?null:num(value);if(!existing)chosen.forEach(i=>{i.groupId=g.id;queue('items',i.id);});mutate('groups',g);syncDealReceipt(g.id);selected.clear();closeModal();toast('Deal group saved');};}
+function groupDialog(id){const chosen=id?data.items.filter(i=>i.groupId===id):data.items.filter(i=>selected.has(i.id));if(!chosen.length)return;const existing=id?data.groups.find(g=>g.id===id):null;const quote=chosen.reduce((n,i)=>n+num(i.quotedTotal),0);modal(existing?'Edit grouped deal':'Group selected rows',`<p>${chosen.length} rows · Original quote ${money(quote)}</p><div class="field"><label>Group name</label><input id="groupLabel" value="${esc(existing?.label||'Agreed deal')}"></div><div class="field"><label>Agreed final amount</label><input id="groupAmount" type="number" min="0" step="0.01" placeholder="Enter negotiated amount" value="${existing?.agreedAmount??''}"></div><div class="notice">This amount replaces the sum of row totals in revenue and payment estimates. Individual rows stay visible for work tracking.</div>`,`<div class="modal-actions"><button class="small-btn blue" id="saveGroup">Save group</button></div>`);$('#saveGroup').onclick=()=>{pushUndo(existing?'Edit deal group':'Group deal');const value=inputValue('groupAmount');const g=existing||{id:uid(),clientId:activeClient};g.label=inputValue('groupLabel')||'Agreed deal';g.agreedAmount=value===''?null:num(value);if(!existing)chosen.forEach(i=>{i.groupId=g.id;queue('items',i.id);});mutate('groups',g);syncDealReceipt(g.id);selected.clear();closeModal();toast('Deal group saved');};}
 function projectGroupDialog() {
   const chosen=data.items.filter(i=>selected.has(i.id));if(!chosen.length)return;
   if(new Set(chosen.map(i=>i.clientId)).size!==1){toast('Select rows from one client');return;}
   modal('Group project',`<p>Organize ${chosen.length} selected rows under one collapsible project heading.</p><div class="field"><label>Project group name</label><input id="projectGroupName" placeholder="For example, Sheena and Royston" autofocus></div>`,`<div class="modal-actions"><button class="small-btn blue" id="saveProjectGroup">Create group</button></div>`);
-  $('#saveProjectGroup').onclick=()=>{const name=inputValue('projectGroupName');if(!name){toast('Enter a group name');return;}const group={id:uid(),clientId:chosen[0].clientId,label:name};for(const item of chosen){item.projectGroupId=group.id;queue('items',item.id);}mutate('projectGroups',group);syncProjectReceipt(group.id);selected.clear();closeModal();toast('Project group created');};
+  $('#saveProjectGroup').onclick=()=>{const name=inputValue('projectGroupName');if(!name){toast('Enter a group name');return;}pushUndo('Group project');const group={id:uid(),clientId:chosen[0].clientId,label:name};for(const item of chosen){item.projectGroupId=group.id;queue('items',item.id);}mutate('projectGroups',group);syncProjectReceipt(group.id);selected.clear();closeModal();toast('Project group created');};
 }
 function renameGroup(kind,id){const table=kind==='project'?'projectGroups':'groups',group=data[table].find(g=>g.id===id);if(!group)return;modal('Rename group',`<div class="field"><label>Group name</label><input id="renameGroupName" value="${esc(group.label)}" autofocus></div>`,`<div class="modal-actions"><button class="small-btn blue" id="saveGroupName">Save name</button></div>`);const saveName=()=>{const label=inputValue('renameGroupName');if(!label){toast('Enter a group name');return;}group.label=label;mutate(table,group);closeModal();toast('Group renamed');};$('#saveGroupName').onclick=saveName;$('#renameGroupName').onkeydown=e=>{if(e.key==='Enter')saveName();};}
+function ungroupDialog(kind, id) {
+  const table = kind === 'project' ? 'projectGroups' : 'groups';
+  const group = (data[table] || []).find(g => g.id === id);
+  if (!group) return;
+  const items = (data.items || []).filter(i => (kind === 'project' ? i.projectGroupId : i.groupId) === id);
+  const typeLabel = kind === 'project' ? 'project group' : 'deal group';
+
+  modal(
+    `Ungroup ${group.label}`,
+    `<p>Ungroup <strong>${esc(group.label)}</strong> (${items.length} row${items.length === 1 ? '' : 's'})?</p>
+     <div class="notice">
+       All rows will remain in your worksheet, but will no longer be linked to this ${typeLabel}.
+       ${kind === 'deal' ? 'Any negotiated agreed amount will be removed, and row values will revert to their individual totals.' : ''}
+     </div>`,
+    `<div class="modal-actions">
+       <button class="small-btn" id="cancelUngroup">Cancel</button>
+       <button class="small-btn danger" id="confirmUngroup">Ungroup</button>
+     </div>`
+  );
+
+  $('#cancelUngroup').onclick = closeModal;
+  $('#confirmUngroup').onclick = () => {
+    pushUndo(`Ungroup ${group.label}`);
+
+    items.forEach(item => {
+      if (kind === 'project') item.projectGroupId = null;
+      else item.groupId = null;
+      enqueue('items', item.id);
+    });
+
+    data[table] = (data[table] || []).filter(g => g.id !== id);
+    data.pending = (data.pending || []).filter(p => !(p.table === table && p.id === id));
+    data.pendingDeletes ||= [];
+    if (!data.pendingDeletes.some(d => d.table === table && d.id === id)) {
+      data.pendingDeletes.push({ table, id });
+    }
+    collapsedGroups.delete(kind + ':' + id);
+
+    const receiptsToRemove = (data.receipts || []).filter(r => r.referenceKind === (kind === 'project' ? 'project' : 'deal') && r.referenceId === id);
+    receiptsToRemove.forEach(r => removeReceipt(r.id));
+
+    items.forEach(item => {
+      syncItemReceipt(item);
+      if (kind === 'deal' && item.projectGroupId) {
+        syncProjectReceipt(item.projectGroupId);
+      }
+    });
+
+    save();
+    scheduleSync();
+    closeModal();
+    render();
+    toast(`${kind === 'project' ? 'Project' : 'Deal'} group ungrouped`);
+  };
+}
+function ungroupSelectedRows() {
+  const chosen = (data.items || []).filter(i => selected.has(i.id) && (i.groupId || i.projectGroupId));
+  if (!chosen.length) {
+    toast('No grouped rows selected');
+    return;
+  }
+
+  const hasDeal = chosen.some(i => i.groupId);
+  const hasProj = chosen.some(i => i.projectGroupId);
+
+  const performUngroup = (options = { deal: true, project: true }) => {
+    pushUndo(`Ungroup ${chosen.length} row${chosen.length > 1 ? 's' : ''}`);
+
+    const affectedDealIds = new Set();
+    const affectedProjectIds = new Set();
+
+    chosen.forEach(item => {
+      if (options.deal && item.groupId) {
+        affectedDealIds.add(item.groupId);
+        item.groupId = null;
+      }
+      if (options.project && item.projectGroupId) {
+        affectedProjectIds.add(item.projectGroupId);
+        item.projectGroupId = null;
+      }
+      enqueue('items', item.id);
+    });
+
+    for (const gid of affectedDealIds) {
+      const remaining = (data.items || []).filter(i => i.groupId === gid);
+      if (!remaining.length) {
+        data.groups = (data.groups || []).filter(g => g.id !== gid);
+        data.pending = (data.pending || []).filter(p => !(p.table === 'groups' && p.id === gid));
+        data.pendingDeletes ||= [];
+        if (!data.pendingDeletes.some(d => d.table === 'groups' && d.id === gid)) {
+          data.pendingDeletes.push({ table: 'groups', id: gid });
+        }
+        collapsedGroups.delete('deal:' + gid);
+        const receiptsToRemove = (data.receipts || []).filter(r => r.referenceKind === 'deal' && r.referenceId === gid);
+        receiptsToRemove.forEach(r => removeReceipt(r.id));
+      } else {
+        syncDealReceipt(gid);
+      }
+    }
+
+    for (const pid of affectedProjectIds) {
+      const remaining = (data.items || []).filter(i => i.projectGroupId === pid);
+      if (!remaining.length) {
+        data.projectGroups = (data.projectGroups || []).filter(g => g.id !== pid);
+        data.pending = (data.pending || []).filter(p => !(p.table === 'projectGroups' && p.id === pid));
+        data.pendingDeletes ||= [];
+        if (!data.pendingDeletes.some(d => d.table === 'projectGroups' && d.id === pid)) {
+          data.pendingDeletes.push({ table: 'projectGroups', id: pid });
+        }
+        collapsedGroups.delete('project:' + pid);
+        const receiptsToRemove = (data.receipts || []).filter(r => r.referenceKind === 'project' && r.referenceId === pid);
+        receiptsToRemove.forEach(r => removeReceipt(r.id));
+      } else {
+        syncProjectReceipt(pid);
+      }
+    }
+
+    chosen.forEach(item => {
+      syncItemReceipt(item);
+      if (item.projectGroupId) syncProjectReceipt(item.projectGroupId);
+    });
+
+    save();
+    scheduleSync();
+    render();
+    toast(`Ungrouped ${chosen.length} row${chosen.length > 1 ? 's' : ''}`);
+  };
+
+  if (hasDeal && hasProj) {
+    modal(
+      'Ungroup rows',
+      `<p>The selected ${chosen.length} row${chosen.length > 1 ? 's are' : ' is'} part of both a project group and a deal group. What would you like to ungroup?</p>
+       <div style="display:flex;flex-direction:column;gap:8px;margin-top:14px">
+         <button class="small-btn" id="ungroupBoth" style="padding:10px;text-align:left;font-weight:600">Ungroup from Both (Deal & Project)</button>
+         <button class="small-btn" id="ungroupDealOnly" style="padding:10px;text-align:left">Ungroup from Deal Group only</button>
+         <button class="small-btn" id="ungroupProjOnly" style="padding:10px;text-align:left">Ungroup from Project Group only</button>
+       </div>`,
+      `<div class="modal-actions"><button class="small-btn" id="cancelUngroupSelect">Cancel</button></div>`
+    );
+    $('#cancelUngroupSelect').onclick = closeModal;
+    $('#ungroupBoth').onclick = () => { closeModal(); performUngroup({ deal: true, project: true }); };
+    $('#ungroupDealOnly').onclick = () => { closeModal(); performUngroup({ deal: true, project: false }); };
+    $('#ungroupProjOnly').onclick = () => { closeModal(); performUngroup({ deal: false, project: true }); };
+  } else {
+    performUngroup({ deal: hasDeal, project: hasProj });
+  }
+}
 function invoiceDialog(){const items=data.items.filter(i=>selected.has(i.id));if(!items.length)return;const notReady=items.filter(i=>i.status!=='sent');if(notReady.length){toast('Select rows marked Sent for a new invoice');return;}if(items.some(i=>billedIds().has(i.id))){toast('One or more rows are already invoiced');return;}if(new Set(items.map(i=>i.clientId)).size!==1){toast('Choose rows from one client');return;}const subtotal=items.reduce((n,i)=>n+num(i.quotedTotal),0);const next=String(data.invoices.length+1).padStart(4,'0');modal('Create invoice',`<p>${items.length} finished rows from ${esc(currentClient()?.name)}.</p><div class="preview-list">${items.map((i,n)=>`<div class="list-row"><div><strong>${n+1}. ${esc(i.service)}</strong><small>${i.quantity} × ${money(i.rate)}</small></div><strong>${money(i.quotedTotal)}</strong></div>`).join('')}</div><div class="field-grid" style="margin-top:15px"><div class="field"><label>Invoice number</label><input id="invNumber" value="GIR-${new Date().getFullYear()}-${next}"></div><div class="field"><label>Issue date</label><input id="invDate" type="date" value="${today()}"></div><div class="field"><label>Discount</label><input id="invDiscount" type="number" min="0" step="0.01" value="0"></div><div class="field"><label>Agreed final amount (overrides discount)</label><input id="invFinal" type="number" min="0" step="0.01" placeholder="Optional"></div></div><div class="notice">Subtotal ${money(subtotal)}. Advances already received: ${money(items.reduce((n,i)=>n+num(i.advanceAmount),0))}. The final amount is the full agreed price; the invoice will show advances separately and deduct them from the balance due.</div>`,`<div class="modal-actions"><button class="small-btn" id="cancelInvoice">Cancel</button><button class="small-btn blue" id="createInvoice">Create invoice</button></div>`,true);$('#cancelInvoice').onclick=closeModal;$('#createInvoice').onclick=()=>{const discount=num(inputValue('invDiscount')),final=inputValue('invFinal');if(discount>subtotal){toast('Discount exceeds subtotal');return;}const amount=final===''?subtotal-discount:num(final);const invoice={id:uid(),clientId:items[0].clientId,number:inputValue('invNumber')||`GIR-${next}`,issueDate:inputValue('invDate')||today(),itemIds:items.map(i=>i.id),lines:items.map((i,n)=>({serial:n+1,service:i.service,quantity:num(i.quantity),rate:num(i.rate),total:num(i.quotedTotal)})),subtotal,discount:final===''?discount:subtotal-amount,finalAmount:amount,advanceAmount:items.reduce((n,i)=>n+num(i.advanceAmount),0),status:'issued',seller:structuredClone(data.settings.seller),buyer:structuredClone(currentClient()?.billing||{})};mutate('invoices',invoice);selected.clear();closeModal();viewInvoice(invoice.id);};}
 function invoiceAdvance(i){return i.advanceAmount==null?(i.itemIds||[]).reduce((sum,id)=>sum+num(data.items.find(item=>item.id===id)?.advanceAmount),0):num(i.advanceAmount);}
 function invoiceHtml(i){return `<div class="invoice-paper"><div class="invoice-top"><div><img class="invoice-company-logo" src="${esc(i.seller.logoData||'assets/gir-icon.png')}" alt="${esc(i.seller.name||'GIR')} logo"><h1>Invoice</h1><div class="muted">${esc(i.seller.name||'GIR')}</div></div><div class="invoice-meta"><div class="label">INVOICE NO.</div><strong>${esc(i.number)}</strong><p>${fmtDate(i.issueDate)}</p><span class="pill ${i.status==='paid'?'paid':'sent'}">${i.status==='paid'?'PAID':'ISSUED'}</span></div></div><div class="invoice-parties"><div><div class="label">FROM</div><strong>${esc(i.seller.name||'')}</strong><p>${esc(i.seller.address||'').replace(/\n/g,'<br>')}<br>${esc(i.seller.email||'')} ${esc(i.seller.phone||'')}<br>${esc(i.seller.taxId||'')}</p></div><div><div class="label">BILL TO</div><strong>${esc(i.buyer.name||'')}</strong><p>${esc(i.buyer.address||'').replace(/\n/g,'<br>')}<br>${esc(i.buyer.email||'')} ${esc(i.buyer.phone||'')}<br>${esc(i.buyer.taxId||'')}</p></div></div><table><thead><tr><th>#</th><th>SERVICE</th><th>QTY</th><th>RATE</th><th>TOTAL</th></tr></thead><tbody>${i.lines.map(l=>`<tr><td>${l.serial}</td><td>${esc(l.service)}</td><td>${l.quantity}</td><td>${money(l.rate)}</td><td>${money(l.total)}</td></tr>`).join('')}</tbody></table><div class="totals"><div><span>Subtotal</span><strong>${money(i.subtotal)}</strong></div><div><span>Discount / adjustment</span><strong>${money(i.discount)}</strong></div><div><span>Final agreed amount</span><strong>${money(i.finalAmount)}</strong></div><div><span>Advance received</span><strong>− ${money(invoiceAdvance(i))}</strong></div><div class="grand"><span>Balance due</span><strong>${money(i.status==='paid'?0:Math.max(0,num(i.finalAmount)-invoiceAdvance(i)))}</strong></div></div>${i.seller.bankDetails?`<div class="invoice-bank"><div class="label">BANK DETAILS · PAY GIR</div><div>${esc(i.seller.bankDetails).replace(/\n/g,'<br>')}</div></div>`:''}<div class="thankyou">Thank you for working with GIR.</div></div>`;}

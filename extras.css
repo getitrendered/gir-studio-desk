@@ -266,12 +266,12 @@ table.sheet input.editing{user-select:text}
 .sheet tr.discarded-row td.status-cell{background:#e7e9e8!important}
 .sheet tr.selected td.status-cell.pending{background:#f4f6f4!important}.sheet tr.selected td.status-cell.working{background:#d8e9fc!important}.sheet tr.selected td.status-cell.changes{background:#e9e0ff!important}.sheet tr.selected td.status-cell.sent{background:#fff0d2!important}.sheet tr.selected td.status-cell.paid{background:#d5efdb!important}
 .sheet tr.blank-row.blank-selected td{background:#e2f1e5!important}
-.group-heading{display:flex;align-items:center;width:100%;height:100%}.group-heading [data-group-collapse]{flex:1;min-width:0}.group-heading .group-add,.group-heading .group-rename{width:auto;flex:none;padding:0 10px;border-left:1px solid #bcd7c3;font-size:10px;font-weight:700}
-.group-heading .group-add:hover,.group-heading .group-rename:hover{background:#d5ecdb}
+.group-heading{display:flex;align-items:center;width:100%;height:100%}.group-heading [data-group-collapse]{flex:1;min-width:0}.group-heading .group-add,.group-heading .group-rename,.group-heading .group-ungroup{width:auto;flex:none;padding:0 10px;border-left:1px solid #bcd7c3;font-size:10px;font-weight:700}
+.group-heading .group-add:hover,.group-heading .group-rename:hover,.group-heading .group-ungroup:hover{background:#d5ecdb}
 .group-chevron{width:16px;height:16px;flex:none;transition:transform .15s ease}
 .group-chevron.collapsed{transform:rotate(-90deg)}
-.sheet-group-header.deal .group-rename{border-left-color:#e8c96c}
-.sheet-group-header.deal .group-rename:hover{background:#ffe6a1}
+.sheet-group-header.deal .group-rename,.sheet-group-header.deal .group-ungroup{border-left-color:#e8c96c}
+.sheet-group-header.deal .group-rename:hover,.sheet-group-header.deal .group-ungroup:hover{background:#ffe6a1}
 .sheet select[data-cell]{pointer-events:none}
 #app.access-mode{background:radial-gradient(circle at 50% 0%,#e3f2e6 0,#f6f9f5 48%,#edf3ee 100%)}
 #app.access-mode .center{display:block}
