@@ -143,6 +143,7 @@ function receiptEffectiveItem(r) {
   return null;
 }
 function receiptEffectiveAmount(r) {
+  if (!r) return 0;
   const item = receiptEffectiveItem(r);
   if (item) {
     if (item.status !== 'paid') return 0;
@@ -156,14 +157,33 @@ function receiptEffectiveAmount(r) {
     }
   }
   if (r.referenceKind === 'deal' && r.referenceId) {
+    const dealReceipts = (data.receipts || []).filter(x => x.referenceKind === 'deal' && x.referenceId === r.referenceId);
+    if (dealReceipts.length > 1 && dealReceipts[0].id !== r.id) {
+      return 0;
+    }
     const g = data.groups.find(x => x.id === r.referenceId);
     const dealItems = data.items.filter(i => i.groupId === r.referenceId && i.status !== 'discarded');
-    if (dealItems.length && dealItems.every(i => i.status === 'paid')) {
+    if (!dealItems.length) return num(r.amount);
+    const paidItems = dealItems.filter(i => i.status === 'paid');
+    if (!paidItems.length) return 0;
+    if (paidItems.length === dealItems.length) {
       const total = dealItems.reduce((sum, i) => sum + num(i.quotedTotal), 0);
-      const agreed = g && g.agreedAmount != null && g.agreedAmount !== '' ? num(g.agreedAmount) : total;
+      const agreed = (g && g.agreedAmount != null && g.agreedAmount !== '') ? num(g.agreedAmount) : total;
       const advances = dealItems.reduce((sum, i) => sum + num(i.advanceAmount), 0);
       return Math.max(0, agreed - advances);
     }
+    return paidItems.reduce((sum, i) => sum + Math.max(0, effectiveItemValue(i) - num(i.advanceAmount)), 0);
+  }
+  if (r.referenceKind === 'project' && r.referenceId) {
+    const projReceipts = (data.receipts || []).filter(x => x.referenceKind === 'project' && x.referenceId === r.referenceId);
+    if (projReceipts.length > 1 && projReceipts[0].id !== r.id) {
+      return 0;
+    }
+    const nonDealItems = data.items.filter(i => i.projectGroupId === r.referenceId && !i.groupId && i.status !== 'discarded');
+    if (!nonDealItems.length) return 0;
+    const paidItems = nonDealItems.filter(i => i.status === 'paid');
+    if (!paidItems.length) return 0;
+    return paidItems.reduce((sum, i) => sum + Math.max(0, effectiveItemValue(i) - num(i.advanceAmount)), 0);
   }
   return num(r.amount);
 }
@@ -174,12 +194,24 @@ function receiptEffectiveDescription(r) {
     const inv = data.invoices.find(x => x.id === r.referenceId);
     if (inv) return `Invoice ${inv.number}`;
   }
+  if (r.referenceKind === 'deal' && r.referenceId) {
+    const g = data.groups.find(x => x.id === r.referenceId);
+    if (g?.label) return g.label;
+  }
+  if (r.referenceKind === 'project' && r.referenceId) {
+    const pg = data.projectGroups?.find(x => x.id === r.referenceId);
+    if (pg?.label) return pg.label;
+  }
   return r.description || (r.source === 'historical_workbook' ? 'Historical payment' : 'Payment');
 }
 function receiptEffectiveClientName(r) {
   const item = receiptEffectiveItem(r);
   if (item) {
     const client = data.clients.find(c => c.id === item.clientId);
+    if (client?.name) return client.name;
+  }
+  if (r.clientId) {
+    const client = data.clients.find(c => c.id === r.clientId);
     if (client?.name) return client.name;
   }
   return r.clientName || 'Client';
@@ -215,8 +247,7 @@ function financials() {
     amount.months={};
     for(const receipt of data.receipts){
       const val=typeof receiptEffectiveAmount==='function'?receiptEffectiveAmount(receipt):num(receipt.amount);
-      const itm=typeof receiptEffectiveItem==='function'?receiptEffectiveItem(receipt):null;
-      if(val<=0&&itm&&itm.status!=='paid')continue;
+      if(val<=0)continue;
       amount.revenue+=val;
       month(receipt.receivedMonth,'received',val);
     }
@@ -685,8 +716,7 @@ function renderRevenue() {
   const months=new Map();
   for(const r of receipts){
     const amt=receiptEffectiveAmount(r);
-    const itm=receiptEffectiveItem(r);
-    if(amt<=0&&itm&&itm.status!=='paid')continue;
+    if(amt<=0)continue;
     const key=(r.receivedMonth||'').slice(0,7);
     const month=months.get(key)||{total:0,receipts:[]};
     month.total+=amt;
@@ -1343,6 +1373,7 @@ function deleteSelectedRows(idsToDelete = null) {
     if (!rowClipboard.sourceRowIds.length) rowClipboard.mode = 'copy';
   }
 
+  consolidateAllReceipts();
   save();
   render();
   scheduleSync();
@@ -1422,6 +1453,7 @@ function pasteCopiedRows(targetId=null,targetBlankOrder=null) {
     toast(copiedItems.length===1?'Row pasted (Ctrl+V)':`${copiedItems.length} rows pasted`);
   }
 
+  consolidateAllReceipts();
   save();
   render();
   scheduleSync();
@@ -1445,6 +1477,7 @@ function duplicateSelectedRow(itemId) {
     item.updatedAt=new Date().toISOString();
     enqueue('items',item.id);
   });
+  consolidateAllReceipts();
   save();
   render();
   scheduleSync();
@@ -1474,6 +1507,7 @@ function moveRowToPosition(itemId,targetPosition) {
     enqueue('items',item.id);
   });
 
+  consolidateAllReceipts();
   save();
   render();
   scheduleSync();
@@ -1551,117 +1585,137 @@ function createReceipt(clientId,amount,description,referenceKind,referenceId,sta
   const receipt={id,clientId,clientName:client?.name||'Client',amount:Math.round(amount*100)/100,receivedMonth:date.slice(0,7)+'-01',receivedOn:date,receivedAt:(stamp.length===10?stamp+'T12:00:00.000Z':stamp),source:'app',sourceKey:'app:'+id,referenceKind,referenceId,description,dateQuality:'exact'};
   data.receipts ||= [];data.receipts.push(receipt);enqueue('receipts',id);
 }
-function recordPaidItems(items,context=null,stamp=new Date().toISOString()){
-  const unpaid=items.filter(i=>i.status!=='paid'&&i.status!=='discarded');if(!unpaid.length)return;
-  if(context){
-    const amount=unpaid.reduce((sum,i)=>sum+Math.max(0,effectiveItemValue(i)-num(i.advanceAmount)),0);
-    createReceipt(unpaid[0].clientId,amount,context.label||'Group deal',context.kind,context.id,stamp);
+function syncDealReceipt(groupId, stamp = new Date().toISOString()) {
+  if (!groupId || !Array.isArray(data.receipts)) return;
+  const g = (data.groups || []).find(x => x.id === groupId);
+  if (!g) return;
+  const dealItems = (data.items || []).filter(i => i.groupId === groupId && i.status !== 'discarded');
+  const paidItems = dealItems.filter(i => i.status === 'paid');
+  const existing = data.receipts.filter(r => r.referenceKind === 'deal' && r.referenceId === groupId);
+
+  if (!paidItems.length) {
+    existing.forEach(r => removeReceipt(r.id));
     return;
   }
-  const sameDeal=unpaid.every(i=>i.groupId&&i.groupId===unpaid[0].groupId&&i.groupId!=null);
-  const sameProject=unpaid.every(i=>i.projectGroupId&&i.projectGroupId===unpaid[0].projectGroupId&&i.projectGroupId!=null);
-  if(sameDeal){
-    const g=data.groups?.find(x=>x.id===unpaid[0].groupId);
-    const amount=unpaid.reduce((sum,i)=>sum+Math.max(0,effectiveItemValue(i)-num(i.advanceAmount)),0);
-    createReceipt(unpaid[0].clientId,amount,g?.label||'Group deal','deal',unpaid[0].groupId,stamp);
-  } else if(sameProject){
-    const pg=data.projectGroups?.find(x=>x.id===unpaid[0].projectGroupId);
-    const amount=unpaid.reduce((sum,i)=>sum+Math.max(0,effectiveItemValue(i)-num(i.advanceAmount)),0);
-    createReceipt(unpaid[0].clientId,amount,pg?.label||'Project','project',unpaid[0].projectGroupId,stamp);
+
+  let amount = 0;
+  if (paidItems.length === dealItems.length && dealItems.length > 0) {
+    const total = dealItems.reduce((sum, i) => sum + num(i.quotedTotal), 0);
+    const agreed = (g.agreedAmount != null && g.agreedAmount !== '') ? num(g.agreedAmount) : total;
+    const advances = dealItems.reduce((sum, i) => sum + num(i.advanceAmount), 0);
+    amount = Math.max(0, agreed - advances);
   } else {
-    for(const item of unpaid){
-      const amount=Math.max(0,effectiveItemValue(item)-num(item.advanceAmount));
-      createReceipt(item.clientId,amount,item.service||'Work row','item',item.id,stamp);
+    amount = paidItems.reduce((sum, i) => sum + Math.max(0, effectiveItemValue(i) - num(i.advanceAmount)), 0);
+  }
+  amount = Math.round(amount * 100) / 100;
+
+  const paidDates = paidItems.map(i => i.paidAt).filter(d => /^\d{4}-\d{2}-\d{2}/.test(d || ''));
+  paidDates.sort();
+  const date = paidDates.length ? paidDates[paidDates.length - 1] : ((stamp && /^\d{4}-\d{2}-\d{2}/.test(stamp)) ? stamp.slice(0, 10) : today());
+  const month = date.slice(0, 7) + '-01';
+  const fullStamp = (stamp && stamp.length === 10 ? stamp + 'T12:00:00.000Z' : stamp);
+  const client = (data.clients || []).find(c => c.id === g.clientId);
+  const desc = g.label || 'Agreed deal';
+
+  if (existing.length) {
+    const primary = existing[0];
+    const changed = primary.amount !== amount || primary.description !== desc || primary.receivedOn !== date || primary.receivedMonth !== month;
+    primary.amount = amount;
+    primary.description = desc;
+    primary.receivedOn = date;
+    primary.receivedMonth = month;
+    primary.receivedAt = fullStamp;
+    if (client?.name) primary.clientName = client.name;
+    if (changed) enqueue('receipts', primary.id);
+    for (let k = 1; k < existing.length; k++) {
+      removeReceipt(existing[k].id);
     }
+  } else if (amount > 0) {
+    createReceipt(g.clientId, amount, desc, 'deal', groupId, fullStamp);
+  }
+
+  for (const item of dealItems) {
+    const r = data.receipts.find(x => (x.referenceKind === 'item' && x.referenceId === item.id) || (x.source === 'app' && x.sourceKey === 'app:' + item.id));
+    if (r) removeReceipt(r.id);
   }
 }
-function assign(ids) { ids.forEach(id=>{const i=data.items.find(x=>x.id===id);if(!i||i.status==='discarded')return;if(i.status==='sent'){i.status='changes';i.revisionCount=(i.revisionCount||0)+1;}else if(i.status!=='changes')i.status='working';i.paidAt=null;i.paidAtTs=null;i.assigneeId=currentUserId();queue('items',id);});selected.clear();render(); }
-function markSent(ids) { bulkSetStatus('sent',ids); }
-function bulkSetStatus(next,idsOverride=null,context=null,customPaidDate=null) {
-  const ids=new Set(idsOverride||selected),items=data.items.filter(i=>ids.has(i.id));if(!items.length)return;
-  const invoices=data.invoices.filter(inv=>(inv.itemIds||[]).some(id=>ids.has(id)));
-  if(invoices.some(inv=>next!=='paid'||(inv.status==='issued'&&!(inv.itemIds||[]).every(id=>ids.has(id))))){toast('Select every row on an invoice to mark it Paid; use invoice payment tracking for other changes');return;}
-  const paidDay=(next==='paid'&&customPaidDate&&/^\d{4}-\d{2}-\d{2}/.test(customPaidDate))?customPaidDate.slice(0,10):today();
-  const stamp=(next==='paid'&&customPaidDate)?(paidDay+'T12:00:00.000Z'):new Date().toISOString();
-  if(next==='paid'){
-    const invoiced=new Set(invoices.flatMap(inv=>inv.itemIds||[]));
-    for(const inv of invoices){
-      if(inv.status==='issued'||customPaidDate){
-        let r=(data.receipts||[]).find(x=>x.referenceKind==='invoice'&&x.referenceId===inv.id);
-        if(r){
-          r.receivedOn=paidDay;
-          r.receivedMonth=paidDay.slice(0,7)+'-01';
-          r.receivedAt=stamp;
-          enqueue('receipts',r.id);
-        } else {
-          createReceipt(inv.clientId,Math.max(0,num(inv.finalAmount)-invoiceAdvance(inv)),`Invoice ${inv.number}`,'invoice',inv.id,stamp);
-        }
-        inv.status='paid';inv.paidAt=paidDay;inv.paidAtTs=stamp;inv.updatedAt=stamp;enqueue('invoices',inv.id);
-      }
+function syncProjectReceipt(projectGroupId, stamp = new Date().toISOString()) {
+  if (!projectGroupId || !Array.isArray(data.receipts)) return;
+  const pg = (data.projectGroups || []).find(x => x.id === projectGroupId);
+  if (!pg) return;
+  const nonDealItems = (data.items || []).filter(i => i.projectGroupId === projectGroupId && !i.groupId && i.status !== 'discarded');
+  const paidItems = nonDealItems.filter(i => i.status === 'paid');
+  const existing = data.receipts.filter(r => r.referenceKind === 'project' && r.referenceId === projectGroupId);
+
+  if (!paidItems.length) {
+    existing.forEach(r => removeReceipt(r.id));
+    return;
+  }
+
+  const amount = Math.round(paidItems.reduce((sum, i) => sum + Math.max(0, effectiveItemValue(i) - num(i.advanceAmount)), 0) * 100) / 100;
+  const paidDates = paidItems.map(i => i.paidAt).filter(d => /^\d{4}-\d{2}-\d{2}/.test(d || ''));
+  paidDates.sort();
+  const date = paidDates.length ? paidDates[paidDates.length - 1] : ((stamp && /^\d{4}-\d{2}-\d{2}/.test(stamp)) ? stamp.slice(0, 10) : today());
+  const month = date.slice(0, 7) + '-01';
+  const fullStamp = (stamp && stamp.length === 10 ? stamp + 'T12:00:00.000Z' : stamp);
+  const client = (data.clients || []).find(c => c.id === pg.clientId);
+  const desc = pg.label || 'Project';
+
+  if (existing.length) {
+    const primary = existing[0];
+    const changed = primary.amount !== amount || primary.description !== desc || primary.receivedOn !== date || primary.receivedMonth !== month;
+    primary.amount = amount;
+    primary.description = desc;
+    primary.receivedOn = date;
+    primary.receivedMonth = month;
+    primary.receivedAt = fullStamp;
+    if (client?.name) primary.clientName = client.name;
+    if (changed) enqueue('receipts', primary.id);
+    for (let k = 1; k < existing.length; k++) {
+      removeReceipt(existing[k].id);
     }
-    const nonInvoicedItems=items.filter(i=>!invoiced.has(i.id));
-    if(customPaidDate){
-      for(const item of nonInvoicedItems){
-        const r=(data.receipts||[]).find(x=>(x.referenceKind==='item'&&x.referenceId===item.id)||(x.source==='app'&&x.sourceKey==='app:'+item.id));
-        if(r){
-          r.receivedOn=paidDay;
-          r.receivedMonth=paidDay.slice(0,7)+'-01';
-          r.receivedAt=stamp;
-          enqueue('receipts',r.id);
-        }
-      }
-      const dealIds=new Set(nonInvoicedItems.map(i=>i.groupId).filter(Boolean));
-      for(const gid of dealIds){
-        const r=(data.receipts||[]).find(x=>x.referenceKind==='deal'&&x.referenceId===gid);
-        if(r){
-          r.receivedOn=paidDay;
-          r.receivedMonth=paidDay.slice(0,7)+'-01';
-          r.receivedAt=stamp;
-          enqueue('receipts',r.id);
-        }
-      }
-      const projIds=new Set(nonInvoicedItems.map(i=>i.projectGroupId).filter(Boolean));
-      for(const pid of projIds){
-        const r=(data.receipts||[]).find(x=>x.referenceKind==='project'&&x.referenceId===pid);
-        if(r){
-          r.receivedOn=paidDay;
-          r.receivedMonth=paidDay.slice(0,7)+'-01';
-          r.receivedAt=stamp;
-          enqueue('receipts',r.id);
-        }
-      }
-      recordPaidItems(nonInvoicedItems.filter(i=>!(data.receipts||[]).some(x=>(x.referenceKind==='item'&&x.referenceId===i.id)||(x.source==='app'&&x.sourceKey==='app:'+i.id))),context,stamp);
-    } else {
-      recordPaidItems(nonInvoicedItems,context,stamp);
-    }
-  } else {
-    for(const item of items){
-      if(item.status==='paid'){
-        const r=(data.receipts||[]).find(x=>(x.referenceKind==='item'&&x.referenceId===item.id)||(x.source==='app'&&x.sourceKey==='app:'+item.id));
-        if(r)removeReceipt(r.id);
-      }
+  } else if (amount > 0) {
+    createReceipt(pg.clientId, amount, desc, 'project', projectGroupId, fullStamp);
+  }
+
+  for (const item of nonDealItems) {
+    const r = data.receipts.find(x => (x.referenceKind === 'item' && x.referenceId === item.id) || (x.source === 'app' && x.sourceKey === 'app:' + item.id));
+    if (r) removeReceipt(r.id);
+  }
+}
+function consolidateAllReceipts() {
+  if (!Array.isArray(data.receipts) || !data.receipts.length) return;
+  const dealGroups = new Map();
+  for (const r of data.receipts) {
+    if (r.referenceKind === 'deal' && r.referenceId) {
+      if (!dealGroups.has(r.referenceId)) dealGroups.set(r.referenceId, []);
+      dealGroups.get(r.referenceId).push(r);
     }
   }
-  for(const item of items){
-    let status=next;
-    if(next==='working'&&item.status==='sent'){status='changes';item.revisionCount=(item.revisionCount||0)+1;}
-    else if(next==='changes'&&item.status!=='changes')item.revisionCount=(item.revisionCount||0)+1;
-    if(['working','changes'].includes(status))item.assigneeId ||= currentUserId();
-    if(status==='paid'){
-      if(item.status!=='paid'||customPaidDate){
-        item.paidAt=paidDay;
-        item.paidAtTs=stamp;
-      }
-    } else {
-      item.paidAt=null;
-      item.paidAtTs=null;
-    }
-    item.status=status;item.updatedAt=stamp;enqueue('items',item.id);
+  for (const [gid] of dealGroups.entries()) {
+    syncDealReceipt(gid);
   }
-  selected.clear();save();scheduleSync();render();toast(`${items.length} row${items.length===1?'':'s'} updated`);
+  const projectReceiptsMap = new Map();
+  for (const r of data.receipts) {
+    if (r.referenceKind === 'project' && r.referenceId) {
+      if (!projectReceiptsMap.has(r.referenceId)) projectReceiptsMap.set(r.referenceId, []);
+      projectReceiptsMap.get(r.referenceId).push(r);
+    }
+  }
+  for (const [pid] of projectReceiptsMap.entries()) {
+    syncProjectReceipt(pid);
+  }
 }
 function syncItemReceipt(item) {
   if (!item || !Array.isArray(data.receipts)) return;
+  if (item.groupId) {
+    syncDealReceipt(item.groupId);
+    return;
+  }
+  if (item.projectGroupId && data.receipts.some(r => r.referenceKind === 'project' && r.referenceId === item.projectGroupId)) {
+    syncProjectReceipt(item.projectGroupId);
+    return;
+  }
   const r = data.receipts.find(x => 
     (x.referenceKind === 'item' && x.referenceId === item.id) ||
     (x.source === 'app' && x.sourceKey === 'app:' + item.id)
@@ -1694,6 +1748,95 @@ function syncItemReceipt(item) {
   } else if (r) {
     removeReceipt(r.id);
   }
+}
+function recordPaidItems(items, context = null, stamp = new Date().toISOString()) {
+  const targetItems = items.filter(i => i.status === 'paid' || i.status !== 'discarded');
+  if (!targetItems.length) return;
+
+  const dealIds = new Set();
+  const projectIds = new Set();
+  const standaloneItems = [];
+
+  for (const item of targetItems) {
+    if (item.groupId) {
+      dealIds.add(item.groupId);
+    } else if (item.projectGroupId) {
+      projectIds.add(item.projectGroupId);
+    } else {
+      standaloneItems.push(item);
+    }
+  }
+
+  if (context && context.kind === 'deal' && context.id) dealIds.add(context.id);
+  if (context && context.kind === 'project' && context.id) projectIds.add(context.id);
+
+  for (const gid of dealIds) syncDealReceipt(gid, stamp);
+  for (const pid of projectIds) syncProjectReceipt(pid, stamp);
+  for (const item of standaloneItems) syncItemReceipt(item);
+}
+function assign(ids) { ids.forEach(id=>{const i=data.items.find(x=>x.id===id);if(!i||i.status==='discarded')return;if(i.status==='sent'){i.status='changes';i.revisionCount=(i.revisionCount||0)+1;}else if(i.status!=='changes')i.status='working';i.paidAt=null;i.paidAtTs=null;i.assigneeId=currentUserId();queue('items',id);});selected.clear();render(); }
+function markSent(ids) { bulkSetStatus('sent',ids); }
+function bulkSetStatus(next,idsOverride=null,context=null,customPaidDate=null) {
+  const ids=new Set(idsOverride||selected),items=data.items.filter(i=>ids.has(i.id));if(!items.length)return;
+  const invoices=data.invoices.filter(inv=>(inv.itemIds||[]).some(id=>ids.has(id)));
+  if(invoices.some(inv=>next!=='paid'||(inv.status==='issued'&&!(inv.itemIds||[]).every(id=>ids.has(id))))){toast('Select every row on an invoice to mark it Paid; use invoice payment tracking for other changes');return;}
+  const paidDay=(next==='paid'&&customPaidDate&&/^\d{4}-\d{2}-\d{2}/.test(customPaidDate))?customPaidDate.slice(0,10):today();
+  const stamp=(next==='paid'&&customPaidDate)?(paidDay+'T12:00:00.000Z'):new Date().toISOString();
+  if(next==='paid'){
+    const invoiced=new Set(invoices.flatMap(inv=>inv.itemIds||[]));
+    for(const inv of invoices){
+      if(inv.status==='issued'||customPaidDate){
+        let r=(data.receipts||[]).find(x=>x.referenceKind==='invoice'&&x.referenceId===inv.id);
+        if(r){
+          r.receivedOn=paidDay;
+          r.receivedMonth=paidDay.slice(0,7)+'-01';
+          r.receivedAt=stamp;
+          enqueue('receipts',r.id);
+        } else {
+          createReceipt(inv.clientId,Math.max(0,num(inv.finalAmount)-invoiceAdvance(inv)),`Invoice ${inv.number}`,'invoice',inv.id,stamp);
+        }
+        inv.status='paid';inv.paidAt=paidDay;inv.paidAtTs=stamp;inv.updatedAt=stamp;enqueue('invoices',inv.id);
+      }
+    }
+    const nonInvoicedItems=items.filter(i=>!invoiced.has(i.id));
+    for(const item of nonInvoicedItems){
+      if(item.status!=='paid'||customPaidDate){
+        item.paidAt=paidDay;
+        item.paidAtTs=stamp;
+      }
+      item.status='paid';
+      item.updatedAt=stamp;
+      enqueue('items',item.id);
+    }
+    recordPaidItems(nonInvoicedItems,context,stamp);
+  } else {
+    const affectedDealIds = new Set();
+    const affectedProjectIds = new Set();
+    for(const item of items){
+      const wasPaid = item.status === 'paid';
+      let status=next;
+      if(next==='working'&&item.status==='sent'){status='changes';item.revisionCount=(item.revisionCount||0)+1;}
+      else if(next==='changes'&&item.status!=='changes')item.revisionCount=(item.revisionCount||0)+1;
+      if(['working','changes'].includes(status))item.assigneeId ||= currentUserId();
+      item.paidAt=null;
+      item.paidAtTs=null;
+      item.status=status;
+      item.updatedAt=stamp;
+      enqueue('items',item.id);
+
+      if(wasPaid){
+        if(item.groupId) affectedDealIds.add(item.groupId);
+        else if(item.projectGroupId) affectedProjectIds.add(item.projectGroupId);
+        else {
+          const r=(data.receipts||[]).find(x=>(x.referenceKind==='item'&&x.referenceId===item.id)||(x.source==='app'&&x.sourceKey==='app:'+item.id));
+          if(r)removeReceipt(r.id);
+        }
+      }
+    }
+    for(const gid of affectedDealIds) syncDealReceipt(gid, stamp);
+    for(const pid of affectedProjectIds) syncProjectReceipt(pid, stamp);
+  }
+  selected.clear();save();scheduleSync();render();toast(`${items.length} row${items.length===1?'':'s'} updated`);
 }
 
 const CAT_REACTIONS = [
@@ -2341,12 +2484,12 @@ async function migrateImport() {
 }
 function newClientDialog(){modal('New client','<div class="field"><label>Client name</label><input id="newClientName" autofocus></div>','<div class="modal-actions"><button class="small-btn" id="cancelClient">Cancel</button><button class="small-btn blue" id="saveClient">Create client</button></div>');$('#cancelClient').onclick=closeModal;$('#saveClient').onclick=()=>{const name=inputValue('newClientName');if(!name)return;const c={id:uid(),name,billing:{name,address:'',email:'',phone:'',taxId:''},sortOrder:data.clients.length};mutate('clients',c);activeClient=c.id;tab='sheet';closeModal();render();};}
 function billingDialog(id=activeClient){const c=data.clients.find(client=>client.id===id);if(!c)return;const b=c.billing||{};modal('Client billing details',`<p>Shown on invoices for ${esc(c.name)}.</p><div class="field"><label>Billing name</label><input id="billName" value="${esc(b.name||c.name)}"></div><div class="field"><label>Address</label><textarea id="billAddress" rows="3">${esc(b.address||'')}</textarea></div><div class="field-grid"><div class="field"><label>Email</label><input id="billEmail" value="${esc(b.email||'')}"></div><div class="field"><label>Phone</label><input id="billPhone" value="${esc(b.phone||'')}"></div></div><div class="field"><label>Tax / GST ID</label><input id="billTax" value="${esc(b.taxId||'')}"></div>`,`<div class="modal-actions"><button class="small-btn blue" id="saveBilling">Save</button></div>`);$('#saveBilling').onclick=()=>{c.billing={name:inputValue('billName'),address:inputValue('billAddress'),email:inputValue('billEmail'),phone:inputValue('billPhone'),taxId:inputValue('billTax')};mutate('clients',c);closeModal();};}
-function groupDialog(id){const chosen=id?data.items.filter(i=>i.groupId===id):data.items.filter(i=>selected.has(i.id));if(!chosen.length)return;const existing=id?data.groups.find(g=>g.id===id):null;const quote=chosen.reduce((n,i)=>n+num(i.quotedTotal),0);modal(existing?'Edit grouped deal':'Group selected rows',`<p>${chosen.length} rows · Original quote ${money(quote)}</p><div class="field"><label>Group name</label><input id="groupLabel" value="${esc(existing?.label||'Agreed deal')}"></div><div class="field"><label>Agreed final amount</label><input id="groupAmount" type="number" min="0" step="0.01" placeholder="Enter negotiated amount" value="${existing?.agreedAmount??''}"></div><div class="notice">This amount replaces the sum of row totals in revenue and payment estimates. Individual rows stay visible for work tracking.</div>`,`<div class="modal-actions"><button class="small-btn blue" id="saveGroup">Save group</button></div>`);$('#saveGroup').onclick=()=>{const value=inputValue('groupAmount');const g=existing||{id:uid(),clientId:activeClient};g.label=inputValue('groupLabel')||'Agreed deal';g.agreedAmount=value===''?null:num(value);if(!existing)chosen.forEach(i=>{i.groupId=g.id;queue('items',i.id);});mutate('groups',g);for(const i of data.items.filter(item=>item.groupId===g.id&&item.status==='paid'))syncItemReceipt(i);selected.clear();closeModal();toast('Deal group saved');};}
+function groupDialog(id){const chosen=id?data.items.filter(i=>i.groupId===id):data.items.filter(i=>selected.has(i.id));if(!chosen.length)return;const existing=id?data.groups.find(g=>g.id===id):null;const quote=chosen.reduce((n,i)=>n+num(i.quotedTotal),0);modal(existing?'Edit grouped deal':'Group selected rows',`<p>${chosen.length} rows · Original quote ${money(quote)}</p><div class="field"><label>Group name</label><input id="groupLabel" value="${esc(existing?.label||'Agreed deal')}"></div><div class="field"><label>Agreed final amount</label><input id="groupAmount" type="number" min="0" step="0.01" placeholder="Enter negotiated amount" value="${existing?.agreedAmount??''}"></div><div class="notice">This amount replaces the sum of row totals in revenue and payment estimates. Individual rows stay visible for work tracking.</div>`,`<div class="modal-actions"><button class="small-btn blue" id="saveGroup">Save group</button></div>`);$('#saveGroup').onclick=()=>{const value=inputValue('groupAmount');const g=existing||{id:uid(),clientId:activeClient};g.label=inputValue('groupLabel')||'Agreed deal';g.agreedAmount=value===''?null:num(value);if(!existing)chosen.forEach(i=>{i.groupId=g.id;queue('items',i.id);});mutate('groups',g);syncDealReceipt(g.id);selected.clear();closeModal();toast('Deal group saved');};}
 function projectGroupDialog() {
   const chosen=data.items.filter(i=>selected.has(i.id));if(!chosen.length)return;
   if(new Set(chosen.map(i=>i.clientId)).size!==1){toast('Select rows from one client');return;}
   modal('Group project',`<p>Organize ${chosen.length} selected rows under one collapsible project heading.</p><div class="field"><label>Project group name</label><input id="projectGroupName" placeholder="For example, Sheena and Royston" autofocus></div>`,`<div class="modal-actions"><button class="small-btn blue" id="saveProjectGroup">Create group</button></div>`);
-  $('#saveProjectGroup').onclick=()=>{const name=inputValue('projectGroupName');if(!name){toast('Enter a group name');return;}const group={id:uid(),clientId:chosen[0].clientId,label:name};for(const item of chosen){item.projectGroupId=group.id;queue('items',item.id);}mutate('projectGroups',group);selected.clear();closeModal();toast('Project group created');};
+  $('#saveProjectGroup').onclick=()=>{const name=inputValue('projectGroupName');if(!name){toast('Enter a group name');return;}const group={id:uid(),clientId:chosen[0].clientId,label:name};for(const item of chosen){item.projectGroupId=group.id;queue('items',item.id);}mutate('projectGroups',group);syncProjectReceipt(group.id);selected.clear();closeModal();toast('Project group created');};
 }
 function renameGroup(kind,id){const table=kind==='project'?'projectGroups':'groups',group=data[table].find(g=>g.id===id);if(!group)return;modal('Rename group',`<div class="field"><label>Group name</label><input id="renameGroupName" value="${esc(group.label)}" autofocus></div>`,`<div class="modal-actions"><button class="small-btn blue" id="saveGroupName">Save name</button></div>`);const saveName=()=>{const label=inputValue('renameGroupName');if(!label){toast('Enter a group name');return;}group.label=label;mutate(table,group);closeModal();toast('Group renamed');};$('#saveGroupName').onclick=saveName;$('#renameGroupName').onkeydown=e=>{if(e.key==='Enter')saveName();};}
 function invoiceDialog(){const items=data.items.filter(i=>selected.has(i.id));if(!items.length)return;const notReady=items.filter(i=>i.status!=='sent');if(notReady.length){toast('Select rows marked Sent for a new invoice');return;}if(items.some(i=>billedIds().has(i.id))){toast('One or more rows are already invoiced');return;}if(new Set(items.map(i=>i.clientId)).size!==1){toast('Choose rows from one client');return;}const subtotal=items.reduce((n,i)=>n+num(i.quotedTotal),0);const next=String(data.invoices.length+1).padStart(4,'0');modal('Create invoice',`<p>${items.length} finished rows from ${esc(currentClient()?.name)}.</p><div class="preview-list">${items.map((i,n)=>`<div class="list-row"><div><strong>${n+1}. ${esc(i.service)}</strong><small>${i.quantity} × ${money(i.rate)}</small></div><strong>${money(i.quotedTotal)}</strong></div>`).join('')}</div><div class="field-grid" style="margin-top:15px"><div class="field"><label>Invoice number</label><input id="invNumber" value="GIR-${new Date().getFullYear()}-${next}"></div><div class="field"><label>Issue date</label><input id="invDate" type="date" value="${today()}"></div><div class="field"><label>Discount</label><input id="invDiscount" type="number" min="0" step="0.01" value="0"></div><div class="field"><label>Agreed final amount (overrides discount)</label><input id="invFinal" type="number" min="0" step="0.01" placeholder="Optional"></div></div><div class="notice">Subtotal ${money(subtotal)}. Advances already received: ${money(items.reduce((n,i)=>n+num(i.advanceAmount),0))}. The final amount is the full agreed price; the invoice will show advances separately and deduct them from the balance due.</div>`,`<div class="modal-actions"><button class="small-btn" id="cancelInvoice">Cancel</button><button class="small-btn blue" id="createInvoice">Create invoice</button></div>`,true);$('#cancelInvoice').onclick=closeModal;$('#createInvoice').onclick=()=>{const discount=num(inputValue('invDiscount')),final=inputValue('invFinal');if(discount>subtotal){toast('Discount exceeds subtotal');return;}const amount=final===''?subtotal-discount:num(final);const invoice={id:uid(),clientId:items[0].clientId,number:inputValue('invNumber')||`GIR-${next}`,issueDate:inputValue('invDate')||today(),itemIds:items.map(i=>i.id),lines:items.map((i,n)=>({serial:n+1,service:i.service,quantity:num(i.quantity),rate:num(i.rate),total:num(i.quotedTotal)})),subtotal,discount:final===''?discount:subtotal-amount,finalAmount:amount,advanceAmount:items.reduce((n,i)=>n+num(i.advanceAmount),0),status:'issued',seller:structuredClone(data.settings.seller),buyer:structuredClone(currentClient()?.billing||{})};mutate('invoices',invoice);selected.clear();closeModal();viewInvoice(invoice.id);};}
@@ -2563,6 +2706,7 @@ async function pullRemote(){
       if(ix<0)data[table].push(local);else data[table][ix]=local;
     }
   });
+  consolidateAllReceipts();
   if(!activeClient || !data.clients.some(c=>c.id===activeClient))activeClient=sortedClients()[0]?.id||null;
   lastSyncTime=Date.now();
   save();
@@ -2772,4 +2916,4 @@ document.addEventListener('paste',e=>{
   if(value.includes('\t')||value.includes('\n'))pasteGrid(e,{dataset:{id:selectionCell.id,cell:selectionCell.key}});
   else{e.preventDefault();editCell(selectionCell.id,selectionCell.key,value);}
 });
-(async()=>{try{const saved=await window.desk.read();if(saved)data={...structuredClone(defaults),...saved,settings:{...structuredClone(defaults.settings),...(saved.settings||{}),seller:{...defaults.settings.seller,...(saved.settings?.seller||{})}}};(data.items||[]).forEach(i=>{if(i.serial)i.serial=cleanSerial(i.serial);});ensureBankAccounts();syncActiveBankDetails();const topClient=sortedClients()[0]?.id;if(topClient)activeClient=topClient;render();setupSupabase();}catch(e){render();toast('Could not load local data: '+e.message);}})();
+(async()=>{try{const saved=await window.desk.read();if(saved)data={...structuredClone(defaults),...saved,settings:{...structuredClone(defaults.settings),...(saved.settings||{}),seller:{...defaults.settings.seller,...(saved.settings?.seller||{})}}};(data.items||[]).forEach(i=>{if(i.serial)i.serial=cleanSerial(i.serial);});consolidateAllReceipts();ensureBankAccounts();syncActiveBankDetails();const topClient=sortedClients()[0]?.id;if(topClient)activeClient=topClient;render();setupSupabase();}catch(e){render();toast('Could not load local data: '+e.message);}})();
