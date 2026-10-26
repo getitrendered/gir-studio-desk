@@ -1990,21 +1990,23 @@ function openCatReactionPicker(contextItem = null, targetName = null) {
   const targetText = `to <strong>${esc(partner)}</strong>`;
 
   const renderPickerContent = () => `
-    <div class="cat-type-toggle-bar">
-      <button type="button" class="cat-toggle-pill ${chosenCat==='orange'?'active-orange':''}" id="pickerCatOrange">🐱 Orange Cat</button>
-      <button type="button" class="cat-toggle-pill ${chosenCat==='black'?'active-black':''}" id="pickerCatBlack">🐈‍⬛ Midnight Black Cat</button>
-    </div>
-    <p class="muted" style="text-align:center;font-size:12px;margin-bottom:10px;">Select an animated cat state to ping ${targetText}:</p>
-    <div class="cat-picker-grid">
-      ${CAT_REACTIONS.map(r => `
-        <div class="cat-picker-item ${chosenCat==='black'?'black-cat-active':''}" data-cat-pick="${r.key}">
-          <div class="cat-picker-anim" id="picker-anim-${r.key}">
-            <div class="lottie-slot" style="width:68px;height:68px;"></div>
+    <div id="catPickerRoot">
+      <div class="cat-type-toggle-bar">
+        <button type="button" class="cat-toggle-pill ${chosenCat==='orange'?'active-orange':''}" id="pickerCatOrange">🐱 Orange Cat</button>
+        <button type="button" class="cat-toggle-pill ${chosenCat==='black'?'active-black':''}" id="pickerCatBlack">🐈‍⬛ Midnight Black Cat</button>
+      </div>
+      <p class="muted" style="text-align:center;font-size:12px;margin-bottom:10px;">Select an animated cat state to ping ${targetText}:</p>
+      <div class="cat-picker-grid">
+        ${CAT_REACTIONS.map(r => `
+          <div class="cat-picker-item ${chosenCat==='black'?'black-cat-active':''}" data-cat-pick="${r.key}">
+            <div class="cat-picker-anim" id="picker-anim-${r.key}">
+              <div class="lottie-slot" style="width:68px;height:68px;"></div>
+            </div>
+            <div class="cat-picker-title">${esc(r.title.split('/')[0].trim())}</div>
+            <div class="cat-picker-action">${esc(r.action)} 🐾</div>
           </div>
-          <div class="cat-picker-title">${esc(r.title.split('/')[0].trim())}</div>
-          <div class="cat-picker-action">${esc(r.action)} 🐾</div>
-        </div>
-      `).join('')}
+        `).join('')}
+      </div>
     </div>
   `;
 
@@ -2032,14 +2034,20 @@ function openCatReactionPicker(contextItem = null, targetName = null) {
     }
 
     const oBtn = document.getElementById('pickerCatOrange');
-    if (oBtn) oBtn.onclick = () => {
+    if (oBtn) oBtn.onclick = (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      if (chosenCat === 'orange') return;
       chosenCat = 'orange';
       data.settings.catType = 'orange';
       save();
       updateModalBody();
     };
     const bBtn = document.getElementById('pickerCatBlack');
-    if (bBtn) bBtn.onclick = () => {
+    if (bBtn) bBtn.onclick = (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      if (chosenCat === 'black') return;
       chosenCat = 'black';
       data.settings.catType = 'black';
       save();
@@ -2056,9 +2064,9 @@ function openCatReactionPicker(contextItem = null, targetName = null) {
   }
 
   function updateModalBody() {
-    const bodyEl = document.querySelector('#modalRoot .modal-body');
-    if (bodyEl) {
-      bodyEl.innerHTML = renderPickerContent();
+    const root = document.getElementById('catPickerRoot');
+    if (root) {
+      root.outerHTML = renderPickerContent();
       initPickerAnimations();
     }
   }

@@ -1,4 +1,4 @@
-const { app, BrowserWindow, ipcMain, dialog, Notification } = require('electron');
+const { app, BrowserWindow, ipcMain, dialog, Notification, Tray, Menu } = require('electron');
 const fs = require('node:fs');
 const path = require('node:path');
 const { spawn } = require('node:child_process');
@@ -46,9 +46,70 @@ function cleanupLegacyInstallation() {
 cleanupLegacyInstallation();
 
 let win;
+let tray = null;
+let isQuitting = false;
+let hasShownTrayTip = false;
 let updater;
 let updateState = { status: 'unavailable', version: app.getVersion(), message: 'Install a release build to receive updates.' };
 const file = () => path.join(app.getPath('userData'), 'ledger.json');
+
+const gotTheLock = app.requestSingleInstanceLock();
+if (!gotTheLock) {
+  app.quit();
+} else {
+  app.on('second-instance', () => {
+    showAndFocusWindow();
+  });
+}
+
+function showAndFocusWindow() {
+  if (!win || win.isDestroyed()) {
+    createWindow();
+    return;
+  }
+  if (win.isMinimized()) win.restore();
+  if (!win.isVisible()) win.show();
+  win.focus();
+}
+
+function createTray() {
+  if (tray) return;
+  const trayIconPath = path.join(__dirname, 'assets', 'gir-icon.png');
+  if (!fs.existsSync(trayIconPath)) return;
+  tray = new Tray(trayIconPath);
+  tray.setToolTip('MeowSheet · Active & Connected');
+
+  const contextMenu = Menu.buildFromTemplate([
+    {
+      label: 'Open MeowSheet',
+      click: () => {
+        showAndFocusWindow();
+      }
+    },
+    {
+      label: 'Check for updates…',
+      click: () => {
+        showAndFocusWindow();
+        if (updater) {
+          updater.checkForUpdates().catch(error => reportUpdate({ status: 'error', message: `Update check failed: ${error.message}` }));
+        }
+      }
+    },
+    { type: 'separator' },
+    {
+      label: 'Quit MeowSheet',
+      click: () => {
+        isQuitting = true;
+        app.quit();
+      }
+    }
+  ]);
+
+  tray.setContextMenu(contextMenu);
+  tray.on('click', () => showAndFocusWindow());
+  tray.on('double-click', () => showAndFocusWindow());
+}
+
 function reportUpdate(next) {
   updateState = { ...updateState, ...next };
   if (win && !win.isDestroyed()) win.webContents.send('update-state', updateState);
@@ -74,16 +135,70 @@ function initUpdates() {
   }
 }
 function createWindow() {
-  win = new BrowserWindow({ width: 1600, height: 980, minWidth: 1080, minHeight: 660, show: false,
-    backgroundColor: '#f7f8fa', title: 'MeowSheet', icon: path.join(__dirname, 'assets', 'gir-icon.png'),
-    webPreferences: { preload: path.join(__dirname, 'preload.cjs'), contextIsolation: true, nodeIntegration: false, sandbox: true } });
+  win = new BrowserWindow({
+    width: 1600,
+    height: 980,
+    minWidth: 1080,
+    minHeight: 660,
+    show: false,
+    backgroundColor: '#f7f8fa',
+    title: 'MeowSheet',
+    icon: path.join(__dirname, 'assets', 'gir-icon.png'),
+    webPreferences: {
+      preload: path.join(__dirname, 'preload.cjs'),
+      contextIsolation: true,
+      nodeIntegration: false,
+      sandbox: true,
+      backgroundThrottling: false
+    }
+  });
   win.setMenuBarVisibility(false);
   win.loadFile(path.join(__dirname, 'index.html'));
-  win.once('ready-to-show', () => { win.show(); reportUpdate({}); });
+  win.once('ready-to-show', () => {
+    const startHidden = process.argv.includes('--hidden') || process.argv.includes('--minimized');
+    if (!startHidden) {
+      win.show();
+      reportUpdate({});
+    }
+  });
   win.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
+
+  win.on('close', (event) => {
+    if (!isQuitting) {
+      event.preventDefault();
+      win.hide();
+      if (!hasShownTrayTip && tray) {
+        hasShownTrayTip = true;
+        tray.displayBalloon?.({
+          iconType: 'info',
+          title: 'MeowSheet is running in the background',
+          content: 'You will stay connected and receive partner updates and cat reactions. Right-click the cat tray icon to quit.'
+        });
+      }
+      return false;
+    }
+  });
 }
-app.whenReady().then(() => { createWindow(); initUpdates(); app.on('activate', () => { if (!BrowserWindow.getAllWindows().length) createWindow(); }); });
-app.on('window-all-closed', () => { if (process.platform !== 'darwin') app.quit(); });
+app.whenReady().then(() => {
+  createTray();
+  createWindow();
+  initUpdates();
+  if (app.isPackaged) {
+    try {
+      app.setLoginItemSettings({ openAtLogin: true, openAsHidden: true });
+    } catch {}
+  }
+  app.on('activate', () => {
+    if (!BrowserWindow.getAllWindows().length) createWindow();
+    else showAndFocusWindow();
+  });
+});
+app.on('before-quit', () => {
+  isQuitting = true;
+});
+app.on('window-all-closed', () => {
+  if (process.platform !== 'darwin' && isQuitting) app.quit();
+});
 ipcMain.handle('read-store', () => { try { return JSON.parse(fs.readFileSync(file(), 'utf8')); } catch { return null; } });
 ipcMain.handle('write-store', (_e, value) => {
   if (!value || JSON.stringify(value).length > 30_000_000) throw new Error('Invalid or oversized data');
@@ -148,4 +263,8 @@ ipcMain.handle('updates-install', () => {
   if (!updater || updateState.status !== 'ready') return false;
   setImmediate(() => updater.quitAndInstall(false, true));
   return true;
+});
+ipcMain.handle('app-quit', () => {
+  isQuitting = true;
+  app.quit();
 });

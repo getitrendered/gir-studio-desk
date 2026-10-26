@@ -7,6 +7,7 @@ contextBridge.exposeInMainWorld('desk', {
   notify: (title, body) => ipcRenderer.invoke('show-notification', { title, body }),
   isFocused: () => ipcRenderer.invoke('is-window-focused'),
   getWindowState: () => ipcRenderer.invoke('get-window-state'),
+  quit: () => ipcRenderer.invoke('app-quit'),
   updates: {
     state: () => ipcRenderer.invoke('updates-state'),
     check: () => ipcRenderer.invoke('updates-check'),
