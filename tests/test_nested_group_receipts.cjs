@@ -170,4 +170,61 @@ console.log('Testing Nested Groups and Revenue Receipts Consolidation...');
   console.log('✓ Test 4: Unmarking deal items adjusts or deletes the deal receipt');
 })();
 
+// Test 5: Redundant or orphaned receipt for an item that is part of a deal group (e.g. PODIUM) is ignored and cleaned up
+(() => {
+  const ctx = setupTestEnvironment();
+
+  // Deal g1 has i1 (ARCH FLEX) and i2 (PHOTOBOOTH)
+  // Add a deal item PODIUM to g1
+  ctx.data.items.push({
+    id: 'i-podium',
+    clientId: 'c1',
+    projectGroupId: 'p1',
+    groupId: 'g1',
+    service: 'PODIUM',
+    quantity: 1,
+    rate: 500,
+    quotedTotal: 500,
+    advanceAmount: 0,
+    status: 'paid'
+  });
+
+  // Deal g1 is marked paid
+  ctx.data.receipts.push({
+    id: 'deal-g1-receipt',
+    clientId: 'c1',
+    clientName: 'TAYARI EVENTS',
+    amount: 7000,
+    receivedMonth: '2026-10-01',
+    receivedOn: '2026-10-26',
+    referenceKind: 'deal',
+    referenceId: 'g1',
+    description: 'RAMLEELA EVENT 2026'
+  });
+
+  // Also simulate an orphaned/legacy receipt for PODIUM 500
+  ctx.data.receipts.push({
+    id: 'ghost-podium-receipt',
+    clientId: 'c1',
+    clientName: 'TAYARI EVENTS',
+    amount: 500,
+    receivedMonth: '2026-10-01',
+    receivedOn: '2026-10-26',
+    referenceKind: 'item',
+    referenceId: 'old-podium-id',
+    description: 'PODIUM'
+  });
+
+  // 1. receiptEffectiveAmount returns 0 for the ghost receipt so Revenue ignores it
+  const ghostAmt = vm.runInContext("receiptEffectiveAmount(data.receipts.find(r => r.id === 'ghost-podium-receipt'))", ctx);
+  assert.equal(ghostAmt, 0, 'Ghost receipt for PODIUM returns 0 because PODIUM is in deal group g1');
+
+  // 2. consolidateAllReceipts removes the ghost receipt completely
+  vm.runInContext("consolidateAllReceipts()", ctx);
+  assert.equal(ctx.data.receipts.some(r => r.id === 'ghost-podium-receipt'), false, 'Ghost PODIUM receipt deleted by consolidateAllReceipts');
+  assert.ok(ctx.data.pendingDeletes.some(d => d.id === 'ghost-podium-receipt'), 'Queued in pendingDeletes for Supabase removal');
+
+  console.log('✓ Test 5: Redundant or orphaned receipt for an item in a deal group (PODIUM) is ignored and cleaned up');
+})();
+
 console.log('\nALL NESTED GROUPS AND REVENUE RECEIPT TESTS PASSED! 🎉');

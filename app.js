@@ -147,7 +147,14 @@ function receiptEffectiveAmount(r) {
   const item = receiptEffectiveItem(r);
   if (item) {
     if (item.status !== 'paid') return 0;
+    if (item.groupId) return 0;
     return Math.max(0, effectiveItemValue(item) - num(item.advanceAmount));
+  }
+  if (r.referenceKind === 'item' || (r.source === 'app' && r.sourceKey && r.sourceKey.startsWith('app:'))) {
+    const dealItems = (data.items || []).filter(i => i.groupId);
+    if (dealItems.some(di => di.clientId === r.clientId && di.service && di.service.trim().toLowerCase() === (r.description || '').trim().toLowerCase())) {
+      return 0;
+    }
   }
   if (r.referenceKind === 'invoice' && r.referenceId) {
     const inv = data.invoices.find(x => x.id === r.referenceId);
@@ -1717,6 +1724,24 @@ function consolidateAllReceipts() {
   }
   for (const [pid] of projectReceiptsMap.entries()) {
     syncProjectReceipt(pid);
+  }
+
+  const dealItems = (data.items || []).filter(i => i.groupId);
+  const receiptsToRemove = [];
+  for (const r of data.receipts) {
+    if (r.referenceKind === 'deal' || r.referenceKind === 'project' || r.referenceKind === 'invoice') continue;
+    const item = (r.referenceKind === 'item' && r.referenceId)
+      ? data.items.find(i => i.id === r.referenceId)
+      : (r.source === 'app' && r.sourceKey && r.sourceKey.startsWith('app:') ? data.items.find(i => i.id === r.sourceKey.slice(4)) : null);
+    if (item && item.groupId) {
+      receiptsToRemove.push(r.id);
+    } else if (!item && (r.referenceKind === 'item' || (r.source === 'app' && r.sourceKey && r.sourceKey.startsWith('app:')))) {
+      const match = dealItems.find(di => di.clientId === r.clientId && di.service && di.service.trim().toLowerCase() === (r.description || '').trim().toLowerCase());
+      if (match) receiptsToRemove.push(r.id);
+    }
+  }
+  for (const rid of receiptsToRemove) {
+    removeReceipt(rid);
   }
 }
 function syncItemReceipt(item) {
