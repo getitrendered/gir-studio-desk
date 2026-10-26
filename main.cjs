@@ -45,6 +45,49 @@ function cleanupLegacyInstallation() {
 }
 cleanupLegacyInstallation();
 
+const cachedIconPath = path.join(targetUserData, 'gir-icon.png');
+try {
+  const unpackedIcon = path.join(process.resourcesPath || '', 'app.asar.unpacked', 'assets', 'gir-icon.png');
+  const sourceIcon = fs.existsSync(unpackedIcon) ? unpackedIcon : path.join(__dirname, 'assets', 'gir-icon.png');
+  if (fs.existsSync(sourceIcon) && !fs.existsSync(cachedIconPath)) {
+    fs.copyFileSync(sourceIcon, cachedIconPath);
+  }
+} catch {}
+
+function ensureNotificationBannerSettings() {
+  if (process.platform !== 'win32') return;
+  try {
+    const regKey = 'HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Notifications\\Settings\\com.meowsheet.app';
+    const values = [
+      ['ShowBanner', '1'],
+      ['Enabled', '1'],
+      ['ShowInActionCenter', '1'],
+      ['Sound', '1']
+    ];
+    for (const [name, val] of values) {
+      spawn('reg.exe', ['add', regKey, '/v', name, '/t', 'REG_DWORD', '/d', val, '/f'], {
+        windowsHide: true,
+        stdio: 'ignore'
+      }).unref();
+    }
+  } catch {}
+}
+ensureNotificationBannerSettings();
+
+function escapeXml(unsafe) {
+  if (!unsafe) return '';
+  return String(unsafe).replace(/[<>&'"]/g, c => {
+    switch (c) {
+      case '<': return '&lt;';
+      case '>': return '&gt;';
+      case '&': return '&amp;';
+      case '\'': return '&apos;';
+      case '"': return '&quot;';
+      default: return c;
+    }
+  });
+}
+
 let win;
 let tray = null;
 let isQuitting = false;
@@ -221,11 +264,48 @@ ipcMain.handle('choose-workbook', async () => {
 ipcMain.handle('print-invoice', async () => { if (!win) return; await win.webContents.print({ silent: false, printBackground: true }); });
 ipcMain.handle('show-notification', (_e, { title, body }) => {
   if (Notification && Notification.isSupported()) {
-    const notif = new Notification({
-      title: title || 'MeowSheet',
-      body: body || '',
-      icon: path.join(__dirname, 'assets', 'gir-icon.png')
-    });
+    const cleanTitle = title || 'MeowSheet';
+    const cleanBody = body || '';
+    const iconFile = fs.existsSync(cachedIconPath) ? cachedIconPath : path.join(__dirname, 'assets', 'gir-icon.png');
+
+    // Windows Toast XML with scenario="reminder" forces Windows 10/11 Notification Manager
+    // to pop up an interactive banner on screen and play the audio chime instead of
+    // silently suppressing it into the Action Center.
+    const toastXml = `
+<toast scenario="reminder">
+  <visual>
+    <binding template="ToastGeneric">
+      <text hint-maxLines="1">${escapeXml(cleanTitle)}</text>
+      <text>${escapeXml(cleanBody)}</text>
+      <image placement="appLogoOverride" src="${iconFile}"/>
+    </binding>
+  </visual>
+  <audio src="ms-winsoundevent:Notification.Default"/>
+</toast>
+`.trim();
+
+    let notif;
+    try {
+      notif = new Notification({
+        title: cleanTitle,
+        body: cleanBody,
+        icon: iconFile,
+        urgency: 'critical',
+        timeoutType: 'default',
+        silent: false,
+        toastXml: toastXml
+      });
+    } catch {
+      notif = new Notification({
+        title: cleanTitle,
+        body: cleanBody,
+        icon: iconFile,
+        urgency: 'critical',
+        timeoutType: 'default',
+        silent: false
+      });
+    }
+
     notif.on('click', () => {
       if (win && !win.isDestroyed()) {
         if (win.isMinimized()) win.restore();
@@ -233,7 +313,29 @@ ipcMain.handle('show-notification', (_e, { title, body }) => {
         win.focus();
       }
     });
-    notif.show();
+
+    try {
+      notif.show();
+    } catch {
+      try {
+        const fallback = new Notification({
+          title: cleanTitle,
+          body: cleanBody,
+          icon: iconFile,
+          urgency: 'critical',
+          timeoutType: 'default',
+          silent: false
+        });
+        fallback.on('click', () => {
+          if (win && !win.isDestroyed()) {
+            if (win.isMinimized()) win.restore();
+            if (!win.isVisible()) win.show();
+            win.focus();
+          }
+        });
+        fallback.show();
+      } catch {}
+    }
     return true;
   }
   return false;
