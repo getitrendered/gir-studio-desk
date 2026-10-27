@@ -6,7 +6,13 @@ const projectDir = path.resolve(__dirname, '..');
 
 console.log('Testing Cat Reactions & Team Ping System...');
 
-const expectedKeys = ['happy', 'working', 'depressed', 'angry', 'sleepy', 'shocked', 'love'];
+const expectedKeys = [
+  'happy', 'working', 'depressed', 'angry', 'sleepy', 'shocked', 'love',
+  'shy', 'proud', 'pleading', 'sparkle', 'chill', 'curious', 'confused',
+  'idea', 'derp', 'dizzy', 'sweating', 'freeze', 'singing', 'gentleman', 'confident'
+];
+
+assert.strictEqual(expectedKeys.length, 22, 'There must be exactly 22 reactions');
 
 // 1. Check Orange Cat files (both Lottie JSON and WebP)
 for (const k of expectedKeys) {
@@ -15,18 +21,26 @@ for (const k of expectedKeys) {
   const json = JSON.parse(fs.readFileSync(pJson, 'utf8'));
   assert(json.fr === 60, `${k}.json frame rate should be 60`);
   assert(json.w === 512 && json.h === 512, `${k}.json should be 512x512`);
-}
-console.log('✔ All 7 Orange Cat twin vector Lottie files verified (60fps 512x512)');
 
-// 2. Check Black Cat Lottie files
+  const pWebp = path.join(projectDir, 'assets/cats/orange', `${k}.webp`);
+  assert(fs.existsSync(pWebp), `Missing assets/cats/orange/${k}.webp`);
+  assert(fs.statSync(pWebp).size > 500, `${k}.webp is too small or empty`);
+}
+console.log('✔ All 22 Orange Cat twin vector Lottie & WebP files verified (60fps 512x512)');
+
+// 2. Check Black Cat Lottie & WebP files
 for (const k of expectedKeys) {
-  const p = path.join(projectDir, 'assets/cats/black', `${k}.json`);
-  assert(fs.existsSync(p), `Missing assets/cats/black/${k}.json`);
-  const json = JSON.parse(fs.readFileSync(p, 'utf8'));
+  const pJson = path.join(projectDir, 'assets/cats/black', `${k}.json`);
+  assert(fs.existsSync(pJson), `Missing assets/cats/black/${k}.json`);
+  const json = JSON.parse(fs.readFileSync(pJson, 'utf8'));
   assert(json.fr === 60, `${k}.json frame rate should be 60`);
   assert(json.w === 512 && json.h === 512, `${k}.json should be 512x512`);
+
+  const pWebp = path.join(projectDir, 'assets/cats/black', `${k}.webp`);
+  assert(fs.existsSync(pWebp), `Missing assets/cats/black/${k}.webp`);
+  assert(fs.statSync(pWebp).size > 500, `${k}.webp is too small or empty`);
 }
-console.log('✔ All 7 Black Cat Lottie JSON files verified (authentic 60fps 512x512 vector animations)');
+console.log('✔ All 22 Black Cat Lottie & WebP files verified (authentic 60fps 512x512 vector animations)');
 
 // 3. Check vendor/lottie.min.js & index.html
 const lottiePath = path.join(projectDir, 'vendor/lottie.min.js');
@@ -56,6 +70,12 @@ assert(!appJs.includes('data-cat-ping='), 'cards must NOT contain individual cat
 assert(appJs.includes("event: 'cat_reaction'"), 'app.js subscribe() must listen for cat_reaction broadcasts');
 assert(appJs.includes('isAppFocused'), 'app.js must perform smart focus detection');
 assert(appJs.includes("workspaceId:'17f39873-e10f-4bdf-93ee-1f92b3e25251'"), 'workspaceId must be permanently defaulted to GIR_WORKSPACE_ID');
-console.log('✔ app.js Cat Reaction, smart notification, and workspace persistence verified');
 
-console.log('\nAll Cat Reaction tests passed with flying colors! 🐾');
+// 6. Check Online Presence Notification integration
+assert(appJs.includes('handleUserOnline'), 'app.js must define handleUserOnline');
+assert(appJs.includes('lastOnlineAlerts'), 'app.js must debounce online alerts');
+assert(appJs.includes("event: 'user_online'"), 'app.js subscribe() must listen for user_online broadcasts');
+assert(appJs.includes("channel.track"), 'app.js subscribe() must track user presence');
+console.log('✔ Mutual Online Presence Notification system verified in app.js');
+
+console.log('\nAll 22 Cat Reaction & Online Presence tests passed with flying colors! 🐾');

@@ -575,6 +575,9 @@ button:disabled,select:disabled,[role="button"][aria-disabled="true"],[role="opt
   grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
   gap: 12px;
   margin-top: 14px;
+  max-height: 520px;
+  overflow-y: auto;
+  padding: 4px;
 }
 .cat-picker-item {
   background: #f8fafc;

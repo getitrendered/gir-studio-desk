@@ -1884,7 +1884,22 @@ const CAT_REACTIONS = [
   { key: 'angry', title: 'Angry / Rage Mode', action: 'Hiss', message: 'The cat is angry and hissing! 😾' },
   { key: 'sleepy', title: 'Sleepy / Napping', action: 'Zzz', message: 'The cat is taking a quick power nap! 💤' },
   { key: 'shocked', title: 'Shocked / Alert', action: 'Gasp', message: 'The cat is in shock! Production alert! 🙀' },
-  { key: 'love', title: 'Love / Appreciated', action: 'Heart', message: 'The cat is sending huge love & thanks! 😻' }
+  { key: 'love', title: 'Love / Appreciated', action: 'Heart', message: 'The cat is sending huge love & thanks! 😻' },
+  { key: 'shy', title: 'Shy / Blushing', action: 'Blush', message: 'The cat is blushing shyly! 😳' },
+  { key: 'proud', title: 'Proud / Overjoyed', action: 'Cheer', message: 'The cat is so proud of this work! 🌟' },
+  { key: 'pleading', title: 'Pleading / Begging', action: 'Beg', message: 'Pretty please with tuna on top? 🥺' },
+  { key: 'sparkle', title: 'Amazed / Starry Eyes', action: 'Dazzle', message: 'Starstruck and sparkling with awe! ✨' },
+  { key: 'chill', title: 'Chill / Relaxed', action: 'Relax', message: 'Total chill vibes, zero stress today! 🌸' },
+  { key: 'curious', title: 'Curious / Head Tilt', action: 'Inspect', message: "Curious head tilt: what's going on here? 🧐" },
+  { key: 'confused', title: 'Confused / Question Marks', action: 'Ponder', message: 'Thoroughly confused... need explanation??? ❓' },
+  { key: 'idea', title: 'Idea / Eureka Alert', action: 'Notice', message: 'Alert! A brilliant idea just struck! 💡' },
+  { key: 'derp', title: 'Derp / Silly Goof', action: 'Goof', message: 'No thoughts, head completely empty! 🤪' },
+  { key: 'dizzy', title: 'Dizzy / Spiral Eyes', action: 'Spin', message: 'Looking at too many spreadsheets, eyes spinning! 🌀' },
+  { key: 'sweating', title: 'Nervous / Awkward Giggle', action: 'Nervous', message: 'Hehe... smiling through the deadline sweat! 😅' },
+  { key: 'freeze', title: 'Freezing / Shivering Panic', action: 'Shiver', message: 'Freezing cold panic! Production freeze! 🥶' },
+  { key: 'singing', title: 'Singing / Meow Anthem', action: 'Sing', message: 'Singing the work victory anthem at top volume! 🎤' },
+  { key: 'gentleman', title: 'Gentleman / Sir Paws', action: 'Fancy', message: 'Quite distinguished! Very classy gentleman! 🎩' },
+  { key: 'confident', title: 'Confident / Smooth Wink', action: 'Wink', message: 'Nailed it smoothly! Looking sharp! 😎' }
 ];
 
 let catLottieCache = {};
@@ -2035,7 +2050,7 @@ function openCatReactionPicker(contextItem = null, targetName = null) {
     </div>
   `;
 
-  modal('🐾 Animated Cat Reaction & Team Ping', renderPickerContent(), '');
+  modal('🐾 Animated Cat Reaction & Team Ping', renderPickerContent(), '', true);
 
   function initPickerAnimations() {
     if (window.bodymovin) {
@@ -2907,6 +2922,47 @@ async function pullRemote(){
   render();
   updateSyncUI();
 }
+const lastOnlineAlerts = {};
+async function handleUserOnline({ userId, displayName, catType, replyRequested }) {
+  if (!userId || userId === currentUserId()) return;
+  const now = Date.now();
+  if (lastOnlineAlerts[userId] && now - lastOnlineAlerts[userId] < 60000) {
+    return;
+  }
+  lastOnlineAlerts[userId] = now;
+
+  const partnerName = displayName || data.settings.localPartner || 'Teammate';
+  await smartNotify({
+    title: `🐾 ${partnerName} is online!`,
+    body: `${partnerName} is online on MeowSheet. Meow~ 🐾`,
+    icon: '🐾',
+    catPayload: {
+      senderId: userId,
+      senderName: partnerName,
+      catType: catType || 'orange',
+      reactionKey: 'happy',
+      message: `${partnerName} is online on MeowSheet! Meow~ 🐾`
+    }
+  });
+
+  // Reply back if the newcomer requested replies, so they learn we are already active!
+  if (replyRequested && channel) {
+    try {
+      await channel.send({
+        type: 'broadcast',
+        event: 'user_online',
+        payload: {
+          userId: currentUserId(),
+          displayName: data.settings.displayName || 'Samuel',
+          catType: data.settings.catType || 'orange',
+          timestamp: Date.now(),
+          replyRequested: false
+        }
+      });
+    } catch {}
+  }
+}
+
 function subscribe(){
   if(!clientApi||!session||!data.settings.workspaceId)return;
   if(channel)clientApi.removeChannel(channel);
@@ -2919,6 +2975,25 @@ function subscribe(){
       body: payload.message || 'Cat reaction sent!',
       catPayload: payload
     });
+  });
+
+  channel.on('broadcast', { event: 'user_online' }, async ({ payload }) => {
+    if (!payload) return;
+    await handleUserOnline(payload);
+  });
+
+  channel.on('presence', { event: 'join' }, async ({ newPresences }) => {
+    if (!Array.isArray(newPresences)) return;
+    for (const p of newPresences) {
+      if (p.userId && p.userId !== currentUserId()) {
+        await handleUserOnline({
+          userId: p.userId,
+          displayName: p.displayName || p.userName,
+          catType: p.catType,
+          replyRequested: false
+        });
+      }
+    }
   });
   
   for(const table of ['clients','deal_groups','project_groups','work_items','invoices','payment_receipts','members']){
@@ -2948,7 +3023,36 @@ function subscribe(){
       timer=setTimeout(()=>{pullRemote().catch(e=>toast('Live refresh failed: '+e.message));},250);
     });
   }
-  channel.subscribe(status=>{if(status==='CHANNEL_ERROR'||status==='TIMED_OUT')toast('Live connection interrupted; use Sync now');});
+  channel.subscribe(async status => {
+    if (status === 'SUBSCRIBED') {
+      try {
+        await channel.track({
+          userId: currentUserId(),
+          displayName: data.settings.displayName || 'Samuel',
+          catType: data.settings.catType || 'orange',
+          onlineAt: Date.now()
+        });
+      } catch {}
+
+      try {
+        await channel.send({
+          type: 'broadcast',
+          event: 'user_online',
+          payload: {
+            userId: currentUserId(),
+            displayName: data.settings.displayName || 'Samuel',
+            catType: data.settings.catType || 'orange',
+            timestamp: Date.now(),
+            replyRequested: true
+          }
+        });
+      } catch (err) {
+        console.warn('Presence broadcast error:', err);
+      }
+    } else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
+      toast('Live connection interrupted; use Sync now');
+    }
+  });
 }
 function updateSyncUI(){
   const btn=$('#topSyncBtn');
