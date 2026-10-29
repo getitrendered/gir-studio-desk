@@ -34,6 +34,7 @@ function setupTestEnvironment() {
     filter: 'all',
     unreadChatCount: 0,
     lastPartnerOnlineTime: 0,
+    chatDraftText: '',
     pendingChatAttachment: null,
     activeStickerTab: 'moving',
     stickerSearchQuery: '',
@@ -96,6 +97,7 @@ function setupTestEnvironment() {
             remove: () => {},
             toggle: () => {}
           },
+          focus: () => {},
           addEventListener: () => {},
           removeEventListener: () => {}
         };
@@ -153,12 +155,11 @@ function setupTestEnvironment() {
 
 console.log('Testing Team Chat, Work Sharing, and Cat Stickers...');
 
-// Test 1: Catalogs have 30 reactions and 120+ moving and static stickers
+// Test 1: Catalogs have 30 reactions and 51 unique non-repeating animated moving stickers
 {
   const ctx = setupTestEnvironment();
   assert.equal(ctx.CAT_REACTIONS.length, 30, 'Should have all 30 reactions');
-  assert.equal(ctx.ALL_CAT_MOVING_STICKERS.length, 120, 'Should have 120 moving stickers (30 x 4 colors)');
-  assert.equal(ctx.ALL_CAT_STATIC_STICKERS.length, 120, 'Should have 120 static stickers (30 x 4 colors)');
+  assert.equal(ctx.ALL_CAT_MOVING_STICKERS.length, 51, 'Should have 51 unique non-repeating moving stickers');
   
   // Verify moving stickers point to assets/cats/moving/ and isAnimated is true
   ctx.ALL_CAT_MOVING_STICKERS.forEach(s => {
@@ -167,14 +168,14 @@ console.log('Testing Team Chat, Work Sharing, and Cat Stickers...');
     assert(fs.existsSync(path.join(__dirname, '..', s.url)), `${s.url} must exist on disk`);
   });
 
-  // Verify static stickers point to assets/cats/static/ and isAnimated is false
-  ctx.ALL_CAT_STATIC_STICKERS.forEach(s => {
-    assert.equal(s.isAnimated, false, `${s.id} static must not be animated`);
-    assert(s.url.startsWith('assets/cats/static/'), `${s.id} url must point to assets/cats/static/`);
-    assert(fs.existsSync(path.join(__dirname, '..', s.url)), `${s.url} must exist on disk`);
+  // Verify zero duplicate IDs in the catalog
+  const seenIds = new Set();
+  ctx.ALL_CAT_MOVING_STICKERS.forEach(s => {
+    assert(!seenIds.has(s.id), `Duplicate sticker id ${s.id}`);
+    seenIds.add(s.id);
   });
 
-  console.log(`✓ Test 1: Cat catalogs verified (30 reactions, ${ctx.ALL_CAT_MOVING_STICKERS.length} moving, ${ctx.ALL_CAT_STATIC_STICKERS.length} static on disk)`);
+  console.log(`✓ Test 1: Cat catalogs verified (30 reactions, ${ctx.ALL_CAT_MOVING_STICKERS.length} unique moving stickers on disk)`);
 }
 
 // Test 2: Dual in-app reaction banners position on right for self and left for partner
@@ -278,10 +279,10 @@ console.log('Testing Team Chat, Work Sharing, and Cat Stickers...');
   assert.equal(msg.sticker.key, 'party');
   assert.equal(msg.sticker.format, 'image');
   assert.equal(msg.sticker.isAnimated, true);
-  assert.equal(msg.sticker.url, 'assets/cats/moving/orange/party.webp');
+  assert.equal(msg.sticker.url, 'assets/cats/moving/black/party.webp');
 
   const threadHtml = ctx.renderChatMessagesList(ctx.data.chatMessages);
-  assert(threadHtml.includes('assets/cats/moving/orange/party.webp'));
+  assert(threadHtml.includes('assets/cats/moving/black/party.webp'));
   assert(threadHtml.includes('chat-sticker-img'));
   console.log('✓ Test 5: Cat sticker messaging and WebP bubble rendering verified');
 }

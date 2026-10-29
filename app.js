@@ -10,7 +10,7 @@ const fmtDate = d => { if (!d) return '—'; const x = new Date(d + 'T00:00:00')
 const defaults = { clients:[], groups:[], projectGroups:[], items:[], invoices:[], receipts:[], members:[], chatMessages:[], pending:[], settings:{ seller:{ name:'GIR — Get It Rendered', address:'', email:'', phone:'', taxId:'', bankDetails:'', bankAccounts:[], activeBankAccountId:'', logoData:'' }, url:'https://isdxybpeagloikchhsbp.supabase.co', key:'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImlzZHh5YnBlYWdsb2lrY2hoc2JwIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTI1NzkzMjcsImV4cCI6MjEwODE1NTMyN30.ll1YG9uyrTqmLzE90miCk-O1Ab5VkBPfqrCPDDUc5u8', workspaceId:'17f39873-e10f-4bdf-93ee-1f92b3e25251', displayName:'Samuel', localPartner:'Mezrid', avatarData:'', partnerAvatarData:'', catType:'orange', zoom:100 } };
 const GIR_WORKSPACE_ID='17f39873-e10f-4bdf-93ee-1f92b3e25251';
 let data = structuredClone(defaults), tab = 'sheet', lastRenderedTab = null, lastRenderedClient = null, activeClient = null, selected = new Set(), selectionAnchor = null, selectionCell = null, collapsedGroups = new Set(), blankRows = 60, highlightUser = null, filter = 'all', clientApi = null, session = null, channel = null, syncing = false, toastTimer, syncTimer, lastSyncTime = Date.now(), importPreview = null, previewClientIndex = 0, migrating = false;
-let pendingChatAttachment = null, activeStickerTab = 'moving', stickerSearchQuery = '', lastPartnerOnlineTime = 0, unreadChatCount = 0, chatSyncTimer = null;
+let pendingChatAttachment = null, chatDraftText = '', activeStickerTab = 'stickers', stickerSearchQuery = '', lastPartnerOnlineTime = 0, unreadChatCount = 0, chatSyncTimer = null;
 let authLoading=true,workspaceReady=false,workspaceResolving=false,accessMode='signin',accessError='',activeStatusMenu=null;
 let desktopUpdate = { status: 'unavailable', message: 'Checking update support…' };
 const navHistory = [];
@@ -280,6 +280,11 @@ function render() {
   }
   $('#app').classList.remove('access-mode');const tabsH=$('#tabsHeader')||$('#tabs');if(tabsH)tabsH.hidden=false;$('.client-tabs').hidden=false;
   $('#app').classList.toggle('sheet-mode',tab==='sheet');
+  $('#app').classList.toggle('chat-mode', tab==='chat');
+  const currentChatInput = document.getElementById('chatInputText');
+  if (currentChatInput) {
+    chatDraftText = currentChatInput.value;
+  }
   const live = !!(clientApi && session && data.settings.workspaceId);
   $$('#tabs button').forEach(b => b.classList.toggle('active', b.dataset.tab === tab));
   renderClients();
@@ -1163,7 +1168,7 @@ function bindMain() {
   $$('[data-receipt-ungroup]').forEach(b=>b.onclick=()=>jumpAndUngroupReceipt(b.dataset.receiptUngroup));
   const viewport=$('.sheet-viewport');if(tab==='sheet'&&viewport)viewport.onscroll=()=>{if(filter==='all'&&viewport.scrollHeight-viewport.scrollTop-viewport.clientHeight<700){blankRows+=40;render();}};
   $$('[data-group-edit]').forEach(b=>b.onclick=()=>groupDialog(b.dataset.groupEdit));
-  $$('[data-rename-card]').forEach(b=>b.onclick=()=>{const card=b.closest('.group-card');card.querySelector('[data-open-group]').hidden=true;b.hidden=true;const editor=card.querySelector('.group-card-editor');editor.hidden=false;const input=editor.querySelector('input');input.focus();input.select();});
+  $$('[data-rename-card]').forEach(b=>b.onclick=()=>{const card=b.closest('.group-card');card.querySelector('[data-open-group]').hidden=true;b.hidden=true;const editor=card.querySelector('.group-card-editor');editor.hidden=false;const input=editor.querySelector('input');if (typeof input.focus === 'function') input.focus();input.select();});
   $$('[data-cancel-card]').forEach(b=>b.onclick=()=>{const card=b.closest('.group-card');card.querySelector('.group-card-editor').hidden=true;card.querySelector('[data-open-group]').hidden=false;card.querySelector('[data-rename-card]').hidden=false;});
   $$('[data-save-card]').forEach(b=>{const saveName=()=>{const [kind,id]=b.dataset.saveCard.split(':'),table=kind==='project'?'projectGroups':'groups',group=data[table].find(g=>g.id===id),name=b.closest('.group-card-editor').querySelector('input').value.trim();if(!group)return;if(!name){toast('Enter a group name');return;}if(name===group.label){b.closest('.group-card-editor').querySelector('[data-cancel-card]').click();return;}const scroll=$('#main').scrollTop;group.label=name;mutate(table,group);$('#main').scrollTop=scroll;toast('Group renamed');};b.onclick=saveName;b.closest('.group-card-editor').querySelector('input').onkeydown=e=>{if(e.key==='Enter')saveName();if(e.key==='Escape')b.closest('.group-card-editor').querySelector('[data-cancel-card]').click();};});
   $$('[data-open-group]').forEach(b=>b.onclick=()=>{const [kind,id]=b.dataset.openGroup.split(':');const group=(kind==='project'?data.projectGroups:data.groups).find(g=>g.id===id);if(!group)return;activeClient=group.clientId;filter='all';collapsedGroups.delete(kind+':'+id);tab='sheet';render();setTimeout(()=>document.querySelector(`[data-group-collapse="${kind}:${id}"]`)?.scrollIntoView({block:'center'}),50);});
@@ -1988,7 +1993,7 @@ const CAT_REACTIONS = [
   { key: 'thumbsup', title: 'Thumbs Up / Approved', action: 'Approve', message: 'Paws up! 100% approved! 👍' }
 ];
 
-// 60+ Moving / Animated and 60+ Static Cat Stickers Catalogs
+// 51 Unique Non-Repeating Animated Moving Stickers (Zero duplicates)
 const CAT_STICKER_COLORS = [
   { id: 'orange', name: 'Ginger Cat' },
   { id: 'black', name: 'Midnight Cat' },
@@ -1996,35 +2001,104 @@ const CAT_STICKER_COLORS = [
   { id: 'white', name: 'Snow Persian' }
 ];
 
-const ALL_CAT_MOVING_STICKERS = [];
-const ALL_CAT_STATIC_STICKERS = [];
+const CORE_BREED_KEYS = ['happy', 'working', 'depressed', 'angry', 'sleepy', 'shocked', 'love'];
 
-CAT_STICKER_COLORS.forEach(col => {
-  CAT_REACTIONS.forEach(r => {
-    ALL_CAT_MOVING_STICKERS.push({
-      id: `${col.id}:${r.key}`,
-      key: r.key,
-      color: col.id,
-      colorName: col.name,
-      title: `${r.title.split('/')[0].trim()} (${col.name})`,
+const ALL_CAT_STICKERS = [];
+
+// 1. 7 Ginger Cats (Orange)
+CORE_BREED_KEYS.forEach(k => {
+  const r = CAT_REACTIONS.find(x => x.key === k);
+  if (r) {
+    ALL_CAT_STICKERS.push({
+      id: `orange:${k}`,
+      key: k,
+      color: 'orange',
+      colorName: 'Ginger Cat',
+      title: `${r.title.split('/')[0].trim()} (Ginger)`,
+      action: r.action,
       message: r.message,
       format: 'image',
-      url: `assets/cats/moving/${col.id}/${r.key}.webp`,
+      url: `assets/cats/moving/orange/${k}.webp`,
       isAnimated: true
     });
-    ALL_CAT_STATIC_STICKERS.push({
-      id: `${col.id}:${r.key}`,
-      key: r.key,
-      color: col.id,
-      colorName: col.name,
-      title: `${r.title.split('/')[0].trim()} (${col.name})`,
+  }
+});
+
+// 2. 7 Midnight Cats (Black)
+CORE_BREED_KEYS.forEach(k => {
+  const r = CAT_REACTIONS.find(x => x.key === k);
+  if (r) {
+    ALL_CAT_STICKERS.push({
+      id: `black:${k}`,
+      key: k,
+      color: 'black',
+      colorName: 'Midnight Cat',
+      title: `${r.title.split('/')[0].trim()} (Midnight)`,
+      action: r.action,
       message: r.message,
       format: 'image',
-      url: `assets/cats/static/${col.id}/${r.key}.webp`,
-      isAnimated: false
+      url: `assets/cats/moving/black/${k}.webp`,
+      isAnimated: true
     });
+  }
+});
+
+// 3. 7 Calico Cats (Calico)
+CORE_BREED_KEYS.forEach(k => {
+  const r = CAT_REACTIONS.find(x => x.key === k);
+  if (r) {
+    ALL_CAT_STICKERS.push({
+      id: `calico:${k}`,
+      key: k,
+      color: 'calico',
+      colorName: 'Calico Cat',
+      title: `${r.title.split('/')[0].trim()} (Calico)`,
+      action: r.action,
+      message: r.message,
+      format: 'image',
+      url: `assets/cats/moving/calico/${k}.webp`,
+      isAnimated: true
+    });
+  }
+});
+
+// 4. 7 Snow Persian Cats (White)
+CORE_BREED_KEYS.forEach(k => {
+  const r = CAT_REACTIONS.find(x => x.key === k);
+  if (r) {
+    ALL_CAT_STICKERS.push({
+      id: `white:${k}`,
+      key: k,
+      color: 'white',
+      colorName: 'Snow Persian',
+      title: `${r.title.split('/')[0].trim()} (Snow)`,
+      action: r.action,
+      message: r.message,
+      format: 'image',
+      url: `assets/cats/moving/white/${k}.webp`,
+      isAnimated: true
+    });
+  }
+});
+
+// 5. 23 Kuro Black Cat Emotion Animations
+CAT_REACTIONS.slice(7).forEach(r => {
+  ALL_CAT_STICKERS.push({
+    id: `black:${r.key}`,
+    key: r.key,
+    color: 'black',
+    colorName: 'Midnight Cat',
+    title: `${r.title.split('/')[0].trim()} (Kuro)`,
+    action: r.action,
+    message: r.message,
+    format: 'image',
+    url: `assets/cats/moving/black/${r.key}.webp`,
+    isAnimated: true
   });
 });
+
+const ALL_CAT_MOVING_STICKERS = ALL_CAT_STICKERS;
+const ALL_CAT_STATIC_STICKERS = ALL_CAT_STICKERS;
 
 let catLottieCache = {};
 async function getCatLottie(color, key) {
@@ -2111,7 +2185,11 @@ function displayCatReactionBanner(payload) {
 }
 
 async function triggerCatPing(reactionKey, catColor, contextItem = null, targetPartner = null) {
-  const r = CAT_REACTIONS.find(x => x.key === reactionKey) || CAT_REACTIONS[0];
+  const chosenColor = (catColor && catColor !== 'all') ? catColor : (data.settings.catType || 'orange');
+  const r = ALL_CAT_STICKERS.find(x => x.key === reactionKey && (x.color === chosenColor || !chosenColor))
+         || ALL_CAT_STICKERS.find(x => x.key === reactionKey)
+         || CAT_REACTIONS.find(x => x.key === reactionKey) 
+         || CAT_REACTIONS[0];
   const myName = data.settings.displayName || 'Me';
   const partnerName = targetPartner || data.settings.localPartner || 'Teammate';
   
@@ -2123,10 +2201,10 @@ async function triggerCatPing(reactionKey, catColor, contextItem = null, targetP
   const payload = {
     senderId: currentUserId(),
     senderName: myName,
-    catType: catColor,
+    catType: r.color || chosenColor,
     reactionKey: r.key,
     title: r.title,
-    action: r.action,
+    action: r.action || 'Ping',
     message: msg,
     timestamp: Date.now()
   };
@@ -2147,7 +2225,7 @@ async function triggerCatPing(reactionKey, catColor, contextItem = null, targetP
     }
   }
   
-  toast(`🐾 Sent ${r.action} ping to ${partnerName}!`);
+  toast(`🐾 Sent ${r.action || 'cat'} ping to ${partnerName}!`);
 }
 
 // --- TEAM CHAT & WORK SHARING APPLICATION ---
@@ -2270,12 +2348,13 @@ function renderChat() {
 
       <div class="chat-sticker-drawer" id="chatStickerDrawer" style="display:none">
         <div class="sticker-drawer-header">
-          <div class="sticker-tabs">
-            <button type="button" class="sticker-tab-btn ${activeStickerTab === 'moving' ? 'active' : ''}" data-sticker-tab="moving">🐾 Moving (${ALL_CAT_MOVING_STICKERS.length})</button>
-            <button type="button" class="sticker-tab-btn ${activeStickerTab === 'static' ? 'active' : ''}" data-sticker-tab="static">🖼️ Static (${ALL_CAT_STATIC_STICKERS.length})</button>
+          <div class="sticker-header-title">
+            <span>🐾</span>
+            <strong>Stickers</strong>
+            <span class="sticker-count-badge">${ALL_CAT_STICKERS.length}</span>
           </div>
-          <input type="text" class="sticker-search-input" id="stickerSearchInput" placeholder="Search stickers..." value="${esc(stickerSearchQuery)}" />
-          <button type="button" class="sticker-drawer-close" id="closeStickerDrawer">✕</button>
+          <input type="text" class="sticker-search-input" id="stickerSearchInput" placeholder="Search animated stickers..." value="${esc(stickerSearchQuery)}" />
+          <button type="button" class="sticker-drawer-close" id="closeStickerDrawer" title="Close drawer">✕</button>
         </div>
         <div class="sticker-grid" id="stickerDrawerGrid">
           ${renderStickerDrawerContent()}
@@ -2286,7 +2365,7 @@ function renderChat() {
         <button type="button" class="chat-icon-btn" id="chatAttachBtn" title="Attach work from worksheet">📎</button>
         <button type="button" class="chat-icon-btn" id="chatStickerBtn" title="Open cat stickers drawer">🐱</button>
         <div class="chat-input-box">
-          <textarea id="chatInputText" placeholder="Message ${esc(partner.name)} as ${esc(myName)}... (Enter to send, Shift+Enter for newline)" rows="1" autofocus></textarea>
+          <textarea id="chatInputText" placeholder="Message ${esc(partner.name)} as ${esc(myName)}... (Enter to send, Shift+Enter for newline)" rows="1" autofocus>${esc(chatDraftText || '')}</textarea>
         </div>
         <button type="button" class="chat-send-btn" id="chatSendBtn" title="Send message">
           <svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor">
@@ -2298,13 +2377,13 @@ function renderChat() {
   `;
 }
 
-function renderChatMessagesList(messages) {
+function renderChatMessagesList(messages, initialLastDate = '') {
   const partner = getPartnerInfo();
   const myName = data.settings.displayName || 'Samuel';
 
   if (!messages || !messages.length) {
     return `
-      <div style="text-align:center;padding:40px 20px;color:#94a3b8">
+      <div class="chat-empty-state" style="text-align:center;padding:40px 20px;color:#94a3b8">
         <div style="font-size:42px;margin-bottom:10px">💬🐾</div>
         <h3 style="color:#f8fafc;font-size:16px;margin:0 0 6px 0">MeowSheet Team Chat</h3>
         <p style="font-size:13px;max-width:380px;margin:0 auto 12px;line-height:1.5">
@@ -2318,7 +2397,7 @@ function renderChatMessagesList(messages) {
   }
 
   let html = '';
-  let lastDate = '';
+  let lastDate = initialLastDate;
 
   for (const m of messages) {
     const isMe = m.senderId === currentUserId() || m.senderId === 'local-me';
@@ -2353,9 +2432,7 @@ function renderChatMessagesList(messages) {
     if (m.type === 'text') {
       contentHtml = `<div class="chat-text">${esc(m.text || '')}</div>`;
     } else if (m.type === 'sticker') {
-      const stickerUrl = m.sticker?.url || (m.sticker?.isAnimated
-        ? `assets/cats/moving/${m.sticker?.color || 'orange'}/${m.sticker?.key || 'happy'}.webp`
-        : `assets/cats/static/${m.sticker?.color || 'orange'}/${m.sticker?.key || 'happy'}.webp`);
+      const stickerUrl = m.sticker?.url || `assets/cats/moving/${m.sticker?.color || 'orange'}/${m.sticker?.key || 'happy'}.webp`;
       contentHtml = `
         <img src="${esc(stickerUrl)}" class="chat-sticker-img" alt="Sticker" title="${esc(m.sticker?.title || 'Cat sticker')}" />
       `;
@@ -2371,46 +2448,33 @@ function renderChatMessagesList(messages) {
                 <small>${card.itemCount} row${card.itemCount === 1 ? '' : 's'} · Total: ${money(card.totalAmount)}</small>
               </div>
             </div>
-            <button type="button" class="work-card-jump-btn" data-jump-work-card="${esc(card.clientId)}" data-jump-items="${esc((card.items || []).map(i => i.id).join(','))}">
-              ↗ View in Sheet
-            </button>
+            <button type="button" class="work-card-jump-btn" data-jump-work-card="${esc(card.clientId)}" data-jump-items="${esc((card.items || []).map(x => x.id).join(','))}">View in sheet →</button>
           </div>
-          <div class="work-card-table-wrap">
-            <table class="work-card-table">
-              <thead><tr><th>Service</th><th>Qty</th><th>Rate</th><th>Total</th><th>Status</th></tr></thead>
-              <tbody>
-                ${(card.items || []).slice(0, 5).map(it => `
-                  <tr>
-                    <td><strong>${esc(it.service)}</strong></td>
-                    <td>${it.quantity}</td>
-                    <td>${money(it.rate)}</td>
-                    <td>${money(it.quotedTotal)}</td>
-                    <td><span class="pill ${it.status}">${esc(displayStatus(it))}</span></td>
-                  </tr>
-                `).join('')}
-                ${(card.items || []).length > 5 ? `<tr><td colspan="5" class="more-rows">+ ${card.items.length - 5} more rows</td></tr>` : ''}
-              </tbody>
-            </table>
+          ${m.text ? `<div class="work-card-comment">${esc(m.text)}</div>` : ''}
+          <div class="work-card-items-preview">
+            ${(card.items || []).slice(0, 3).map(it => `
+              <div class="work-card-row-preview">
+                <span class="row-serv">${esc(it.service)}</span>
+                <span class="row-rate">${it.quantity} × ${money(it.rate)} = ${money(it.quotedTotal)}</span>
+              </div>
+            `).join('')}
+            ${(card.items || []).length > 3 ? `<div class="work-card-more">+${card.items.length - 3} more row${card.items.length - 3 === 1 ? '' : 's'}</div>` : ''}
           </div>
-          ${m.text ? `<div class="work-card-note">${esc(m.text)}</div>` : ''}
         </div>
       `;
     }
 
     html += `
-      <div class="chat-msg-row ${rowClass}">
-        ${!isMe ? avatarHtml : ''}
-        <div class="chat-msg-content">
-          <span class="chat-sender-name ${rowClass}">${esc(senderName)}${isMe ? ' (You)' : ''}</span>
-          <div class="chat-bubble ${rowClass} ${isSticker ? 'chat-sticker-bubble' : ''}">
-            ${contentHtml}
-            <div class="chat-meta">
-              <span>${time}</span>
-              ${isMe ? `<span class="checkmarks">✓✓</span>` : ''}
-            </div>
+      <div class="chat-msg-row ${rowClass} ${isSticker ? 'msg-sticker' : ''}">
+        ${avatarHtml}
+        <div class="chat-bubble">
+          <div class="chat-bubble-sender">${esc(senderName)}${isMe ? ' (You)' : ''}</div>
+          ${contentHtml}
+          <div class="chat-bubble-footer">
+            <span class="chat-time">${esc(time)}</span>
+            ${isMe ? '<span class="chat-ticks">✓✓</span>' : ''}
           </div>
         </div>
-        ${isMe ? avatarHtml : ''}
       </div>
     `;
   }
@@ -2420,7 +2484,7 @@ function renderChatMessagesList(messages) {
 
 function renderStickerDrawerContent() {
   const query = (stickerSearchQuery || '').toLowerCase().trim();
-  const list = activeStickerTab === 'moving' ? ALL_CAT_MOVING_STICKERS : ALL_CAT_STATIC_STICKERS;
+  const list = ALL_CAT_STICKERS;
   const filtered = query 
     ? list.filter(s => s.key.includes(query) || s.title.toLowerCase().includes(query) || s.colorName.toLowerCase().includes(query))
     : list;
@@ -2439,6 +2503,46 @@ function renderStickerDrawerContent() {
   `).join('');
 }
 
+function updateChatOnlineStatusUI() {
+  const partner = getPartnerInfo();
+  const dot = $('.chat-status-dot');
+  const label = $('.chat-online-label');
+  if (dot) {
+    dot.classList.toggle('online', partner.isOnline);
+    dot.title = partner.isOnline ? 'Online' : 'Offline';
+  }
+  if (label) {
+    label.innerHTML = partner.isOnline
+      ? '<span class="status-online"><span class="pulse-dot"></span> Online now</span>'
+      : '<span>Offline / In background</span>';
+  }
+}
+
+function appendChatMessageToViewport(msg) {
+  const vp = $('#chatMessagesViewport');
+  if (!vp || !vp.querySelector) return;
+  const empty = vp.querySelector('.chat-empty-state');
+  if (empty) empty.remove();
+
+  const pills = vp.querySelectorAll('.chat-date-pill');
+  const lastDate = pills.length ? pills[pills.length - 1].textContent.trim() : '';
+
+  const temp = document.createElement('div');
+  temp.innerHTML = renderChatMessagesList([msg], lastDate);
+  while (temp.firstChild) {
+    vp.appendChild(temp.firstChild);
+  }
+  vp.scrollTop = vp.scrollHeight;
+
+  vp.querySelectorAll('[data-jump-work-card]').forEach(btn => {
+    btn.onclick = () => {
+      const cid = btn.dataset.jumpWorkCard;
+      const itemIds = (btn.dataset.jumpItems || '').split(',').filter(Boolean);
+      jumpToWorkCardInSheet(cid, itemIds);
+    };
+  });
+}
+
 function initChatInteractions() {
   const viewport = $('#chatMessagesViewport');
   if (viewport) {
@@ -2450,12 +2554,17 @@ function initChatInteractions() {
 
   const input = $('#chatInputText');
   if (input) {
+    input.value = chatDraftText || '';
+    input.oninput = e => {
+      chatDraftText = e.target.value;
+    };
     input.onkeydown = e => {
       if (e.key === 'Enter' && !e.shiftKey) {
         e.preventDefault();
         handleSendChatMessage();
       }
     };
+    if (typeof input.focus === 'function') input.focus();
   }
 
   const attachBtn = $('#chatAttachBtn');
@@ -2470,26 +2579,22 @@ function initChatInteractions() {
     stickerBtn.onclick = () => {
       const isHidden = drawer.style.display === 'none';
       drawer.style.display = isHidden ? 'flex' : 'none';
-      if (isHidden) initChatInteractions();
+      if (isHidden) {
+        const sInput = $('#stickerSearchInput');
+        if (sInput) sInput.focus();
+      } else {
+        const ci = $('#chatInputText'); if (ci && typeof ci.focus === 'function') ci.focus();
+      }
     };
   }
 
   const closeDrawer = $('#closeStickerDrawer');
   if (closeDrawer && drawer) {
-    closeDrawer.onclick = () => { drawer.style.display = 'none'; };
-  }
-
-  $$('[data-sticker-tab]').forEach(btn => {
-    btn.onclick = () => {
-      activeStickerTab = btn.dataset.stickerTab;
-      $$('[data-sticker-tab]').forEach(b => b.classList.toggle('active', b === btn));
-      const grid = $('#stickerDrawerGrid');
-      if (grid) {
-        grid.innerHTML = renderStickerDrawerContent();
-        initChatInteractions();
-      }
+    closeDrawer.onclick = () => {
+      drawer.style.display = 'none';
+      const ci = $('#chatInputText'); if (ci && typeof ci.focus === 'function') ci.focus();
     };
-  });
+  }
 
   const searchInp = $('#stickerSearchInput');
   if (searchInp) {
@@ -2498,22 +2603,24 @@ function initChatInteractions() {
       const grid = $('#stickerDrawerGrid');
       if (grid) {
         grid.innerHTML = renderStickerDrawerContent();
-        initChatInteractions();
+        bindStickerClicks();
       }
     };
   }
 
-  $$('[data-send-sticker]').forEach(btn => {
-    btn.onclick = () => {
-      const stickerId = btn.dataset.sendSticker;
-      const list = activeStickerTab === 'moving' ? ALL_CAT_MOVING_STICKERS : ALL_CAT_STATIC_STICKERS;
-      const sticker = list.find(s => s.id === stickerId);
-      if (sticker) {
-        sendStickerChatMessage(sticker);
-        if (drawer) drawer.style.display = 'none';
-      }
-    };
-  });
+  function bindStickerClicks() {
+    $$('[data-send-sticker]').forEach(btn => {
+      btn.onclick = () => {
+        const stickerId = btn.dataset.sendSticker;
+        const sticker = ALL_CAT_STICKERS.find(s => s.id === stickerId);
+        if (sticker) {
+          sendStickerChatMessage(sticker);
+          if (drawer) drawer.style.display = 'none';
+        }
+      };
+    });
+  }
+  bindStickerClicks();
 
   $$('[data-jump-work-card]').forEach(btn => {
     btn.onclick = () => {
@@ -2545,7 +2652,7 @@ function initChatInteractions() {
 
 function handleSendChatMessage() {
   const input = $('#chatInputText');
-  const text = (input?.value || '').trim();
+  const text = (input ? input.value : chatDraftText || '').trim();
   if (!text && !pendingChatAttachment) return;
 
   let msg = null;
@@ -2562,6 +2669,8 @@ function handleSendChatMessage() {
       workCard: pendingChatAttachment
     };
     pendingChatAttachment = null;
+    const bar = $('#chatAttachmentBar');
+    if (bar) bar.style.display = 'none';
   } else {
     msg = {
       id: uid(),
@@ -2575,9 +2684,18 @@ function handleSendChatMessage() {
     };
   }
 
-  if (input) input.value = '';
+  chatDraftText = '';
+  if (input) {
+    input.value = '';
+    if (input.style) input.style.height = 'auto';
+  }
   sendChatMessage(msg);
-  render();
+  appendChatMessageToViewport(msg);
+
+  setTimeout(() => {
+    const inp = $('#chatInputText');
+    if (inp && typeof inp.focus === 'function') inp.focus();
+  }, 10);
 }
 
 function sendStickerChatMessage(sticker) {
@@ -2586,7 +2704,7 @@ function sendStickerChatMessage(sticker) {
     senderId: currentUserId(),
     senderName: data.settings.displayName || 'Samuel',
     senderAvatar: data.settings.avatarData || '',
-    catType: data.settings.catType || 'orange',
+    catType: sticker.color || data.settings.catType || 'orange',
     timestamp: Date.now(),
     type: 'sticker',
     sticker: {
@@ -2600,7 +2718,23 @@ function sendStickerChatMessage(sticker) {
   };
 
   sendChatMessage(msg);
-  render();
+  appendChatMessageToViewport(msg);
+
+  displayCatReactionBanner({
+    senderId: currentUserId(),
+    senderName: 'You',
+    catType: sticker.color || 'orange',
+    reactionKey: sticker.key,
+    title: sticker.title,
+    action: sticker.action || 'Sticker',
+    message: `Sent ${sticker.title} 🐾`,
+    timestamp: Date.now()
+  });
+
+  setTimeout(() => {
+    const inp = $('#chatInputText');
+    if (inp && typeof inp.focus === 'function') inp.focus();
+  }, 10);
 }
 
 function sendChatMessage(msg) {
@@ -2635,27 +2769,45 @@ function handleIncomingChatMessage(payload) {
 
   lastPartnerOnlineTime = Date.now();
 
+  let snippet = payload.text || '';
+  if (payload.type === 'sticker') snippet = 'Sent a cat sticker: ' + (payload.sticker?.title || '🐱');
+  if (payload.type === 'work_card') snippet = `Shared ${payload.workCard?.itemCount || ''} work rows (${payload.workCard?.clientName || ''})`;
+
+  const catPayload = {
+    senderId: payload.senderId,
+    senderName: payload.senderName || 'Teammate',
+    catType: payload.catType || payload.sticker?.color || 'orange',
+    reactionKey: payload.sticker?.key || 'happy',
+    title: payload.sticker?.title || 'Cat reaction',
+    action: 'Ping',
+    message: snippet,
+    timestamp: payload.timestamp || Date.now()
+  };
+
   if (tab === 'chat') {
-    render();
+    appendChatMessageToViewport(payload);
     playChatChime();
+
+    if (payload.type === 'sticker') {
+      displayCatReactionBanner(catPayload);
+    }
+
+    if (typeof isAppActivelyUsed === 'function') {
+      isAppActivelyUsed().then(isActive => {
+        if (!isActive) {
+          sendNativeDesktopNotification('💬 ' + (payload.senderName || 'Teammate'), snippet, catPayload);
+        }
+      });
+    }
   } else {
     unreadChatCount++;
     updateChatUnreadBadge();
     playChatChime();
 
-    let snippet = payload.text || '';
-    if (payload.type === 'sticker') snippet = 'Sent a cat sticker: ' + (payload.sticker?.title || '🐱');
-    if (payload.type === 'work_card') snippet = `Shared ${payload.workCard?.itemCount || ''} work rows (${payload.workCard?.clientName || ''})`;
-
     smartNotify({
       title: '💬 ' + (payload.senderName || 'Teammate'),
       body: snippet,
-      catPayload: {
-        catType: payload.catType || 'orange',
-        reactionKey: payload.sticker?.key || 'happy',
-        senderName: payload.senderName || 'Teammate',
-        message: snippet
-      }
+      catPayload
     });
   }
 }
@@ -2918,28 +3070,44 @@ function openCatReactionPicker(contextItem = null, targetName = null) {
   let chosenCat = data.settings.catType || 'orange';
   const targetText = `to <strong>${esc(partner)}</strong>`;
 
-  const renderPickerContent = () => `
+  const renderPickerContent = () => {
+    let pickerList = [];
+    if (chosenCat === 'orange') {
+      pickerList = ALL_CAT_STICKERS.filter(s => s.color === 'orange');
+    } else if (chosenCat === 'black') {
+      pickerList = ALL_CAT_STICKERS.filter(s => s.color === 'black');
+    } else if (chosenCat === 'calico') {
+      pickerList = ALL_CAT_STICKERS.filter(s => s.color === 'calico');
+    } else if (chosenCat === 'white') {
+      pickerList = ALL_CAT_STICKERS.filter(s => s.color === 'white');
+    } else {
+      pickerList = ALL_CAT_STICKERS;
+    }
+
+    return `
     <div id="catPickerRoot">
       <div class="cat-type-toggle-bar">
-        <button type="button" class="cat-toggle-pill ${chosenCat==='orange'?'active-orange':''}" id="pickerCatOrange">🐱 Ginger Cat</button>
-        <button type="button" class="cat-toggle-pill ${chosenCat==='black'?'active-black':''}" id="pickerCatBlack">🐈‍⬛ Midnight Cat</button>
-        <button type="button" class="cat-toggle-pill ${chosenCat==='calico'?'active-calico':''}" id="pickerCatCalico">🐾 Calico Cat</button>
-        <button type="button" class="cat-toggle-pill ${chosenCat==='white'?'active-white':''}" id="pickerCatWhite">🤍 Snow Persian</button>
+        <button type="button" class="cat-toggle-pill ${chosenCat==='orange'?'active-orange':''}" id="pickerCatOrange">🐱 Ginger Cat (${ALL_CAT_STICKERS.filter(s => s.color === 'orange').length})</button>
+        <button type="button" class="cat-toggle-pill ${chosenCat==='black'?'active-black':''}" id="pickerCatBlack">🐈‍⬛ Midnight Cat (${ALL_CAT_STICKERS.filter(s => s.color === 'black').length})</button>
+        <button type="button" class="cat-toggle-pill ${chosenCat==='calico'?'active-calico':''}" id="pickerCatCalico">🐾 Calico Cat (${ALL_CAT_STICKERS.filter(s => s.color === 'calico').length})</button>
+        <button type="button" class="cat-toggle-pill ${chosenCat==='white'?'active-white':''}" id="pickerCatWhite">🤍 Snow Persian (${ALL_CAT_STICKERS.filter(s => s.color === 'white').length})</button>
+        <button type="button" class="cat-toggle-pill ${chosenCat==='all'?'active-all':''}" id="pickerCatAll">🐾 All (${ALL_CAT_STICKERS.length})</button>
       </div>
       <p class="muted" style="text-align:center;font-size:12px;margin-bottom:10px;">Select an animated cat state to ping ${targetText}:</p>
       <div class="cat-picker-grid">
-        ${CAT_REACTIONS.map(r => `
-          <div class="cat-picker-item ${chosenCat==='black'?'black-cat-active':''}" data-cat-pick="${r.key}">
-            <div class="cat-picker-anim" id="picker-anim-${r.key}">
-              <img src="assets/cats/moving/${chosenCat}/${r.key}.webp" alt="${esc(r.title)}" loading="lazy" />
+        ${pickerList.map(s => `
+          <div class="cat-picker-item ${s.color==='black'?'black-cat-active':''}" data-cat-pick="${s.key}" data-cat-color="${s.color}">
+            <div class="cat-picker-anim" id="picker-anim-${s.key}">
+              <img src="${s.url}" alt="${esc(s.title)}" loading="lazy" />
             </div>
-            <div class="cat-picker-title">${esc(r.title.split('/')[0].trim())}</div>
-            <div class="cat-picker-action">${esc(r.action)} 🐾</div>
+            <div class="cat-picker-title">${esc(s.title.split('/')[0].trim())}</div>
+            <div class="cat-picker-action">${esc(s.action || 'Ping')} 🐾</div>
           </div>
         `).join('')}
       </div>
     </div>
   `;
+  };
 
   modal('🐾 Animated Cat Reaction & Team Ping', renderPickerContent(), '', true);
 
@@ -2984,12 +3152,21 @@ function openCatReactionPicker(contextItem = null, targetName = null) {
       save();
       updateModalBody();
     };
+    const aBtn = document.getElementById('pickerCatAll');
+    if (aBtn) aBtn.onclick = (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      if (chosenCat === 'all') return;
+      chosenCat = 'all';
+      updateModalBody();
+    };
 
     document.querySelectorAll('[data-cat-pick]').forEach(el => {
       el.onclick = () => {
         const key = el.dataset.catPick;
+        const color = el.dataset.catColor || chosenCat;
         closeModal();
-        triggerCatPing(key, chosenCat, contextItem, partner);
+        triggerCatPing(key, color, contextItem, partner);
       };
     });
   }
@@ -4002,29 +4179,368 @@ function ungroupSelectedRows() {
     performUngroup({ deal: hasDeal, project: hasProj });
   }
 }
-function invoiceDialog(){const items=data.items.filter(i=>selected.has(i.id));if(!items.length)return;const notReady=items.filter(i=>i.status!=='sent');if(notReady.length){toast('Select rows marked Sent for a new invoice');return;}if(items.some(i=>billedIds().has(i.id))){toast('One or more rows are already invoiced');return;}if(new Set(items.map(i=>i.clientId)).size!==1){toast('Choose rows from one client');return;}const subtotal=items.reduce((n,i)=>n+num(i.quotedTotal),0);const next=String(data.invoices.length+1).padStart(4,'0');modal('Create invoice',`<p>${items.length} finished rows from ${esc(currentClient()?.name)}.</p><div class="preview-list">${items.map((i,n)=>`<div class="list-row"><div><strong>${n+1}. ${esc(i.service)}</strong><small>${i.quantity} × ${money(i.rate)}</small></div><strong>${money(i.quotedTotal)}</strong></div>`).join('')}</div><div class="field-grid" style="margin-top:15px"><div class="field"><label>Invoice number</label><input id="invNumber" value="GIR-${new Date().getFullYear()}-${next}"></div><div class="field"><label>Issue date</label><input id="invDate" type="date" value="${today()}"></div><div class="field"><label>Discount</label><input id="invDiscount" type="number" min="0" step="0.01" value="0"></div><div class="field"><label>Agreed final amount (overrides discount)</label><input id="invFinal" type="number" min="0" step="0.01" placeholder="Optional"></div></div><div class="notice">Subtotal ${money(subtotal)}. Advances already received: ${money(items.reduce((n,i)=>n+num(i.advanceAmount),0))}. The final amount is the full agreed price; the invoice will show advances separately and deduct them from the balance due.</div>`,`<div class="modal-actions"><button class="small-btn" id="cancelInvoice">Cancel</button><button class="small-btn blue" id="createInvoice">Create invoice</button></div>`,true);$('#cancelInvoice').onclick=closeModal;$('#createInvoice').onclick=()=>{const discount=num(inputValue('invDiscount')),final=inputValue('invFinal');if(discount>subtotal){toast('Discount exceeds subtotal');return;}const amount=final===''?subtotal-discount:num(final);const invoice={id:uid(),clientId:items[0].clientId,number:inputValue('invNumber')||`GIR-${next}`,issueDate:inputValue('invDate')||today(),itemIds:items.map(i=>i.id),lines:items.map((i,n)=>({serial:n+1,service:i.service,quantity:num(i.quantity),rate:num(i.rate),total:num(i.quotedTotal)})),subtotal,discount:final===''?discount:subtotal-amount,finalAmount:amount,advanceAmount:items.reduce((n,i)=>n+num(i.advanceAmount),0),status:'issued',seller:structuredClone(data.settings.seller),buyer:structuredClone(currentClient()?.billing||{})};mutate('invoices',invoice);selected.clear();closeModal();viewInvoice(invoice.id);};}
-function invoiceAdvance(i){return i.advanceAmount==null?(i.itemIds||[]).reduce((sum,id)=>sum+num(data.items.find(item=>item.id===id)?.advanceAmount),0):num(i.advanceAmount);}
-function invoiceHtml(i){return `<div class="invoice-paper"><div class="invoice-top"><div><img class="invoice-company-logo" src="${esc(i.seller.logoData||'assets/gir-icon.png')}" alt="${esc(i.seller.name||'GIR')} logo"><h1>Invoice</h1><div class="muted">${esc(i.seller.name||'GIR')}</div></div><div class="invoice-meta"><div class="label">INVOICE NO.</div><strong>${esc(i.number)}</strong><p>${fmtDate(i.issueDate)}</p><span class="pill ${i.status==='paid'?'paid':'sent'}">${i.status==='paid'?'PAID':'ISSUED'}</span></div></div><div class="invoice-parties"><div><div class="label">FROM</div><strong>${esc(i.seller.name||'')}</strong><p>${esc(i.seller.address||'').replace(/\n/g,'<br>')}<br>${esc(i.seller.email||'')} ${esc(i.seller.phone||'')}<br>${esc(i.seller.taxId||'')}</p></div><div><div class="label">BILL TO</div><strong>${esc(i.buyer.name||'')}</strong><p>${esc(i.buyer.address||'').replace(/\n/g,'<br>')}<br>${esc(i.buyer.email||'')} ${esc(i.buyer.phone||'')}<br>${esc(i.buyer.taxId||'')}</p></div></div><table><thead><tr><th>#</th><th>SERVICE</th><th>QTY</th><th>RATE</th><th>TOTAL</th></tr></thead><tbody>${i.lines.map(l=>`<tr><td>${l.serial}</td><td>${esc(l.service)}</td><td>${l.quantity}</td><td>${money(l.rate)}</td><td>${money(l.total)}</td></tr>`).join('')}</tbody></table><div class="totals"><div><span>Subtotal</span><strong>${money(i.subtotal)}</strong></div><div><span>Discount / adjustment</span><strong>${money(i.discount)}</strong></div><div><span>Final agreed amount</span><strong>${money(i.finalAmount)}</strong></div><div><span>Advance received</span><strong>− ${money(invoiceAdvance(i))}</strong></div><div class="grand"><span>Balance due</span><strong>${money(i.status==='paid'?0:Math.max(0,num(i.finalAmount)-invoiceAdvance(i)))}</strong></div></div>${i.seller.bankDetails?`<div class="invoice-bank"><div class="label">BANK DETAILS · PAY GIR</div><div>${esc(i.seller.bankDetails).replace(/\n/g,'<br>')}</div></div>`:''}<div class="thankyou">Thank you for working with GIR.</div></div>`;}
-function viewInvoice(id){const i=data.invoices.find(x=>x.id===id);if(!i)return;modal('Invoice preview',`<div id="invoicePreview">${invoiceHtml(i)}</div>`,`<div class="modal-actions"><button class="small-btn" id="printInvoice">Print / save PDF</button><button class="small-btn" id="deleteInvoice">Delete invoice</button>${i.status==='issued'?`<button class="small-btn blue" id="recordPayment">Record paid</button>`:''}</div>`,true);$('#printInvoice').onclick=()=>{$('#printArea')?.remove();const div=document.createElement('div');div.id='printArea';div.className='print-only';div.innerHTML=invoiceHtml(i);document.body.appendChild(div);window.desk.print().finally(()=>setTimeout(()=>div.remove(),500));};$('#deleteInvoice').onclick=()=>deleteInvoiceDialog(i.id);if($('#recordPayment'))$('#recordPayment').onclick=()=>{markInvoicePaid(i.id);closeModal();};}
-function deleteInvoiceDialog(id){
-  const invoice=data.invoices.find(i=>i.id===id);if(!invoice)return;
-  modal('Delete invoice',`<p>Delete invoice <strong>${esc(invoice.number)}</strong>? This removes the invoice from the shared workspace and frees its rows for another invoice.</p>${invoice.status==='paid'?'<div class="notice">The recorded payment and paid work will remain in revenue.</div>':''}`,`<div class="modal-actions"><button class="small-btn" id="cancelDeleteInvoice">Cancel</button><button class="small-btn" id="confirmDeleteInvoice">Delete invoice</button></div>`);
-  $('#cancelDeleteInvoice').onclick=closeModal;
-  $('#confirmDeleteInvoice').onclick=async()=>{
-    const button=$('#confirmDeleteInvoice');button.disabled=true;button.textContent='Deleting…';
-    try{
-      if(!clientApi||!session||!data.settings.workspaceId)throw new Error('Connect to the workspace before deleting an invoice');
+function invoiceDialog() {
+  const items = data.items.filter(i => selected.has(i.id));
+  if (!items.length) return;
+  const notReady = items.filter(i => i.status !== 'sent');
+  if (notReady.length) { toast('Select rows marked Sent for a new invoice'); return; }
+  if (items.some(i => billedIds().has(i.id))) { toast('One or more rows are already invoiced'); return; }
+  if (new Set(items.map(i => i.clientId)).size !== 1) { toast('Choose rows from one client'); return; }
+
+  const subtotal = items.reduce((n, i) => n + num(i.quotedTotal), 0);
+  const next = String(data.invoices.length + 1).padStart(4, '0');
+
+  // Check if any selected items belong to a group deal
+  const dealGroupIds = new Set(items.map(i => i.groupId).filter(Boolean));
+  const hasGroupDeal = dealGroupIds.size > 0;
+  let initialDeal = null;
+  if (hasGroupDeal) {
+    const firstDealId = [...dealGroupIds][0];
+    initialDeal = (data.groups || []).find(g => g.id === firstDealId);
+  }
+
+  // By default: if group deal -> Show as Lump Sum; otherwise -> Show Breakup
+  let isLumpSum = hasGroupDeal;
+  let lumpSumDescription = (initialDeal && initialDeal.label) || `${currentClient()?.name || 'Project'} Services`;
+  let lumpSumAmount = (initialDeal && initialDeal.agreedAmount != null && initialDeal.agreedAmount !== '') 
+    ? num(initialDeal.agreedAmount) 
+    : subtotal;
+
+  let currentInvNumber = `GIR-${new Date().getFullYear()}-${next}`;
+  let currentInvDate = today();
+  let currentDiscount = 0;
+  let currentInvFinal = '';
+
+  const renderModalContent = () => `
+    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
+      <p style="margin:0; color:#64748b; font-size:13px;">${items.length} finished row${items.length === 1 ? '' : 's'} from <strong>${esc(currentClient()?.name)}</strong></p>
+      <button type="button" class="small-btn blue" id="toggleInvoiceMode" style="display:flex; align-items:center; gap:6px; font-weight:700;">
+        ${isLumpSum ? '📋 Show Breakup' : '💰 Show as Lump Sum'}
+      </button>
+    </div>
+
+    ${isLumpSum ? `
+      <div class="lump-sum-row-card" style="background:#f8faff; border:2px dashed #93c5fd; border-radius:10px; padding:14px; margin-bottom:14px;">
+        <div style="display:flex; gap:12px; align-items:flex-start;">
+          <div style="flex:1;">
+            <label style="font-size:11px; font-weight:800; color:#1e40af; display:block; margin-bottom:5px;">LUMP SUM SERVICE / DEAL NAME</label>
+            <input id="lumpSumService" value="${esc(lumpSumDescription)}" style="width:100%; font-weight:700; font-size:13px; border:1px solid #93c5fd; border-radius:6px; padding:7px 10px; background:#fff;" placeholder="Enter service description for invoice" />
+          </div>
+          <div style="width:170px;">
+            <label style="font-size:11px; font-weight:800; color:#1e40af; display:block; margin-bottom:5px;">LUMP SUM AMOUNT (₹)</label>
+            <input id="lumpSumAmount" type="number" min="0" step="0.01" value="${lumpSumAmount}" style="width:100%; font-weight:800; font-size:14px; text-align:right; border:1px solid #93c5fd; border-radius:6px; padding:7px 10px; background:#fff;" />
+          </div>
+        </div>
+        <small style="display:block; color:#64748b; font-size:11px; margin-top:8px;">
+          💡 Single line item will appear on the invoice. You can edit the description and full amount directly above.
+        </small>
+      </div>
+    ` : `
+      <div class="preview-list" style="max-height:220px; overflow-y:auto; border:1px solid var(--line); border-radius:8px;">
+        ${items.map((i, n) => `
+          <div class="list-row" style="display:flex; justify-content:space-between; padding:8px 12px; border-bottom:1px solid #f1f5f9;">
+            <div>
+              <strong>${n + 1}. ${esc(i.service)}</strong>
+              <small style="display:block; color:#64748b;">${i.quantity} × ${money(i.rate)}</small>
+            </div>
+            <strong>${money(i.quotedTotal)}</strong>
+          </div>
+        `).join('')}
+      </div>
+    `}
+
+    <div class="field-grid" style="margin-top:15px">
+      <div class="field"><label>Invoice number</label><input id="invNumber" value="${esc(currentInvNumber)}"></div>
+      <div class="field"><label>Issue date</label><input id="invDate" type="date" value="${currentInvDate}"></div>
+      <div class="field"><label>Discount</label><input id="invDiscount" type="number" min="0" step="0.01" value="${currentDiscount}"></div>
+      <div class="field"><label>Agreed final amount (overrides discount)</label><input id="invFinal" type="number" min="0" step="0.01" placeholder="Optional" value="${currentInvFinal}"></div>
+    </div>
+    <div class="notice">
+      ${isLumpSum 
+        ? `Lump sum amount ${money(lumpSumAmount)}. Advances already received: ${money(items.reduce((n, i) => n + num(i.advanceAmount), 0))}. The final amount is the full agreed price; the invoice will show advances separately and deduct them from the balance due.`
+        : `Subtotal ${money(subtotal)}. Advances already received: ${money(items.reduce((n, i) => n + num(i.advanceAmount), 0))}. The final amount is the full agreed price; the invoice will show advances separately and deduct them from the balance due.`}
+    </div>
+  `;
+
+  modal('Create invoice', renderModalContent(), `<div class="modal-actions"><button class="small-btn" id="cancelInvoice">Cancel</button><button class="small-btn blue" id="createInvoice">Create invoice</button></div>`, true);
+
+  function syncFormInputs() {
+    currentInvNumber = inputValue('invNumber') || currentInvNumber;
+    currentInvDate = inputValue('invDate') || currentInvDate;
+    currentDiscount = inputValue('invDiscount') !== '' ? num(inputValue('invDiscount')) : currentDiscount;
+    currentInvFinal = inputValue('invFinal') || currentInvFinal;
+    if (document.getElementById('lumpSumService')) {
+      lumpSumDescription = inputValue('lumpSumService').trim() || lumpSumDescription;
+    }
+    if (document.getElementById('lumpSumAmount') && inputValue('lumpSumAmount') !== '') {
+      lumpSumAmount = num(inputValue('lumpSumAmount'));
+    }
+  }
+
+  function bindInvoiceModalEvents() {
+    const cancelBtn = $('#cancelInvoice');
+    if (cancelBtn) cancelBtn.onclick = closeModal;
+
+    const toggleBtn = $('#toggleInvoiceMode');
+    if (toggleBtn) {
+      toggleBtn.onclick = () => {
+        syncFormInputs();
+        isLumpSum = !isLumpSum;
+        modal('Create invoice', renderModalContent(), `<div class="modal-actions"><button class="small-btn" id="cancelInvoice">Cancel</button><button class="small-btn blue" id="createInvoice">Create invoice</button></div>`, true);
+        bindInvoiceModalEvents();
+      };
+    }
+
+    const createBtn = $('#createInvoice');
+    if (createBtn) {
+      createBtn.onclick = () => {
+        syncFormInputs();
+        const effSubtotal = isLumpSum ? lumpSumAmount : subtotal;
+        const discount = num(inputValue('invDiscount'));
+        const final = inputValue('invFinal');
+        if (discount > effSubtotal) {
+          toast('Discount exceeds subtotal');
+          return;
+        }
+        const amount = final === '' ? effSubtotal - discount : num(final);
+
+        const originalLines = items.map((i, n) => ({
+          serial: n + 1,
+          service: i.service,
+          quantity: num(i.quantity),
+          rate: num(i.rate),
+          total: num(i.quotedTotal)
+        }));
+
+        const lines = isLumpSum
+          ? [{
+              serial: 1,
+              service: lumpSumDescription || 'Lump sum service',
+              quantity: 1,
+              rate: effSubtotal,
+              total: effSubtotal
+            }]
+          : originalLines;
+
+        const sellerMeta = structuredClone(data.settings.seller || {});
+        sellerMeta.lumpSum = {
+          isLumpSum,
+          lumpSumDescription,
+          originalLines
+        };
+
+        const invoice = {
+          id: uid(),
+          clientId: items[0].clientId,
+          number: inputValue('invNumber') || `GIR-${next}`,
+          issueDate: inputValue('invDate') || today(),
+          itemIds: items.map(i => i.id),
+          isLumpSum,
+          lumpSumDescription,
+          originalLines,
+          lines,
+          subtotal: effSubtotal,
+          discount: final === '' ? discount : effSubtotal - amount,
+          finalAmount: amount,
+          advanceAmount: items.reduce((n, i) => n + num(i.advanceAmount), 0),
+          status: 'issued',
+          seller: sellerMeta,
+          buyer: structuredClone(currentClient()?.billing || {})
+        };
+
+        mutate('invoices', invoice);
+        selected.clear();
+        closeModal();
+        viewInvoice(invoice.id);
+      };
+    }
+  }
+
+  bindInvoiceModalEvents();
+}
+
+function invoiceAdvance(i) {
+  return i.advanceAmount == null
+    ? (i.itemIds || []).reduce((sum, id) => sum + num(data.items.find(item => item.id === id)?.advanceAmount), 0)
+    : num(i.advanceAmount);
+}
+
+function invoiceHtml(i) {
+  return `<div class="invoice-paper">
+    <div class="invoice-top">
+      <div>
+        <img class="invoice-company-logo" src="${esc(i.seller?.logoData || 'assets/gir-icon.png')}" alt="${esc(i.seller?.name || 'GIR')} logo">
+        <h1>Invoice</h1>
+        <div class="muted">${esc(i.seller?.name || 'GIR')}</div>
+      </div>
+      <div class="invoice-meta">
+        <div class="label">INVOICE NO.</div>
+        <strong>${esc(i.number)}</strong>
+        <p>${fmtDate(i.issueDate)}</p>
+        <span class="pill ${i.status === 'paid' ? 'paid' : 'sent'}">${i.status === 'paid' ? 'PAID' : 'ISSUED'}</span>
+        ${i.isLumpSum ? '<span class="pill blue" style="margin-left:4px;">LUMP SUM</span>' : ''}
+      </div>
+    </div>
+    <div class="invoice-parties">
+      <div>
+        <div class="label">FROM</div>
+        <strong>${esc(i.seller?.name || '')}</strong>
+        <p>${esc(i.seller?.address || '').replace(/\n/g, '<br>')}<br>${esc(i.seller?.email || '')} ${esc(i.seller?.phone || '')}<br>${esc(i.seller?.taxId || '')}</p>
+      </div>
+      <div>
+        <div class="label">BILL TO</div>
+        <strong>${esc(i.buyer?.name || '')}</strong>
+        <p>${esc(i.buyer?.address || '').replace(/\n/g, '<br>')}<br>${esc(i.buyer?.email || '')} ${esc(i.buyer?.phone || '')}<br>${esc(i.buyer?.taxId || '')}</p>
+      </div>
+    </div>
+    <table>
+      <thead><tr><th>#</th><th>SERVICE</th><th>QTY</th><th>RATE</th><th>TOTAL</th></tr></thead>
+      <tbody>
+        ${(i.lines || []).map(l => `<tr><td>${l.serial}</td><td>${esc(l.service)}</td><td>${l.quantity}</td><td>${money(l.rate)}</td><td>${money(l.total)}</td></tr>`).join('')}
+      </tbody>
+    </table>
+    <div class="totals">
+      <div><span>Subtotal</span><strong>${money(i.subtotal)}</strong></div>
+      <div><span>Discount / adjustment</span><strong>${money(i.discount)}</strong></div>
+      <div><span>Final agreed amount</span><strong>${money(i.finalAmount)}</strong></div>
+      <div><span>Advance received</span><strong>− ${money(invoiceAdvance(i))}</strong></div>
+      <div class="grand"><span>Balance due</span><strong>${money(i.status === 'paid' ? 0 : Math.max(0, num(i.finalAmount) - invoiceAdvance(i)))}</strong></div>
+    </div>
+    ${i.seller?.bankDetails ? `<div class="invoice-bank"><div class="label">BANK DETAILS · PAY GIR</div><div>${esc(i.seller.bankDetails).replace(/\n/g, '<br>')}</div></div>` : ''}
+    <div class="thankyou">Thank you for working with GIR.</div>
+  </div>`;
+}
+
+function viewInvoice(id) {
+  const i = data.invoices.find(x => x.id === id);
+  if (!i) return;
+
+  const renderModal = () => {
+    const isLump = !!i.isLumpSum;
+    const actionsHtml = `
+      <div class="modal-actions">
+        <button class="small-btn" id="printInvoice">Print / save PDF</button>
+        <button class="small-btn" id="toggleViewInvoiceMode" title="Switch between lump sum and itemized breakup on this invoice">
+          ${isLump ? '📋 Show Breakup' : '💰 Show as Lump Sum'}
+        </button>
+        <button class="small-btn" id="deleteInvoice">Delete invoice</button>
+        ${i.status === 'issued' ? `<button class="small-btn blue" id="recordPayment">Record paid</button>` : ''}
+      </div>
+    `;
+
+    modal('Invoice preview', `<div id="invoicePreview">${invoiceHtml(i)}</div>`, actionsHtml, true);
+
+    $('#printInvoice').onclick = () => {
+      $('#printArea')?.remove();
+      const div = document.createElement('div');
+      div.id = 'printArea';
+      div.className = 'print-only';
+      div.innerHTML = invoiceHtml(i);
+      document.body.appendChild(div);
+      window.desk.print().finally(() => setTimeout(() => div.remove(), 500));
+    };
+
+    const toggleBtn = $('#toggleViewInvoiceMode');
+    if (toggleBtn) {
+      toggleBtn.onclick = () => {
+        if (i.isLumpSum) {
+          // Switch to Breakup
+          i.isLumpSum = false;
+          if (i.originalLines && i.originalLines.length) {
+            i.lines = structuredClone(i.originalLines);
+          } else if (i.seller?.lumpSum?.originalLines && i.seller.lumpSum.originalLines.length) {
+            i.lines = structuredClone(i.seller.lumpSum.originalLines);
+          }
+          i.seller = i.seller || {};
+          i.seller.lumpSum = i.seller.lumpSum || {};
+          i.seller.lumpSum.isLumpSum = false;
+          mutate('invoices', i);
+          renderModal();
+          toast('Switched to itemized breakup');
+        } else {
+          // Switch to Lump Sum
+          i.isLumpSum = true;
+          if (!i.originalLines || !i.originalLines.length) {
+            i.originalLines = structuredClone(i.lines);
+          }
+          const lumpDesc = i.lumpSumDescription || i.seller?.lumpSum?.lumpSumDescription || i.lines[0]?.service || 'Lump sum service';
+          const lumpAmt = num(i.finalAmount);
+          i.lines = [{
+            serial: 1,
+            service: lumpDesc,
+            quantity: 1,
+            rate: lumpAmt,
+            total: lumpAmt
+          }];
+          i.seller = i.seller || {};
+          i.seller.lumpSum = i.seller.lumpSum || {};
+          i.seller.lumpSum.isLumpSum = true;
+          i.seller.lumpSum.lumpSumDescription = lumpDesc;
+          i.seller.lumpSum.originalLines = structuredClone(i.originalLines);
+          mutate('invoices', i);
+          renderModal();
+          toast('Switched to lump sum');
+        }
+      };
+    }
+
+    $('#deleteInvoice').onclick = () => deleteInvoiceDialog(i.id);
+    if ($('#recordPayment')) $('#recordPayment').onclick = () => { markInvoicePaid(i.id); closeModal(); };
+  };
+
+  renderModal();
+}
+
+function deleteInvoiceDialog(id) {
+  const invoice = data.invoices.find(i => i.id === id);
+  if (!invoice) return;
+  modal('Delete invoice', `<p>Delete invoice <strong>${esc(invoice.number)}</strong>? This removes the invoice from the shared workspace and frees its rows for another invoice.</p>${invoice.status === 'paid' ? '<div class="notice">The recorded payment and paid work will remain in revenue.</div>' : ''}`, `<div class="modal-actions"><button class="small-btn" id="cancelDeleteInvoice">Cancel</button><button class="small-btn" id="confirmDeleteInvoice">Delete invoice</button></div>`);
+  $('#cancelDeleteInvoice').onclick = closeModal;
+  $('#confirmDeleteInvoice').onclick = async () => {
+    const button = $('#confirmDeleteInvoice');
+    button.disabled = true;
+    button.textContent = 'Deleting…';
+    try {
+      if (!clientApi || !session || !data.settings.workspaceId) throw new Error('Connect to the workspace before deleting an invoice');
       await flushPending();
-      const {data:deleted,error}=await clientApi.from('invoices').delete().eq('id',id).eq('workspace_id',data.settings.workspaceId).select('id');
-      if(error)throw error;
-      if(!deleted?.length)throw new Error('Invoice was not deleted. Check workspace permissions and sync again.');
-      data.invoices=data.invoices.filter(i=>i.id!==id);
-      data.pending=data.pending.filter(p=>!(p.table==='invoices'&&p.id===id));
-      save();closeModal();render();toast('Invoice deleted');
-    }catch(error){button.disabled=false;button.textContent='Delete invoice';toast('Delete failed: '+error.message);}
+      const { data: deleted, error } = await clientApi.from('invoices').delete().eq('id', id).eq('workspace_id', data.settings.workspaceId).select('id');
+      if (error) throw error;
+      if (!deleted?.length) throw new Error('Invoice was not deleted. Check workspace permissions and sync again.');
+      data.invoices = data.invoices.filter(i => i.id !== id);
+      data.pending = data.pending.filter(p => !(p.table === 'invoices' && p.id === id));
+      save();
+      closeModal();
+      render();
+      toast('Invoice deleted');
+    } catch (error) {
+      button.disabled = false;
+      button.textContent = 'Delete invoice';
+      toast('Delete failed: ' + error.message);
+    }
   };
 }
-function markInvoicePaid(id){const i=data.invoices.find(x=>x.id===id);if(!i||i.status==='paid')return;const stamp=new Date().toISOString();createReceipt(i.clientId,Math.max(0,num(i.finalAmount)-invoiceAdvance(i)),`Invoice ${i.number}`,'invoice',i.id,stamp);i.status='paid';i.paidAt=today();i.paidAtTs=stamp;mutate('invoices',i);i.itemIds.forEach(itemId=>{const item=data.items.find(x=>x.id===itemId);if(item){item.status='paid';item.paidAt=i.paidAt;item.paidAtTs=stamp;queue('items',itemId);}});render();toast('Payment recorded');}
+
+function markInvoicePaid(id) {
+  const i = data.invoices.find(x => x.id === id);
+  if (!i || i.status === 'paid') return;
+  const stamp = new Date().toISOString();
+  createReceipt(i.clientId, Math.max(0, num(i.finalAmount) - invoiceAdvance(i)), `Invoice ${i.number}`, 'invoice', i.id, stamp);
+  i.status = 'paid';
+  i.paidAt = today();
+  i.paidAtTs = stamp;
+  mutate('invoices', i);
+  i.itemIds.forEach(itemId => {
+    const item = data.items.find(x => x.id === itemId);
+    if (item) {
+      item.status = 'paid';
+      item.paidAt = i.paidAt;
+      item.paidAtTs = stamp;
+      queue('items', itemId);
+    }
+  });
+  render();
+  toast('Payment recorded');
+}
 
 const remoteTable = { clients:'clients', groups:'deal_groups', projectGroups:'project_groups', items:'work_items', invoices:'invoices', receipts:'payment_receipts' };
 function remoteRow(table, x) {
@@ -4033,7 +4549,7 @@ function remoteRow(table, x) {
   if(table==='groups')return {id:x.id,workspace_id:ws,client_id:x.clientId,label:x.label,agreed_amount:x.agreedAmount};
   if(table==='projectGroups')return {id:x.id,workspace_id:ws,client_id:x.clientId,label:x.label};
   if(table==='items')return {id:x.id,workspace_id:ws,client_id:x.clientId,group_id:x.groupId||null,project_group_id:x.projectGroupId||null,source_row:x.sourceRow||null,sort_order:x.sortOrder||0,serial:cleanSerial(String(x.serial||'')),work_date:validDate(x.workDate),due_date:validDate(x.dueDate),service:x.service||'',quantity:num(x.quantity),rate:num(x.rate),quoted_total:num(x.quotedTotal),advance_amount:num(x.advanceAmount),advance_received_at:validDate(x.advanceReceivedAt),paid_at:validDate(x.paidAt),paid_at_ts:x.paidAtTs||null,status:x.status,revision_count:x.revisionCount||0,assignee_id:x.assigneeId==='local-me'?currentUserId():isUuid(x.assigneeId)?x.assigneeId:null,remarks:x.remarks||'',updated_at:x.updatedAt||new Date().toISOString()};
-  if(table==='invoices')return {id:x.id,workspace_id:ws,client_id:x.clientId,number:x.number,issue_date:validDate(x.issueDate)||today(),paid_at:validDate(x.paidAt),paid_at_ts:x.paidAtTs||null,item_ids:x.itemIds,lines:x.lines,subtotal:num(x.subtotal),discount:num(x.discount),final_amount:num(x.finalAmount),advance_amount:invoiceAdvance(x),status:x.status,seller:x.seller,buyer:x.buyer};
+  if(table==='invoices')return {id:x.id,workspace_id:ws,client_id:x.clientId,number:x.number,issue_date:validDate(x.issueDate)||today(),paid_at:validDate(x.paidAt),paid_at_ts:x.paidAtTs||null,item_ids:x.itemIds,lines:x.lines,subtotal:num(x.subtotal),discount:num(x.discount),final_amount:num(x.finalAmount),advance_amount:invoiceAdvance(x),status:x.status,seller:{...(x.seller||{}),lumpSum:{isLumpSum:!!x.isLumpSum,lumpSumDescription:x.lumpSumDescription||'',originalLines:x.originalLines||[]}},buyer:x.buyer};
   if(table==='receipts')return {id:x.id,workspace_id:ws,client_id:x.clientId||null,client_name:x.clientName,amount:num(x.amount),received_month:x.receivedMonth,received_on:x.receivedOn||null,received_at:x.receivedAt||null,source:x.source,source_key:x.sourceKey,reference_kind:x.referenceKind||null,reference_id:x.referenceId||null,description:x.description||'',source_file:x.sourceFile||null,source_row:x.sourceRow||null,original_date:x.originalDate||null,date_quality:x.dateQuality||'exact'};
 }
 function localRow(table,x) {
@@ -4041,7 +4557,7 @@ function localRow(table,x) {
   if(table==='groups')return {id:x.id,clientId:x.client_id,label:x.label,agreedAmount:x.agreed_amount};
   if(table==='projectGroups')return {id:x.id,clientId:x.client_id,label:x.label};
   if(table==='items')return {id:x.id,clientId:x.client_id,groupId:x.group_id,projectGroupId:x.project_group_id,sourceRow:x.source_row,sortOrder:x.sort_order,serial:cleanSerial(x.serial)||cleanSerial(String((x.sort_order||0)+1)),workDate:x.work_date||'',dueDate:x.due_date||'',service:x.service,quantity:num(x.quantity),rate:num(x.rate),quotedTotal:num(x.quoted_total),advanceAmount:num(x.advance_amount),advanceReceivedAt:x.advance_received_at||null,paidAt:x.paid_at||null,paidAtTs:x.paid_at_ts||null,status:x.status,revisionCount:x.revision_count,assigneeId:x.assignee_id||'',remarks:x.remarks||'',manualTotal:true,updatedAt:x.updated_at};
-  if(table==='invoices')return {id:x.id,clientId:x.client_id,number:x.number,issueDate:x.issue_date,paidAt:x.paid_at||null,paidAtTs:x.paid_at_ts||null,itemIds:x.item_ids||[],lines:x.lines||[],subtotal:num(x.subtotal),discount:num(x.discount),finalAmount:num(x.final_amount),advanceAmount:num(x.advance_amount),status:x.status,seller:x.seller||{},buyer:x.buyer||{}};
+  if(table==='invoices')return {id:x.id,clientId:x.client_id,number:x.number,issueDate:x.issue_date,paidAt:x.paid_at||null,paidAtTs:x.paid_at_ts||null,itemIds:x.item_ids||[],lines:x.lines||[],isLumpSum:x.seller?.lumpSum?.isLumpSum??x.isLumpSum??false,lumpSumDescription:x.seller?.lumpSum?.lumpSumDescription||x.lumpSumDescription||'',originalLines:x.seller?.lumpSum?.originalLines||x.originalLines||[],subtotal:num(x.subtotal),discount:num(x.discount),finalAmount:num(x.final_amount),advanceAmount:num(x.advance_amount),status:x.status,seller:x.seller||{},buyer:x.buyer||{}};
   if(table==='receipts')return {id:x.id,clientId:x.client_id,clientName:x.client_name,amount:num(x.amount),receivedMonth:x.received_month,receivedOn:x.received_on,receivedAt:x.received_at,source:x.source,sourceKey:x.source_key,referenceKind:x.reference_kind,referenceId:x.reference_id,description:x.description,sourceFile:x.source_file,sourceRow:x.source_row,originalDate:x.original_date,dateQuality:x.date_quality};
 }
 function isUuid(s){return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(s||'');}
@@ -4242,7 +4758,7 @@ const lastOnlineAlerts = {};
 async function handleUserOnline({ userId, displayName, catType, replyRequested }) {
   if (!userId || userId === currentUserId()) return;
   lastPartnerOnlineTime = Date.now();
-  if (tab === 'chat') render();
+  if (tab === 'chat') updateChatOnlineStatusUI();
   const now = Date.now();
   if (lastOnlineAlerts[userId] && now - lastOnlineAlerts[userId] < 60000) {
     return;
@@ -4298,7 +4814,7 @@ function subscribe(){
   channel.on('broadcast', { event: 'user_online' }, async ({ payload }) => {
     if (!payload) return;
     lastPartnerOnlineTime = Date.now();
-    if (tab === 'chat') render();
+    if (tab === 'chat') updateChatOnlineStatusUI();
     await handleUserOnline(payload);
   });
 
@@ -4310,7 +4826,7 @@ function subscribe(){
   channel.on('presence', { event: 'join' }, async ({ newPresences }) => {
     if (!Array.isArray(newPresences)) return;
     lastPartnerOnlineTime = Date.now();
-    if (tab === 'chat') render();
+    if (tab === 'chat') updateChatOnlineStatusUI();
     for (const p of newPresences) {
       if (p.userId && p.userId !== currentUserId()) {
         await handleUserOnline({

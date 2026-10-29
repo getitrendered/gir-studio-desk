@@ -756,10 +756,27 @@ button:disabled,select:disabled,[role="button"][aria-disabled="true"],[role="opt
   vertical-align: middle;
 }
 
+#app.chat-mode main {
+  padding: 0 !important;
+  overflow: hidden !important;
+  height: 100% !important;
+  display: flex !important;
+  flex-direction: column !important;
+}
+
+#app.chat-mode .chat-container {
+  height: 100% !important;
+  min-height: 100% !important;
+  border-radius: 0 !important;
+  border: none !important;
+  box-shadow: none !important;
+  flex: 1 !important;
+}
+
 .chat-container {
   display: flex;
   flex-direction: column;
-  height: calc(100vh - 120px);
+  height: 100%;
   min-height: 520px;
   background: #0f172a;
   border-radius: 12px;
@@ -1396,6 +1413,25 @@ button:disabled,select:disabled,[role="button"][aria-disabled="true"],[role="opt
   display: flex;
   align-items: center;
   gap: 10px;
+}
+
+.sticker-header-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: #f8fafc;
+  font-size: 13px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.sticker-count-badge {
+  background: #f59e0b;
+  color: #111827;
+  font-size: 10px;
+  font-weight: 800;
+  padding: 2px 7px;
+  border-radius: 10px;
 }
 
 .sticker-tabs {
