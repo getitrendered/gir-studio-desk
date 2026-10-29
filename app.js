@@ -346,13 +346,60 @@ function renderDashboard() {
     <div class="grid-2"><div class="panel"><h3>Clients with most pending work</h3>${priority.length?priority.map(x=>`<div class="list-row"><div><strong>${esc(x.cl.name)}</strong><small>${x.items.length} unfinished rows</small></div><button class="small-btn" data-client-open="${x.cl.id}">Open sheet</button></div>`).join(''):'<p class="muted">No pending work right now.</p>'}</div>
     <div class="panel"><h3>Clients closest to completion</h3>${byClient.length?byClient.map(x=>`<div class="metric-row"><div style="width:100%"><div style="display:flex;justify-content:space-between;margin-bottom:8px"><strong>${esc(x.cl.name)}</strong><span class="muted">${x.pending} left · ${x.done}/${x.total}</span></div><div class="bar"><span style="width:${x.done/x.total*100}%"></span></div></div></div>`).join(''):'<p class="muted">No unfinished client work right now.</p>'}</div></div>`;
 }
+function groupTotalValue(kind, group, items) {
+  const active = (items || []).filter(i => i.status !== 'discarded');
+  if (kind === 'deal') {
+    if (group.agreedAmount != null && group.agreedAmount !== '') {
+      const agreed = num(group.agreedAmount);
+      const isAllPaid = active.length > 0 && active.every(i => i.status === 'paid');
+      return { agreed: true, total: agreed, paid: isAllPaid ? agreed : 0 };
+    }
+    const total = active.reduce((s, i) => s + num(i.quotedTotal), 0);
+    const paid = active.filter(i => i.status === 'paid').reduce((s, i) => s + num(i.quotedTotal), 0);
+    return { agreed: false, total, paid };
+  }
+  let total = 0;
+  let paid = 0;
+  const dealsHandled = new Set();
+  for (const it of active) {
+    if (it.groupId) {
+      if (!dealsHandled.has(it.groupId)) {
+        dealsHandled.add(it.groupId);
+        const d = (data.groups || []).find(g => g.id === it.groupId);
+        const dItems = active.filter(x => x.groupId === it.groupId);
+        if (d && d.agreedAmount != null && d.agreedAmount !== '') {
+          const agreed = num(d.agreedAmount);
+          total += agreed;
+          if (dItems.length > 0 && dItems.every(x => x.status === 'paid')) paid += agreed;
+        } else {
+          total += dItems.reduce((s, x) => s + num(x.quotedTotal), 0);
+          paid += dItems.filter(x => x.status === 'paid').reduce((s, x) => s + num(x.quotedTotal), 0);
+        }
+      }
+    } else {
+      total += num(it.quotedTotal);
+      if (it.status === 'paid') paid += num(it.quotedTotal);
+    }
+  }
+  return { agreed: false, total, paid };
+}
 function groupHeader(kind,group,items) {
   const done=items.filter(i=>['sent','paid'].includes(i.status)).length;
   const active=items.filter(i=>i.status!=='discarded');
   const folded=collapsedGroups.has(kind+':'+group.id);
-  const detail=kind==='deal'&&group.agreedAmount!=null?` · Agreed ${money(group.agreedAmount)}`:'';
+  const gVal=groupTotalValue(kind,group,items);
+  let detail='';
+  if(gVal.agreed){
+    detail=` · Agreed ${money(gVal.total)}`;
+  } else if(gVal.total>0){
+    if(gVal.paid>0 && gVal.paid<gVal.total){
+      detail=` · Total ${money(gVal.total)} (${money(gVal.paid)} paid)`;
+    } else {
+      detail=` · Total ${money(gVal.total)}`;
+    }
+  }
   const status=groupStatus(items);
-  return `<tr class="sheet-group-header ${kind}"><td colspan="11"><div class="group-heading"><button data-group-collapse="${kind}:${group.id}" aria-expanded="${!folded}"><svg class="group-chevron ${folded?'collapsed':''}" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="m3.5 5.75 4.5 4.5 4.5-4.5" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg><strong>${esc(group.label)}</strong><span>${done}/${active.length} complete${detail}</span></button><span class="group-status ${status.toLowerCase().replaceAll(' ','-')}">${status}</span><button class="group-quick" data-group-status="${kind}:${group.id}:sent" ${!active.length?'disabled':''}>Mark sent</button><button class="group-quick" data-group-status="${kind}:${group.id}:paid" ${!active.length?'disabled':''}>Mark paid</button>${kind==='project'?`<button class="group-add" data-group-add="${group.id}" title="Add work under this project">＋ Row</button>`:''}<button class="group-rename" data-group-rename="${kind}:${group.id}" title="Rename group">Rename</button><button class="group-ungroup" data-group-ungroup="${kind}:${group.id}" title="Ungroup (keep rows, remove group)">Ungroup</button></div></td></tr>`;
+  return `<tr class="sheet-group-header ${kind}"><td colspan="11"><div class="group-heading"><button data-group-collapse="${kind}:${group.id}" aria-expanded="${!folded}"><svg class="group-chevron ${folded?'collapsed':''}" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="m3.5 5.75 4.5 4.5 4.5-4.5" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg><strong>${esc(group.label)}</strong><span>${done}/${active.length} complete${detail}</span></button><span class="group-status ${status.toLowerCase().replaceAll(' ','-')}">${status}</span><button class="group-quick" data-group-status="${kind}:${group.id}:sent" ${!active.length?'disabled':''}>Mark sent</button><button class="group-quick" data-group-status="${kind}:${group.id}:paid" ${!active.length?'disabled':''}>Mark paid</button><button class="group-deal-btn" data-group-deal="${kind}:${group.id}" title="Make or edit group deal">Group deal</button>${kind==='project'?`<button class="group-add" data-group-add="${group.id}" title="Add work under this project">＋ Row</button>`:''}<button class="group-rename" data-group-rename="${kind}:${group.id}" title="Rename group">Rename</button><button class="group-ungroup" data-group-ungroup="${kind}:${group.id}" title="Ungroup (keep rows, remove group)">Ungroup</button></div></td></tr>`;
 }
 function groupStatus(items){const active=items.filter(i=>i.status!=='discarded');if(!active.length)return 'Discarded';if(active.every(i=>i.status==='paid'))return 'Paid';if(active.every(i=>['sent','paid'].includes(i.status)))return 'Sent';if(active.some(i=>['working','changes'].includes(i.status)))return 'Working';return 'Pending';}
 function blankRowHtml(order) {
@@ -711,8 +758,18 @@ function renderGroups() {
     const rows=data.items.filter(i=>(g.kind==='project'?i.projectGroupId:i.groupId)===g.id);
     const active=rows.filter(i=>i.status!=='discarded');
     const done=active.filter(i=>['sent','paid'].includes(i.status)).length;
-    const amount=g.kind==='deal'&&g.agreedAmount!=null?`<span>Agreed ${money(g.agreedAmount)}</span>`:'';
-    return `<div class="group-card"><button class="group-card-open" data-open-group="${g.kind}:${g.id}"><span class="group-badge">${g.kind==='project'?'PROJECT GROUP':'DEAL GROUP'}</span><strong>${esc(g.label)}</strong><small>${esc(data.clients.find(c=>c.id===g.clientId)?.name)} · ${done}/${active.length} complete · ${active.length-done} left · ${groupStatus(rows)}</small>${amount}<div class="bar"><span style="width:${active.length?done/active.length*100:0}%"></span></div></button><div class="group-card-actions"><button class="group-quick" data-group-status="${g.kind}:${g.id}:sent">Mark sent</button><button class="group-quick" data-group-status="${g.kind}:${g.id}:paid">Mark paid</button></div><button class="group-card-rename" data-rename-card="${g.kind}:${g.id}" title="Rename group">Rename</button><button class="group-card-rename" data-ungroup-card="${g.kind}:${g.id}" title="Ungroup group" style="margin-left:6px">Ungroup</button><div class="group-card-editor" hidden><label>Group name<input value="${esc(g.label)}" aria-label="Group name"></label><div><button type="button" data-save-card="${g.kind}:${g.id}">Save</button><button type="button" data-cancel-card>Cancel</button></div></div></div>`;
+    const gVal=groupTotalValue(g.kind,g,rows);
+    let amount='';
+    if(gVal.agreed){
+      amount=`<span>Agreed ${money(gVal.total)}</span>`;
+    } else if(gVal.total>0){
+      if(gVal.paid>0 && gVal.paid<gVal.total){
+        amount=`<span>Total ${money(gVal.total)} (${money(gVal.paid)} paid)</span>`;
+      } else {
+        amount=`<span>Total ${money(gVal.total)}</span>`;
+      }
+    }
+    return `<div class="group-card"><button class="group-card-open" data-open-group="${g.kind}:${g.id}"><span class="group-badge">${g.kind==='project'?'PROJECT GROUP':'DEAL GROUP'}</span><strong>${esc(g.label)}</strong><small>${esc(data.clients.find(c=>c.id===g.clientId)?.name)} · ${done}/${active.length} complete · ${active.length-done} left · ${groupStatus(rows)}</small>${amount}<div class="bar"><span style="width:${active.length?done/active.length*100:0}%"></span></div></button><div class="group-card-actions"><button class="group-quick" data-group-status="${g.kind}:${g.id}:sent">Mark sent</button><button class="group-quick" data-group-status="${g.kind}:${g.id}:paid">Mark paid</button><button class="group-quick" data-group-deal-card="${g.kind}:${g.id}">Group deal</button></div><button class="group-card-rename" data-rename-card="${g.kind}:${g.id}" title="Rename group">Rename</button><button class="group-card-rename" data-ungroup-card="${g.kind}:${g.id}" title="Ungroup group" style="margin-left:6px">Ungroup</button><div class="group-card-editor" hidden><label>Group name<input value="${esc(g.label)}" aria-label="Group name"></label><div><button type="button" data-save-card="${g.kind}:${g.id}">Save</button><button type="button" data-cancel-card>Cancel</button></div></div></div>`;
   }).join('');
   return `<div class="section-top"><div><h2>Groups</h2><p>Project folders and negotiated deals across clients.</p></div></div>${groups.length?`<div class="group-grid">${cards}</div>`:'<div class="empty"><h3>No groups yet</h3><p>Select rows on a worksheet to create a project group or grouped deal.</p></div>'}`;
 }function renderClientDetails() {
@@ -1080,6 +1137,8 @@ function bindMain() {
   $$('[data-group-collapse]').forEach(b=>b.onclick=()=>{const id=b.dataset.groupCollapse;collapsedGroups.has(id)?collapsedGroups.delete(id):collapsedGroups.add(id);render();});
   $$('[data-group-add]').forEach(b=>b.onclick=()=>{const group=data.projectGroups.find(g=>g.id===b.dataset.groupAdd);if(!group)return;const item=newItem(group.clientId,clientItems(group.clientId).length);item.projectGroupId=group.id;mutate('items',item);setTimeout(()=>{const row=document.querySelector(`[data-row="${item.id}"]`);row?.scrollIntoView({block:'center'});const field=row?.querySelector('[data-cell="service"]');if(field)activateSheetField(field);},60);});
   $$('[data-group-rename]').forEach(b=>b.onclick=()=>{const [kind,id]=b.dataset.groupRename.split(':');renameGroup(kind,id);});
+  $$('[data-group-deal]').forEach(b=>b.onclick=()=>{const [kind,id]=b.dataset.groupDeal.split(':');openGroupDealDialog(kind,id);});
+  $$('[data-group-deal-card]').forEach(b=>b.onclick=()=>{const [kind,id]=b.dataset.groupDealCard.split(':');openGroupDealDialog(kind,id);});
   $$('[data-group-ungroup]').forEach(b=>b.onclick=()=>{const [kind,id]=b.dataset.groupUngroup.split(':');ungroupDialog(kind,id);});
   $$('[data-ungroup-card]').forEach(b=>b.onclick=()=>{const [kind,id]=b.dataset.ungroupCard.split(':');ungroupDialog(kind,id);});
   $$('[data-group-status]').forEach(b=>b.onclick=()=>{const [kind,id,status]=b.dataset.groupStatus.split(':');const group=(kind==='project'?data.projectGroups:data.groups).find(g=>g.id===id);if(!group)return;const rows=data.items.filter(i=>(kind==='project'?i.projectGroupId:i.groupId)===id&&i.status!=='discarded'&&(status==='paid'?i.status!=='paid':!['sent','paid'].includes(i.status)));if(!rows.length){toast('Group is already '+status);return;}bulkSetStatus(status,rows.map(i=>i.id),{kind,id,label:group.label});});
@@ -2552,6 +2611,106 @@ function projectGroupDialog() {
   if(new Set(chosen.map(i=>i.clientId)).size!==1){toast('Select rows from one client');return;}
   modal('Group project',`<p>Organize ${chosen.length} selected rows under one collapsible project heading.</p><div class="field"><label>Project group name</label><input id="projectGroupName" placeholder="For example, Sheena and Royston" autofocus></div>`,`<div class="modal-actions"><button class="small-btn blue" id="saveProjectGroup">Create group</button></div>`);
   $('#saveProjectGroup').onclick=()=>{const name=inputValue('projectGroupName');if(!name){toast('Enter a group name');return;}pushUndo('Group project');const group={id:uid(),clientId:chosen[0].clientId,label:name};for(const item of chosen){item.projectGroupId=group.id;queue('items',item.id);}mutate('projectGroups',group);syncProjectReceipt(group.id);selected.clear();closeModal();toast('Project group created');};
+}
+function openGroupDealDialog(kind, id) {
+  const isProj = kind === 'project';
+  const table = isProj ? 'projectGroups' : 'groups';
+  const group = (data[table] || []).find(g => g.id === id);
+  if (!group) return;
+
+  const activeItems = (data.items || []).filter(i => (isProj ? i.projectGroupId : i.groupId) === id && i.status !== 'discarded');
+  const allItems = activeItems.length ? activeItems : (data.items || []).filter(i => (isProj ? i.projectGroupId : i.groupId) === id);
+  if (!allItems.length) {
+    toast('Group has no rows');
+    return;
+  }
+
+  const quote = allItems.reduce((sum, i) => sum + num(i.quotedTotal), 0);
+  const currentAgreed = (!isProj && group.agreedAmount != null) ? group.agreedAmount : '';
+
+  modal(
+    isProj ? 'Make Group Deal' : 'Edit Group Deal',
+    `<p><strong>${esc(group.label)}</strong> · ${allItems.length} rows · Original quote ${money(quote)}</p>
+     <div class="field">
+       <label>Group name</label>
+       <input id="groupDealLabel" value="${esc(group.label || 'Agreed deal')}">
+     </div>
+     <div class="field">
+       <label>Agreed final deal amount</label>
+       <input id="groupDealAmount" type="number" min="0" step="0.01" placeholder="Enter negotiated amount" value="${currentAgreed}" autofocus>
+     </div>
+     <div class="notice">
+       This amount replaces the sum of row totals in revenue and payment estimates. Individual rows stay visible for work tracking.
+     </div>`,
+    `<div class="modal-actions">
+       <button class="small-btn" id="cancelGroupDeal">Cancel</button>
+       <button class="small-btn blue" id="saveGroupDeal">Save group deal</button>
+     </div>`
+  );
+
+  $('#cancelGroupDeal').onclick = closeModal;
+
+  const submitDeal = () => {
+    pushUndo(isProj ? 'Convert to group deal' : 'Edit group deal');
+    const label = inputValue('groupDealLabel').trim() || group.label || 'Agreed deal';
+    const rawVal = inputValue('groupDealAmount').trim();
+    const agreedAmount = rawVal === '' ? null : num(rawVal);
+    if (agreedAmount !== null && (!Number.isFinite(agreedAmount) || agreedAmount < 0)) {
+      toast('Please enter a valid deal amount');
+      return;
+    }
+
+    if (isProj) {
+      const dealGroup = {
+        id: group.id,
+        clientId: group.clientId,
+        label,
+        agreedAmount
+      };
+      mutate('groups', dealGroup);
+
+      allItems.forEach(i => {
+        i.groupId = dealGroup.id;
+        i.projectGroupId = null;
+        enqueue('items', i.id);
+      });
+
+      data.projectGroups = (data.projectGroups || []).filter(g => g.id !== id);
+      data.pending = (data.pending || []).filter(p => !(p.table === 'projectGroups' && p.id === id));
+      data.pendingDeletes ||= [];
+      if (!data.pendingDeletes.some(d => d.table === 'projectGroups' && d.id === id)) {
+        data.pendingDeletes.push({ table: 'projectGroups', id });
+      }
+      collapsedGroups.delete('project:' + id);
+
+      const receiptsToRemove = (data.receipts || []).filter(r => r.referenceKind === 'project' && r.referenceId === id);
+      receiptsToRemove.forEach(r => removeReceipt(r.id));
+
+      data.groups = (data.groups || []).filter(g => g.id === dealGroup.id || (data.items || []).some(i => i.groupId === g.id));
+
+      syncDealReceipt(dealGroup.id);
+      save();
+      scheduleSync();
+      closeModal();
+      render();
+      toast('Group converted to group deal');
+    } else {
+      group.label = label;
+      group.agreedAmount = agreedAmount;
+      mutate('groups', group);
+      syncDealReceipt(group.id);
+      save();
+      scheduleSync();
+      closeModal();
+      render();
+      toast('Group deal saved');
+    }
+  };
+
+  $('#saveGroupDeal').onclick = submitDeal;
+  const onKey = e => { if (e.key === 'Enter') submitDeal(); };
+  $('#groupDealLabel').onkeydown = onKey;
+  $('#groupDealAmount').onkeydown = onKey;
 }
 function renameGroup(kind,id){const table=kind==='project'?'projectGroups':'groups',group=data[table].find(g=>g.id===id);if(!group)return;modal('Rename group',`<div class="field"><label>Group name</label><input id="renameGroupName" value="${esc(group.label)}" autofocus></div>`,`<div class="modal-actions"><button class="small-btn blue" id="saveGroupName">Save name</button></div>`);const saveName=()=>{const label=inputValue('renameGroupName');if(!label){toast('Enter a group name');return;}group.label=label;mutate(table,group);closeModal();toast('Group renamed');};$('#saveGroupName').onclick=saveName;$('#renameGroupName').onkeydown=e=>{if(e.key==='Enter')saveName();};}
 function ungroupDialog(kind, id) {

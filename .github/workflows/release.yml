@@ -38,6 +38,9 @@ jobs:
       - run: node tests/test_row_delete_undo_redo.cjs
       - run: node tests/test_cat_reactions.cjs
       - run: node tests/test_smart_notifications.cjs
+      - run: node tests/test_ungroup.cjs
+      - run: node tests/test_nested_group_receipts.cjs
+      - run: node tests/test_group_deals_and_totals.cjs
       - run: python tests/test_import.py
       - run: npm run build:win
       - name: Publish GitHub Release
