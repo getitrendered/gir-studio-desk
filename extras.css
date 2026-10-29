@@ -2094,3 +2094,78 @@ button:disabled,select:disabled,[role="button"][aria-disabled="true"],[role="opt
     border: none !important;
   }
 }
+
+/* ==========================================================================
+   Excel-Style Row Drag Selection & Highlighted Toolbar Total
+   ========================================================================== */
+
+body.row-drag-selecting,
+body.row-drag-selecting * {
+  user-select: none !important;
+  -webkit-user-select: none !important;
+  cursor: cell !important;
+}
+
+body.row-drag-selecting tr[data-row] input {
+  pointer-events: none !important;
+}
+
+tr[data-row].selected td {
+  background: #eff6ff !important;
+}
+
+#selectedCount {
+  display: inline-flex !important;
+  align-items: center !important;
+  margin-left: auto !important;
+}
+
+.sel-count-zero {
+  font-size: 11.5px !important;
+  color: #8b95a5 !important;
+  font-weight: 500 !important;
+}
+
+.sel-badge-active {
+  display: inline-flex !important;
+  align-items: center !important;
+  gap: 10px !important;
+  background: #f0fdf4 !important;
+  border: 1.5px solid #86efac !important;
+  border-radius: 9px !important;
+  padding: 4px 14px !important;
+  box-shadow: 0 2px 8px rgba(16, 185, 129, 0.15) !important;
+}
+
+.sel-count-pill {
+  font-size: 11.5px !important;
+  font-weight: 700 !important;
+  color: #166534 !important;
+  background: #dcfce7 !important;
+  padding: 2px 8px !important;
+  border-radius: 6px !important;
+  letter-spacing: 0.2px !important;
+}
+
+.sel-total-wrap {
+  display: inline-flex !important;
+  align-items: baseline !important;
+  gap: 6px !important;
+}
+
+.sel-total-label {
+  font-size: 11px !important;
+  font-weight: 800 !important;
+  color: #14532d !important;
+  letter-spacing: 0.8px !important;
+  text-transform: uppercase !important;
+}
+
+.sel-total-amount {
+  font-size: 17px !important;
+  font-weight: 800 !important;
+  color: #047857 !important; /* Rich vibrant emerald */
+  letter-spacing: -0.4px !important;
+  font-feature-settings: "tnum" 1 !important;
+  line-height: 1 !important;
+}

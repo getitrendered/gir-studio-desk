@@ -208,4 +208,61 @@ assert.strictEqual(itemsAfterMoveUp[0].serial, '1');
 assert.strictEqual(itemsAfterMoveUp[1].serial, '2');
 console.log('✓ Test 6: Move row by delta (Alt+Up / Alt+Down) works seamlessly');
 
+// Test 7: Excel-Style Row Drag Selection & Prominent Total
+vm.runInContext(`
+  // Mock $$('[data-row]') to return elements with dataset.row and classList
+  $$ = selector => {
+    if (selector === '[data-row]') {
+      return clientItems().map(item => ({
+        dataset: { row: item.id },
+        classList: { toggle: () => {}, contains: () => false, add: () => {}, remove: () => {} }
+      }));
+    }
+    return [];
+  };
+
+  // Mock clipboard for writeText
+  let lastCopiedText = '';
+  navigator.clipboard.writeText = async text => { lastCopiedText = text; };
+
+  // Reset selection
+  selected.clear();
+
+  const allItems = clientItems();
+  const firstId = allItems[0].id;
+  const thirdId = allItems[2].id;
+
+  // Start dragging on first row
+  handleRowDragStart(firstId, { button: 0 });
+
+  // Drag over to 3rd row
+  handleRowDragOver(thirdId);
+
+  // Release mouse
+  handleRowDragEnd();
+
+  // Check selection
+  globalThis.selectedSize = selected.size;
+  globalThis.has0 = selected.has(allItems[0].id);
+  globalThis.has1 = selected.has(allItems[1].id);
+  globalThis.has2 = selected.has(allItems[2].id);
+  globalThis.has3 = selected.has(allItems[3].id);
+
+  // Test selectionLabelHtml
+  globalThis.labelHtml = selectionLabelHtml();
+
+  // Test copySelectedRows with dragged range
+  copySelectedRows(false);
+  globalThis.lastCopiedText = lastCopiedText;
+`, context);
+
+assert.strictEqual(context.selectedSize, 3, 'Drag selection across 3 rows should select 3 rows');
+assert.ok(context.has0 && context.has1 && context.has2, 'Rows 0, 1, and 2 should all be selected');
+assert.ok(!context.has3, 'Row 3 should not be selected');
+assert.ok(context.labelHtml.includes('sel-badge-active'), 'Label HTML should contain sel-badge-active');
+assert.ok(context.labelHtml.includes('3 rows selected'), 'Label HTML should display "3 rows selected"');
+assert.ok(context.labelHtml.includes('sel-total-amount'), 'Label HTML should contain sel-total-amount');
+assert.ok(context.lastCopiedText.split('\n').filter(Boolean).length >= 3, 'Copied clipboard text should contain 3 rows');
+console.log('✓ Test 7: Excel-style row drag selection, prominent total badge, and copy-paste verified');
+
 console.log('ALL ROW COPY, CUT, PASTE, AND MOVE TESTS PASSED!');
