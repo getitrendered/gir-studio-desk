@@ -2008,7 +2008,8 @@ CAT_STICKER_COLORS.forEach(col => {
       colorName: col.name,
       title: `${r.title.split('/')[0].trim()} (${col.name})`,
       message: r.message,
-      format: 'lottie',
+      format: 'image',
+      url: `assets/cats/moving/${col.id}/${r.key}.webp`,
       isAnimated: true
     });
     ALL_CAT_STATIC_STICKERS.push({
@@ -2019,7 +2020,7 @@ CAT_STICKER_COLORS.forEach(col => {
       title: `${r.title.split('/')[0].trim()} (${col.name})`,
       message: r.message,
       format: 'image',
-      url: `assets/cats/${col.id}/${r.key}.webp`,
+      url: `assets/cats/static/${col.id}/${r.key}.webp`,
       isAnimated: false
     });
   });
@@ -2367,15 +2368,12 @@ function renderChatMessagesList(messages) {
     if (m.type === 'text') {
       contentHtml = `<div class="chat-text">${esc(m.text || '')}</div>`;
     } else if (m.type === 'sticker') {
-      if (m.sticker?.format === 'lottie') {
-        contentHtml = `
-          <div class="chat-sticker-anim" data-chat-lottie="${esc(m.sticker.color)}:${esc(m.sticker.key)}" title="${esc(m.sticker.title || 'Cat sticker')}"></div>
-        `;
-      } else {
-        contentHtml = `
-          <img src="${esc(m.sticker?.url || '')}" class="chat-sticker-img" alt="Sticker" title="${esc(m.sticker?.title || 'Cat sticker')}" />
-        `;
-      }
+      const stickerUrl = m.sticker?.url || (m.sticker?.isAnimated
+        ? `assets/cats/moving/${m.sticker?.color || 'orange'}/${m.sticker?.key || 'happy'}.webp`
+        : `assets/cats/static/${m.sticker?.color || 'orange'}/${m.sticker?.key || 'happy'}.webp`);
+      contentHtml = `
+        <img src="${esc(stickerUrl)}" class="chat-sticker-img" alt="Sticker" title="${esc(m.sticker?.title || 'Cat sticker')}" />
+      `;
     } else if (m.type === 'work_card' && m.workCard) {
       const card = m.workCard;
       contentHtml = `
@@ -2449,9 +2447,7 @@ function renderStickerDrawerContent() {
   return filtered.map(s => `
     <button type="button" class="sticker-item-btn" data-send-sticker="${esc(s.id)}" data-sticker-type="${s.format}" title="${esc(s.title)}">
       <div class="sticker-preview-box">
-        ${s.format === 'lottie' 
-          ? `<div class="drawer-lottie-anim" data-drawer-lottie="${esc(s.color)}:${esc(s.key)}"></div>`
-          : `<img src="${esc(s.url)}" alt="${esc(s.title)}" loading="lazy" />`}
+        <img src="${esc(s.url)}" alt="${esc(s.title)}" loading="lazy" />
       </div>
       <span class="sticker-label">${esc(s.title.split('(')[0].trim())}</span>
     </button>
@@ -2462,42 +2458,6 @@ function initChatInteractions() {
   const viewport = $('#chatMessagesViewport');
   if (viewport) {
     setTimeout(() => { viewport.scrollTop = viewport.scrollHeight; }, 30);
-  }
-
-  // Load Lotties for stickers inside chat bubbles
-  if (typeof window !== 'undefined' && window.bodymovin) {
-    $$('[data-chat-lottie]').forEach(el => {
-      const [color, key] = el.dataset.chatLottie.split(':');
-      getCatLottie(color, key).then(data => {
-        if (data && el) {
-          el.innerHTML = '';
-          window.bodymovin.loadAnimation({
-            container: el,
-            renderer: 'svg',
-            loop: true,
-            autoplay: true,
-            animationData: data
-          });
-        }
-      });
-    });
-
-    // Load Lotties for drawer previews
-    $$('[data-drawer-lottie]').forEach(el => {
-      const [color, key] = el.dataset.drawerLottie.split(':');
-      getCatLottie(color, key).then(data => {
-        if (data && el) {
-          el.innerHTML = '';
-          window.bodymovin.loadAnimation({
-            container: el,
-            renderer: 'svg',
-            loop: true,
-            autoplay: true,
-            animationData: data
-          });
-        }
-      });
-    });
   }
 
   const sendBtn = $('#chatSendBtn');
@@ -2816,18 +2776,18 @@ function openAttachWorkDialog() {
           <input type="text" id="attachRowSearch" placeholder="Filter by service..." value="${esc(clientRowsSearch)}" />
         </div>
       </div>
-      <div style="max-height:220px;overflow-y:auto;border:1px solid #334155;border-radius:8px;background:#0f172a;margin-bottom:12px">
+      <div class="attach-work-table-wrap">
         ${filteredRows.length ? filteredRows.map(r => `
-          <label style="display:flex;align-items:center;gap:10px;padding:8px 12px;border-bottom:1px solid #1e293b;cursor:pointer;font-size:12px">
+          <label class="attach-work-row ${checkedRowIds.has(r.id) ? 'selected' : ''}">
             <input type="checkbox" data-attach-row="${r.id}" ${checkedRowIds.has(r.id) ? 'checked' : ''} />
-            <div style="flex:1">
-              <strong>${esc(r.service || 'Item')}</strong>
-              <small style="color:#94a3b8;margin-left:6px">${r.quantity || 1} × ${money(r.rate || 0)}</small>
+            <div class="attach-work-info">
+              <strong class="attach-work-service">${esc(r.service || 'Item')}</strong>
+              <span class="attach-work-meta">${r.quantity || 1} × ${money(r.rate || 0)}</span>
             </div>
             <span class="pill ${r.status}">${esc(displayStatus(r))}</span>
-            <strong style="color:#34d399">${money(r.quotedTotal || 0)}</strong>
+            <strong class="attach-work-price">${money(r.quotedTotal || 0)}</strong>
           </label>
-        `).join('') : '<div style="padding:16px;text-align:center;color:#94a3b8;font-size:12px">No rows found</div>'}
+        `).join('') : '<div class="attach-work-empty">No rows found for this client</div>'}
       </div>
     `;
   }
@@ -2865,8 +2825,13 @@ function openAttachWorkDialog() {
     $$('[data-attach-row]').forEach(box => {
       box.onchange = () => {
         const id = box.dataset.attachRow;
-        if (box.checked) checkedRowIds.add(id);
-        else checkedRowIds.delete(id);
+        if (box.checked) {
+          checkedRowIds.add(id);
+          box.closest('.attach-work-row')?.classList.add('selected');
+        } else {
+          checkedRowIds.delete(id);
+          box.closest('.attach-work-row')?.classList.remove('selected');
+        }
       };
     });
   }

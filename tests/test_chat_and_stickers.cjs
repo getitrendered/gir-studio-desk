@@ -159,7 +159,22 @@ console.log('Testing Team Chat, Work Sharing, and Cat Stickers...');
   assert.equal(ctx.CAT_REACTIONS.length, 30, 'Should have all 30 reactions');
   assert.equal(ctx.ALL_CAT_MOVING_STICKERS.length, 120, 'Should have 120 moving stickers (30 x 4 colors)');
   assert.equal(ctx.ALL_CAT_STATIC_STICKERS.length, 120, 'Should have 120 static stickers (30 x 4 colors)');
-  console.log(`✓ Test 1: Cat catalogs verified (30 reactions, ${ctx.ALL_CAT_MOVING_STICKERS.length} moving, ${ctx.ALL_CAT_STATIC_STICKERS.length} static)`);
+  
+  // Verify moving stickers point to assets/cats/moving/ and isAnimated is true
+  ctx.ALL_CAT_MOVING_STICKERS.forEach(s => {
+    assert.equal(s.isAnimated, true, `${s.id} moving must be animated`);
+    assert(s.url.startsWith('assets/cats/moving/'), `${s.id} url must point to assets/cats/moving/`);
+    assert(fs.existsSync(path.join(__dirname, '..', s.url)), `${s.url} must exist on disk`);
+  });
+
+  // Verify static stickers point to assets/cats/static/ and isAnimated is false
+  ctx.ALL_CAT_STATIC_STICKERS.forEach(s => {
+    assert.equal(s.isAnimated, false, `${s.id} static must not be animated`);
+    assert(s.url.startsWith('assets/cats/static/'), `${s.id} url must point to assets/cats/static/`);
+    assert(fs.existsSync(path.join(__dirname, '..', s.url)), `${s.url} must exist on disk`);
+  });
+
+  console.log(`✓ Test 1: Cat catalogs verified (30 reactions, ${ctx.ALL_CAT_MOVING_STICKERS.length} moving, ${ctx.ALL_CAT_STATIC_STICKERS.length} static on disk)`);
 }
 
 // Test 2: Dual in-app reaction banners position on right for self and left for partner
@@ -261,11 +276,14 @@ console.log('Testing Team Chat, Work Sharing, and Cat Stickers...');
   const msg = ctx.data.chatMessages[0];
   assert.equal(msg.type, 'sticker');
   assert.equal(msg.sticker.key, 'party');
-  assert.equal(msg.sticker.format, 'lottie');
+  assert.equal(msg.sticker.format, 'image');
+  assert.equal(msg.sticker.isAnimated, true);
+  assert.equal(msg.sticker.url, 'assets/cats/moving/orange/party.webp');
 
   const threadHtml = ctx.renderChatMessagesList(ctx.data.chatMessages);
-  assert(threadHtml.includes('data-chat-lottie="orange:party"'));
-  console.log('✓ Test 5: Cat sticker messaging and bubble rendering verified');
+  assert(threadHtml.includes('assets/cats/moving/orange/party.webp'));
+  assert(threadHtml.includes('chat-sticker-img'));
+  console.log('✓ Test 5: Cat sticker messaging and WebP bubble rendering verified');
 }
 
 // Test 6: Worksheet multi-row "Share in chat" and jump back
@@ -303,6 +321,10 @@ console.log('Testing Team Chat, Work Sharing, and Cat Stickers...');
   const ctx = setupTestEnvironment();
   ctx.openAttachWorkDialog();
   assert(ctx.modalTitle.includes('Attach Work to Chat'));
+  assert(ctx.modalHtml.includes('attach-work-table-wrap'), 'Must use attach-work-table-wrap container');
+  assert(ctx.modalHtml.includes('attach-work-row'), 'Must use attach-work-row items');
+  assert(ctx.modalHtml.includes('attach-work-service'), 'Must style service name legibly');
+  assert(ctx.modalHtml.includes('attach-work-price'), 'Must style price legibly');
 
   // Attach row i3 from c2
   ctx.pendingChatAttachment = {
@@ -322,7 +344,7 @@ console.log('Testing Team Chat, Work Sharing, and Cat Stickers...');
   assert.equal(msg.workCard.clientName, 'TAYARI EVENTS');
   assert.equal(msg.text, 'Paid for lighting');
   assert.equal(ctx.pendingChatAttachment, null, 'Attachment should clear after sending');
-  console.log('✓ Test 7: Attach work modal from any client verified');
+  console.log('✓ Test 7: Attach work modal UI readability and selection verified');
 }
 
 // Test 8: Display proper names and profile avatar images in chat header and message bubbles
