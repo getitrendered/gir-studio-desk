@@ -7,9 +7,10 @@ const num = v => Number(String(v ?? '').replace(/[^0-9.-]/g, '')) || 0;
 const esc = v => String(v ?? '').replace(/[&<>"']/g, c => ({ '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;' }[c]));
 const cleanSerial = v => { if (v == null || v === '') return ''; const s = String(v).trim(), n = Number(s); if (!isNaN(n) && Number.isInteger(n) && !s.includes('e') && !s.includes('E')) return String(n); return s.replace(/\.0+$/, ''); };
 const fmtDate = d => { if (!d) return '—'; const x = new Date(d + 'T00:00:00'); return Number.isNaN(x.getTime()) ? d : x.toLocaleDateString('en-IN', { day:'numeric', month:'short', year:'numeric' }); };
-const defaults = { clients:[], groups:[], projectGroups:[], items:[], invoices:[], receipts:[], members:[], pending:[], settings:{ seller:{ name:'GIR — Get It Rendered', address:'', email:'', phone:'', taxId:'', bankDetails:'', bankAccounts:[], activeBankAccountId:'', logoData:'' }, url:'https://isdxybpeagloikchhsbp.supabase.co', key:'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImlzZHh5YnBlYWdsb2lrY2hoc2JwIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTI1NzkzMjcsImV4cCI6MjEwODE1NTMyN30.ll1YG9uyrTqmLzE90miCk-O1Ab5VkBPfqrCPDDUc5u8', workspaceId:'17f39873-e10f-4bdf-93ee-1f92b3e25251', displayName:'Samuel', localPartner:'Mezrid', catType:'orange', zoom:100 } };
+const defaults = { clients:[], groups:[], projectGroups:[], items:[], invoices:[], receipts:[], members:[], chatMessages:[], pending:[], settings:{ seller:{ name:'GIR — Get It Rendered', address:'', email:'', phone:'', taxId:'', bankDetails:'', bankAccounts:[], activeBankAccountId:'', logoData:'' }, url:'https://isdxybpeagloikchhsbp.supabase.co', key:'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImlzZHh5YnBlYWdsb2lrY2hoc2JwIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTI1NzkzMjcsImV4cCI6MjEwODE1NTMyN30.ll1YG9uyrTqmLzE90miCk-O1Ab5VkBPfqrCPDDUc5u8', workspaceId:'17f39873-e10f-4bdf-93ee-1f92b3e25251', displayName:'Samuel', localPartner:'Mezrid', catType:'orange', zoom:100 } };
 const GIR_WORKSPACE_ID='17f39873-e10f-4bdf-93ee-1f92b3e25251';
 let data = structuredClone(defaults), tab = 'sheet', lastRenderedTab = null, lastRenderedClient = null, activeClient = null, selected = new Set(), selectionAnchor = null, selectionCell = null, collapsedGroups = new Set(), blankRows = 60, highlightUser = null, filter = 'all', clientApi = null, session = null, channel = null, syncing = false, toastTimer, syncTimer, lastSyncTime = Date.now(), importPreview = null, previewClientIndex = 0, migrating = false;
+let pendingChatAttachment = null, activeStickerTab = 'moving', stickerSearchQuery = '', lastPartnerOnlineTime = 0, unreadChatCount = 0, chatSyncTimer = null;
 let authLoading=true,workspaceReady=false,workspaceResolving=false,accessMode='signin',accessError='',activeStatusMenu=null;
 let desktopUpdate = { status: 'unavailable', message: 'Checking update support…' };
 const navHistory = [];
@@ -282,7 +283,7 @@ function render() {
   const live = !!(clientApi && session && data.settings.workspaceId);
   $$('#tabs button').forEach(b => b.classList.toggle('active', b.dataset.tab === tab));
   renderClients();
-  main.innerHTML = ({ dashboard:renderDashboard, sheet:renderSheet, tracker:renderTracker, groups:renderGroups, revenue:renderRevenue, payments:renderPayments, invoices:renderInvoices, 'client-details':renderClientDetails, settings:renderSettings, 'import-preview':renderImportPreview }[tab] || renderSheet)();
+  main.innerHTML = ({ dashboard:renderDashboard, sheet:renderSheet, tracker:renderTracker, chat:renderChat, groups:renderGroups, revenue:renderRevenue, payments:renderPayments, invoices:renderInvoices, 'client-details':renderClientDetails, settings:renderSettings, 'import-preview':renderImportPreview }[tab] || renderSheet)();
   if(sameTab && main) main.scrollTop = preservedMainScroll;
   if(sameSheet && sheetScroll){const grid=main.querySelector('.sheet-viewport');if(grid){grid.scrollTop=sheetScroll.grid;grid.scrollLeft=sheetScroll.across;}}
   const indicator = $('#tabIndicator'), active = $(`#tabs button[data-tab="${tab}"]`);
@@ -290,8 +291,9 @@ function render() {
   if (lastRenderedTab && (lastRenderedTab !== tab || (tab === 'sheet' && lastRenderedClient !== activeClient))) {
     recordNav(lastRenderedTab, lastRenderedClient);
   }
-  if (lastRenderedTab !== tab) { const order = ['sheet','dashboard','tracker','groups','revenue','payments','invoices','client-details','settings']; const direction = order.indexOf(tab) >= order.indexOf(lastRenderedTab) ? 'tab-next' : 'tab-prev'; $('#main').classList.remove('tab-next','tab-prev'); void $('#main').offsetWidth; $('#main').classList.add(direction); lastRenderedTab = tab; }
+  if (lastRenderedTab !== tab) { const order = ['sheet','dashboard','tracker','chat','groups','revenue','payments','invoices','client-details','settings']; const direction = order.indexOf(tab) >= order.indexOf(lastRenderedTab) ? 'tab-next' : 'tab-prev'; $('#main').classList.remove('tab-next','tab-prev'); void $('#main').offsetWidth; $('#main').classList.add(direction); lastRenderedTab = tab; }
   if(tab==='settings')showUpdateState(desktopUpdate);
+  if(tab==='chat'){ unreadChatCount = 0; updateChatUnreadBadge(); initChatInteractions(); }
   lastRenderedClient=activeClient;bindMain();updateSyncUI();updateBackBtn();
 }
 function $$(s) { return [...document.querySelectorAll(s)]; }
@@ -520,7 +522,7 @@ function renderSheet() {
       ${value('remarks',i.remarks||'')}</tr>`;
   }
   if(filter==='all')rows+=Array.from({length:blankRows},(_,n)=>blankRowHtml(all.length+n)).join('');
-  return `<div class="sheet-shell"><div class="sheet-toolbar"><div class="actions"><button class="small-btn blue" data-action="assign" ${selected.size?'':'disabled'}>● Start work</button><button class="small-btn" data-action="complete" ${selected.size?'':'disabled'}>✓ Mark sent</button><button class="small-btn" data-action="invoice" ${selected.size?'':'disabled'}>▣ Create invoice</button><button class="small-btn danger" data-action="delete" title="Delete selected row(s) (Del)" ${selected.size?'':'disabled'}>🗑 Delete row</button><button class="small-btn" data-action="undo" title="Undo (Ctrl+Z)" ${undoStack.length?'':'disabled'}>↶ Undo</button><button class="small-btn" data-action="redo" title="Redo (Ctrl+Y)" ${redoStack.length?'':'disabled'}>↷ Redo</button><button class="small-btn" data-action="group" ${selected.size>1?'':'disabled'}>Group deal</button><button class="small-btn" data-action="project-group" ${selected.size?'':'disabled'}>Group project</button><button class="small-btn" data-action="ungroup" ${hasGroupedSelected()?'':'disabled'} title="Ungroup selected row(s)">Ungroup</button><select id="bulkStatus" aria-label="Set selected rows status" ${selected.size?'':'disabled'}><option value="">Set status…</option>${['pending','working','changes','sent','paid','discarded'].map(s=>`<option value="${s}">${s[0].toUpperCase()+s.slice(1)}</option>`).join('')}<option value="paid-date">Paid on date…</option></select><select id="workFilter" aria-label="Filter work">${['all','pending','working','changes','sent','paid','discarded'].map(s=>`<option value="${s}" ${filter===s?'selected':''}>${s==='all'?'All work':s[0].toUpperCase()+s.slice(1)}</option>`).join('')}</select></div><span class="hint" id="selectedCount">${selectionLabel()}</span></div>
+  return `<div class="sheet-shell"><div class="sheet-toolbar"><div class="actions"><button class="small-btn blue" data-action="assign" ${selected.size?'':'disabled'}>● Start work</button><button class="small-btn" data-action="complete" ${selected.size?'':'disabled'}>✓ Mark sent</button><button class="small-btn" data-action="invoice" ${selected.size?'':'disabled'}>▣ Create invoice</button><button class="small-btn" data-action="share-chat" ${selected.size?'':'disabled'} title="Share selected row(s) in Team Chat">💬 Share in chat</button><button class="small-btn danger" data-action="delete" title="Delete selected row(s) (Del)" ${selected.size?'':'disabled'}>🗑 Delete row</button><button class="small-btn" data-action="undo" title="Undo (Ctrl+Z)" ${undoStack.length?'':'disabled'}>↶ Undo</button><button class="small-btn" data-action="redo" title="Redo (Ctrl+Y)" ${redoStack.length?'':'disabled'}>↷ Redo</button><button class="small-btn" data-action="group" ${selected.size>1?'':'disabled'}>Group deal</button><button class="small-btn" data-action="project-group" ${selected.size?'':'disabled'}>Group project</button><button class="small-btn" data-action="ungroup" ${hasGroupedSelected()?'':'disabled'} title="Ungroup selected row(s)">Ungroup</button><select id="bulkStatus" aria-label="Set selected rows status" ${selected.size?'':'disabled'}><option value="">Set status…</option>${['pending','working','changes','sent','paid','discarded'].map(s=>`<option value="${s}">${s[0].toUpperCase()+s.slice(1)}</option>`).join('')}<option value="paid-date">Paid on date…</option></select><select id="workFilter" aria-label="Filter work">${['all','pending','working','changes','sent','paid','discarded'].map(s=>`<option value="${s}" ${filter===s?'selected':''}>${s==='all'?'All work':s[0].toUpperCase()+s.slice(1)}</option>`).join('')}</select></div><span class="hint" id="selectedCount">${selectionLabel()}</span></div>
     <div class="sheet-viewport"><table class="sheet"><thead><tr><th class="row-selector"><input type="checkbox" id="selectAll" aria-label="Select visible rows"></th><th>SR</th><th>DATE</th><th>SERVICE PROVIDED</th><th>QTY</th><th>RATE</th><th>TOTAL</th><th>STATUS</th><th>ADVANCE</th><th>ASSIGNED</th><th>REMARKS</th></tr></thead><tbody>${rows}</tbody></table></div></div>`;
 }
 
@@ -1211,7 +1213,7 @@ function refreshSelection() {
   $$('[data-check]').forEach(box=>box.checked=selected.has(box.dataset.check));
   const count=$('#selectedCount');if(count)count.textContent=selectionLabel();
   const bulk=$('#bulkStatus');if(bulk)bulk.disabled=!selected.size;
-  for(const action of ['assign','complete','invoice','delete']){const button=$(`[data-action="${action}"]`);if(button)button.disabled=!selected.size;}
+  for(const action of ['assign','complete','invoice','share-chat','delete']){const button=$(`[data-action="${action}"]`);if(button)button.disabled=!selected.size;}
   const group=$('[data-action="group"]');if(group)group.disabled=selected.size<2;
   const project=$('[data-action="project-group"]');if(project)project.disabled=!selected.size;
   const ungroup=$('[data-action="ungroup"]');if(ungroup)ungroup.disabled=!hasGroupedSelected();
@@ -1963,8 +1965,53 @@ const CAT_REACTIONS = [
   { key: 'freeze', title: 'Freezing / Shivering Panic', action: 'Shiver', message: 'Freezing cold panic! Production freeze! 🥶' },
   { key: 'singing', title: 'Singing / Meow Anthem', action: 'Sing', message: 'Singing the work victory anthem at top volume! 🎤' },
   { key: 'gentleman', title: 'Gentleman / Sir Paws', action: 'Fancy', message: 'Quite distinguished! Very classy gentleman! 🎩' },
-  { key: 'confident', title: 'Confident / Smooth Wink', action: 'Wink', message: 'Nailed it smoothly! Looking sharp! 😎' }
+  { key: 'confident', title: 'Confident / Smooth Wink', action: 'Wink', message: 'Nailed it smoothly! Looking sharp! 😎' },
+  { key: 'wave', title: 'Waving / Hello Paw', action: 'Wave', message: 'The cat waves a warm hello paw! 🐾' },
+  { key: 'facepalm', title: 'Facepalm / Sigh', action: 'Sigh', message: 'Cat facepalm... oh boy! 🤦' },
+  { key: 'cool', title: 'Cool / Shades On', action: 'Cool', message: 'Too cool for bugs, sunglasses on! 😎' },
+  { key: 'snack', title: 'Snacking / Nom Nom', action: 'Snack', message: 'Munching on tasty tuna snacks! 🐟' },
+  { key: 'party', title: 'Party / Celebration', action: 'Party', message: "Party time! Let's celebrate! 🎉" },
+  { key: 'hug', title: 'Hug / Comfort', action: 'Hug', message: 'Sending a warm fuzzy cat hug! 🫂' },
+  { key: 'peek', title: 'Peeking / Sneaky', action: 'Peek', message: 'Sneaky cat peeking around the corner! 👀' },
+  { key: 'thumbsup', title: 'Thumbs Up / Approved', action: 'Approve', message: 'Paws up! 100% approved! 👍' }
 ];
+
+// 60+ Moving / Animated and 60+ Static Cat Stickers Catalogs
+const CAT_STICKER_COLORS = [
+  { id: 'orange', name: 'Ginger Cat' },
+  { id: 'black', name: 'Midnight Cat' },
+  { id: 'calico', name: 'Calico Cat' },
+  { id: 'white', name: 'Snow Persian' }
+];
+
+const ALL_CAT_MOVING_STICKERS = [];
+const ALL_CAT_STATIC_STICKERS = [];
+
+CAT_STICKER_COLORS.forEach(col => {
+  CAT_REACTIONS.forEach(r => {
+    ALL_CAT_MOVING_STICKERS.push({
+      id: `${col.id}:${r.key}`,
+      key: r.key,
+      color: col.id,
+      colorName: col.name,
+      title: `${r.title.split('/')[0].trim()} (${col.name})`,
+      message: r.message,
+      format: 'lottie',
+      isAnimated: true
+    });
+    ALL_CAT_STATIC_STICKERS.push({
+      id: `${col.id}:${r.key}`,
+      key: r.key,
+      color: col.id,
+      colorName: col.name,
+      title: `${r.title.split('/')[0].trim()} (${col.name})`,
+      message: r.message,
+      format: 'image',
+      url: `assets/cats/${col.id}/${r.key}.webp`,
+      isAnimated: false
+    });
+  });
+});
 
 let catLottieCache = {};
 async function getCatLottie(color, key) {
@@ -1999,53 +2046,70 @@ function playCatChime(pitch = 587.33) {
   } catch {}
 }
 
-let bannerHideTimer = null;
+let bannerRightTimer = null;
+let bannerLeftTimer = null;
+
 function displayCatReactionBanner(payload) {
   playCatChime(payload.catType === 'black' ? 659.25 : 523.25);
-  let banner = document.getElementById('catLiveBanner');
+  const isMe = payload.senderId === currentUserId();
+  const bannerId = isMe ? 'catLiveBannerRight' : 'catLiveBannerLeft';
+  const sideClass = isMe ? 'banner-right' : 'banner-left';
+  const isBlack = payload.catType === 'black';
+
+  let banner = document.getElementById(bannerId);
   if (!banner) {
     banner = document.createElement('div');
-    banner.id = 'catLiveBanner';
-    banner.className = 'cat-live-banner';
+    banner.id = bannerId;
+    banner.className = `cat-live-banner ${sideClass}`;
     banner.onclick = () => banner.classList.remove('show');
     document.body.appendChild(banner);
   }
-  
-  const isBlack = payload.catType === 'black';
-  banner.className = 'cat-live-banner ' + (isBlack ? 'banner-black' : '');
-  
+
+  banner.className = `cat-live-banner ${sideClass} ${isBlack ? 'banner-black' : ''}`;
+  const animBoxId = isMe ? 'catBannerAnimBoxRight' : 'catBannerAnimBoxLeft';
+
+  const heading = isMe 
+    ? `You sent a cat reaction!` 
+    : `${esc(payload.senderName || 'Teammate')} pinged you!`;
+
   banner.innerHTML = `
-    <div class="cat-banner-anim" id="catBannerAnimBox"></div>
+    <div class="cat-banner-anim" id="${animBoxId}"></div>
     <div class="cat-banner-text">
-      <strong>${esc(payload.senderName || 'Teammate')} pinged you!</strong>
+      <strong>${heading}</strong>
       <p>${esc(payload.message || 'Cat reaction sent!')}</p>
     </div>
   `;
-  
-  const animBox = document.getElementById('catBannerAnimBox');
-  const catColor = payload.catType === 'black' ? 'black' : 'orange';
-  if (window.bodymovin) {
-    getCatLottie(catColor, payload.reactionKey).then(data => {
-      if (data && animBox) {
-        animBox.innerHTML = '';
-        window.bodymovin.loadAnimation({
-          container: animBox,
-          renderer: 'svg',
-          loop: true,
-          autoplay: true,
-          animationData: data
-        });
-      }
-    });
-  } else {
-    animBox.innerHTML = `<img src="assets/cats/orange/${payload.reactionKey}.webp" alt="Cat reaction">`;
+
+  const animBox = document.getElementById(animBoxId);
+  const catColor = payload.catType || 'orange';
+  if (animBox) {
+    if (typeof window !== 'undefined' && window.bodymovin) {
+      getCatLottie(catColor, payload.reactionKey).then(data => {
+        if (data && animBox) {
+          animBox.innerHTML = '';
+          window.bodymovin.loadAnimation({
+            container: animBox,
+            renderer: 'svg',
+            loop: true,
+            autoplay: true,
+            animationData: data
+          });
+        }
+      });
+    } else {
+      animBox.innerHTML = `<img src="assets/cats/${catColor}/${payload.reactionKey}.webp" alt="Cat reaction">`;
+    }
   }
-  
-  clearTimeout(bannerHideTimer);
-  requestAnimationFrame(() => banner.classList.add('show'));
-  bannerHideTimer = setTimeout(() => {
-    banner.classList.remove('show');
-  }, 4500);
+
+  if (isMe) {
+    clearTimeout(bannerRightTimer);
+    requestAnimationFrame(() => banner.classList.add('show'));
+    bannerRightTimer = setTimeout(() => banner.classList.remove('show'), 4500);
+  } else {
+    clearTimeout(bannerLeftTimer);
+    requestAnimationFrame(() => banner.classList.add('show'));
+    bannerLeftTimer = setTimeout(() => banner.classList.remove('show'), 4500);
+  }
 }
 
 async function triggerCatPing(reactionKey, catColor, contextItem = null, targetPartner = null) {
@@ -2073,7 +2137,7 @@ async function triggerCatPing(reactionKey, catColor, contextItem = null, targetP
   displayCatReactionBanner(payload);
   
   // Broadcast to partner over Supabase channel
-  if (channel) {
+  if (typeof channel !== 'undefined' && channel) {
     try {
       await channel.send({
         type: 'broadcast',
@@ -2086,6 +2150,761 @@ async function triggerCatPing(reactionKey, catColor, contextItem = null, targetP
   }
   
   toast(`🐾 Sent ${r.action} ping to ${partnerName}!`);
+}
+
+// --- TEAM CHAT & WORK SHARING APPLICATION ---
+
+function chatTimeStr(ts) {
+  if (!ts) return '';
+  const d = new Date(ts);
+  return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+}
+
+function chatDateStr(ts) {
+  if (!ts) return 'Today';
+  const d = new Date(ts);
+  const now = new Date();
+  if (d.toDateString() === now.toDateString()) return 'Today';
+  const y = new Date();
+  y.setDate(now.getDate() - 1);
+  if (d.toDateString() === y.toDateString()) return 'Yesterday';
+  return fmtDate(d.toISOString().slice(0, 10));
+}
+
+function playChatChime() {
+  try {
+    const ctx = new (window.AudioContext || window.webkitAudioContext)();
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.type = 'sine';
+    osc.frequency.setValueAtTime(587.33, ctx.currentTime);
+    osc.frequency.exponentialRampToValueAtTime(880.00, ctx.currentTime + 0.12);
+    gain.gain.setValueAtTime(0.12, ctx.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.25);
+    osc.connect(gain);
+    gain.connect(ctx.destination);
+    osc.start();
+    osc.stop(ctx.currentTime + 0.26);
+  } catch {}
+}
+
+function getPartnerInfo() {
+  const partnerMember = (data.members || []).find(m => m.userId && m.userId !== currentUserId());
+  const name = partnerMember?.displayName || data.settings.localPartner || 'Teammate';
+  const cat = partnerMember?.catType || (data.settings.catType === 'black' ? 'orange' : 'black');
+  const isOnline = (Date.now() - lastPartnerOnlineTime) < 180000;
+  return { name, cat, isOnline, member: partnerMember };
+}
+
+function updateChatUnreadBadge() {
+  const badge = $('#chatUnreadCount');
+  if (!badge) return;
+  if (unreadChatCount > 0 && tab !== 'chat') {
+    badge.textContent = unreadChatCount > 99 ? '99+' : unreadChatCount;
+    badge.style.display = 'inline-flex';
+  } else {
+    badge.style.display = 'none';
+    if (tab === 'chat') unreadChatCount = 0;
+  }
+}
+
+function renderChat() {
+  const partner = getPartnerInfo();
+  data.chatMessages = data.chatMessages || [];
+  const messages = data.chatMessages;
+
+  return `
+    <div class="chat-container">
+      <div class="chat-header">
+        <div class="chat-peer-info">
+          <div class="chat-avatar-wrap">
+            <span class="chat-peer-avatar">${avatar(partner.member?.userId || 'partner', partner.name)}</span>
+            <span class="chat-status-dot ${partner.isOnline ? 'online' : ''}" title="${partner.isOnline ? 'Online' : 'Offline'}"></span>
+          </div>
+          <div class="chat-peer-details">
+            <div class="chat-peer-name">
+              <strong>${esc(partner.name)}</strong>
+              <span class="chat-cat-tag ${partner.cat}">🐱 ${partner.cat === 'black' ? 'Black Cat' : partner.cat === 'calico' ? 'Calico Cat' : partner.cat === 'white' ? 'Snow Persian' : 'Ginger Cat'}</span>
+            </div>
+            <div class="chat-online-label">
+              ${partner.isOnline 
+                ? '<span class="status-online"><span class="pulse-dot"></span> Online now</span>' 
+                : '<span>Offline / In background</span>'}
+            </div>
+          </div>
+        </div>
+        <div class="chat-header-actions">
+          <button type="button" class="small-btn blue" id="attachWorkTopBtn" title="Attach and discuss rows from any client worksheet">📎 Share Work</button>
+          <button type="button" class="small-btn" id="chatClearBtn" title="Clear chat messages">🗑️ Clear</button>
+        </div>
+      </div>
+
+      <div class="chat-messages-viewport" id="chatMessagesViewport">
+        ${renderChatMessagesList(messages)}
+      </div>
+
+      <div class="chat-attachment-bar" id="chatAttachmentBar" style="${pendingChatAttachment ? '' : 'display:none'}">
+        ${pendingChatAttachment ? `
+          <div class="attachment-preview">
+            <span class="attachment-icon">📋</span>
+            <div class="attachment-meta">
+              <strong>${esc(pendingChatAttachment.clientName)} (${pendingChatAttachment.items.length} row${pendingChatAttachment.items.length === 1 ? '' : 's'})</strong>
+              <span>Total: ${money(pendingChatAttachment.totalAmount)}</span>
+            </div>
+            <button type="button" class="attachment-remove-btn" id="removeChatAttachment" title="Remove attachment">✕</button>
+          </div>
+        ` : ''}
+      </div>
+
+      <div class="chat-sticker-drawer" id="chatStickerDrawer" style="display:none">
+        <div class="sticker-drawer-header">
+          <div class="sticker-tabs">
+            <button type="button" class="sticker-tab-btn ${activeStickerTab === 'moving' ? 'active' : ''}" data-sticker-tab="moving">🐾 Moving (${ALL_CAT_MOVING_STICKERS.length})</button>
+            <button type="button" class="sticker-tab-btn ${activeStickerTab === 'static' ? 'active' : ''}" data-sticker-tab="static">🖼️ Static (${ALL_CAT_STATIC_STICKERS.length})</button>
+          </div>
+          <input type="text" class="sticker-search-input" id="stickerSearchInput" placeholder="Search stickers..." value="${esc(stickerSearchQuery)}" />
+          <button type="button" class="sticker-drawer-close" id="closeStickerDrawer">✕</button>
+        </div>
+        <div class="sticker-grid" id="stickerDrawerGrid">
+          ${renderStickerDrawerContent()}
+        </div>
+      </div>
+
+      <div class="chat-input-bar">
+        <button type="button" class="chat-icon-btn" id="chatAttachBtn" title="Attach work from worksheet">📎</button>
+        <button type="button" class="chat-icon-btn" id="chatStickerBtn" title="Open cat stickers drawer">🐱</button>
+        <div class="chat-input-box">
+          <textarea id="chatInputText" placeholder="Type a message or discuss work... (Enter to send, Shift+Enter for newline)" rows="1" autofocus></textarea>
+        </div>
+        <button type="button" class="chat-send-btn" id="chatSendBtn" title="Send message">
+          <svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor">
+            <path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"/>
+          </svg>
+        </button>
+      </div>
+    </div>
+  `;
+}
+
+function renderChatMessagesList(messages) {
+  if (!messages || !messages.length) {
+    return `
+      <div style="text-align:center;padding:40px 20px;color:#94a3b8">
+        <div style="font-size:42px;margin-bottom:10px">💬🐾</div>
+        <h3 style="color:#f8fafc;font-size:16px;margin:0 0 6px 0">MeowSheet Team Chat</h3>
+        <p style="font-size:13px;max-width:360px;margin:0 auto;line-height:1.5">
+          Real-time chat with purpose. Send messages, use animated cat stickers, or attach worksheet rows to discuss numbers directly!
+        </p>
+      </div>
+    `;
+  }
+
+  let html = '';
+  let lastDate = '';
+
+  for (const m of messages) {
+    const isMe = m.senderId === currentUserId();
+    const dStr = chatDateStr(m.timestamp);
+    if (dStr !== lastDate) {
+      html += `<div class="chat-date-divider"><span class="chat-date-pill">${esc(dStr)}</span></div>`;
+      lastDate = dStr;
+    }
+
+    const rowClass = isMe ? 'out' : 'in';
+    const time = chatTimeStr(m.timestamp);
+
+    let contentHtml = '';
+    const isSticker = m.type === 'sticker';
+
+    if (m.type === 'text') {
+      contentHtml = `<div class="chat-text">${esc(m.text || '')}</div>`;
+    } else if (m.type === 'sticker') {
+      if (m.sticker?.format === 'lottie') {
+        contentHtml = `
+          <div class="chat-sticker-anim" data-chat-lottie="${esc(m.sticker.color)}:${esc(m.sticker.key)}" title="${esc(m.sticker.title || 'Cat sticker')}"></div>
+        `;
+      } else {
+        contentHtml = `
+          <img src="${esc(m.sticker?.url || '')}" class="chat-sticker-img" alt="Sticker" title="${esc(m.sticker?.title || 'Cat sticker')}" />
+        `;
+      }
+    } else if (m.type === 'work_card' && m.workCard) {
+      const card = m.workCard;
+      contentHtml = `
+        <div class="chat-work-card">
+          <div class="work-card-top">
+            <div class="work-card-client">
+              <span class="card-icon">📋</span>
+              <div>
+                <strong>${esc(card.clientName || 'Client')}</strong>
+                <small>${card.itemCount} row${card.itemCount === 1 ? '' : 's'} · Total: ${money(card.totalAmount)}</small>
+              </div>
+            </div>
+            <button type="button" class="work-card-jump-btn" data-jump-work-card="${esc(card.clientId)}" data-jump-items="${esc((card.items || []).map(i => i.id).join(','))}">
+              ↗ View in Sheet
+            </button>
+          </div>
+          <div class="work-card-table-wrap">
+            <table class="work-card-table">
+              <thead><tr><th>Service</th><th>Qty</th><th>Rate</th><th>Total</th><th>Status</th></tr></thead>
+              <tbody>
+                ${(card.items || []).slice(0, 5).map(it => `
+                  <tr>
+                    <td><strong>${esc(it.service)}</strong></td>
+                    <td>${it.quantity}</td>
+                    <td>${money(it.rate)}</td>
+                    <td>${money(it.quotedTotal)}</td>
+                    <td><span class="pill ${it.status}">${esc(displayStatus(it))}</span></td>
+                  </tr>
+                `).join('')}
+                ${(card.items || []).length > 5 ? `<tr><td colspan="5" class="more-rows">+ ${card.items.length - 5} more rows</td></tr>` : ''}
+              </tbody>
+            </table>
+          </div>
+          ${m.text ? `<div class="work-card-note">${esc(m.text)}</div>` : ''}
+        </div>
+      `;
+    }
+
+    html += `
+      <div class="chat-msg-row ${rowClass}">
+        <div class="chat-bubble ${rowClass} ${isSticker ? 'chat-sticker-bubble' : ''}">
+          ${!isMe ? `<span class="chat-sender-name">${esc(m.senderName || 'Partner')}</span>` : ''}
+          ${contentHtml}
+          <div class="chat-meta">
+            <span>${time}</span>
+            ${isMe ? `<span class="checkmarks">✓✓</span>` : ''}
+          </div>
+        </div>
+      </div>
+    `;
+  }
+
+  return html;
+}
+
+function renderStickerDrawerContent() {
+  const query = (stickerSearchQuery || '').toLowerCase().trim();
+  const list = activeStickerTab === 'moving' ? ALL_CAT_MOVING_STICKERS : ALL_CAT_STATIC_STICKERS;
+  const filtered = query 
+    ? list.filter(s => s.key.includes(query) || s.title.toLowerCase().includes(query) || s.colorName.toLowerCase().includes(query))
+    : list;
+
+  if (!filtered.length) {
+    return `<div style="grid-column:1/-1;text-align:center;padding:20px;color:#94a3b8;font-size:12px">No stickers matching "${esc(query)}"</div>`;
+  }
+
+  return filtered.map(s => `
+    <button type="button" class="sticker-item-btn" data-send-sticker="${esc(s.id)}" data-sticker-type="${s.format}" title="${esc(s.title)}">
+      <div class="sticker-preview-box">
+        ${s.format === 'lottie' 
+          ? `<div class="drawer-lottie-anim" data-drawer-lottie="${esc(s.color)}:${esc(s.key)}"></div>`
+          : `<img src="${esc(s.url)}" alt="${esc(s.title)}" loading="lazy" />`}
+      </div>
+      <span class="sticker-label">${esc(s.title.split('(')[0].trim())}</span>
+    </button>
+  `).join('');
+}
+
+function initChatInteractions() {
+  const viewport = $('#chatMessagesViewport');
+  if (viewport) {
+    setTimeout(() => { viewport.scrollTop = viewport.scrollHeight; }, 30);
+  }
+
+  // Load Lotties for stickers inside chat bubbles
+  if (typeof window !== 'undefined' && window.bodymovin) {
+    $$('[data-chat-lottie]').forEach(el => {
+      const [color, key] = el.dataset.chatLottie.split(':');
+      getCatLottie(color, key).then(data => {
+        if (data && el) {
+          el.innerHTML = '';
+          window.bodymovin.loadAnimation({
+            container: el,
+            renderer: 'svg',
+            loop: true,
+            autoplay: true,
+            animationData: data
+          });
+        }
+      });
+    });
+
+    // Load Lotties for drawer previews
+    $$('[data-drawer-lottie]').forEach(el => {
+      const [color, key] = el.dataset.drawerLottie.split(':');
+      getCatLottie(color, key).then(data => {
+        if (data && el) {
+          el.innerHTML = '';
+          window.bodymovin.loadAnimation({
+            container: el,
+            renderer: 'svg',
+            loop: true,
+            autoplay: true,
+            animationData: data
+          });
+        }
+      });
+    });
+  }
+
+  const sendBtn = $('#chatSendBtn');
+  if (sendBtn) sendBtn.onclick = handleSendChatMessage;
+
+  const input = $('#chatInputText');
+  if (input) {
+    input.onkeydown = e => {
+      if (e.key === 'Enter' && !e.shiftKey) {
+        e.preventDefault();
+        handleSendChatMessage();
+      }
+    };
+  }
+
+  const attachBtn = $('#chatAttachBtn');
+  if (attachBtn) attachBtn.onclick = openAttachWorkDialog;
+
+  const attachTopBtn = $('#attachWorkTopBtn');
+  if (attachTopBtn) attachTopBtn.onclick = openAttachWorkDialog;
+
+  const stickerBtn = $('#chatStickerBtn');
+  const drawer = $('#chatStickerDrawer');
+  if (stickerBtn && drawer) {
+    stickerBtn.onclick = () => {
+      const isHidden = drawer.style.display === 'none';
+      drawer.style.display = isHidden ? 'flex' : 'none';
+      if (isHidden) initChatInteractions();
+    };
+  }
+
+  const closeDrawer = $('#closeStickerDrawer');
+  if (closeDrawer && drawer) {
+    closeDrawer.onclick = () => { drawer.style.display = 'none'; };
+  }
+
+  $$('[data-sticker-tab]').forEach(btn => {
+    btn.onclick = () => {
+      activeStickerTab = btn.dataset.stickerTab;
+      $$('[data-sticker-tab]').forEach(b => b.classList.toggle('active', b === btn));
+      const grid = $('#stickerDrawerGrid');
+      if (grid) {
+        grid.innerHTML = renderStickerDrawerContent();
+        initChatInteractions();
+      }
+    };
+  });
+
+  const searchInp = $('#stickerSearchInput');
+  if (searchInp) {
+    searchInp.oninput = () => {
+      stickerSearchQuery = searchInp.value;
+      const grid = $('#stickerDrawerGrid');
+      if (grid) {
+        grid.innerHTML = renderStickerDrawerContent();
+        initChatInteractions();
+      }
+    };
+  }
+
+  $$('[data-send-sticker]').forEach(btn => {
+    btn.onclick = () => {
+      const stickerId = btn.dataset.sendSticker;
+      const list = activeStickerTab === 'moving' ? ALL_CAT_MOVING_STICKERS : ALL_CAT_STATIC_STICKERS;
+      const sticker = list.find(s => s.id === stickerId);
+      if (sticker) {
+        sendStickerChatMessage(sticker);
+        if (drawer) drawer.style.display = 'none';
+      }
+    };
+  });
+
+  $$('[data-jump-work-card]').forEach(btn => {
+    btn.onclick = () => {
+      const cid = btn.dataset.jumpWorkCard;
+      const itemIds = (btn.dataset.jumpItems || '').split(',').filter(Boolean);
+      jumpToWorkCardInSheet(cid, itemIds);
+    };
+  });
+
+  const removeAttBtn = $('#removeChatAttachment');
+  if (removeAttBtn) {
+    removeAttBtn.onclick = () => {
+      pendingChatAttachment = null;
+      render();
+    };
+  }
+
+  const clearBtn = $('#chatClearBtn');
+  if (clearBtn) {
+    clearBtn.onclick = () => {
+      if (!confirm('Clear chat messages from this window?')) return;
+      data.chatMessages = [];
+      save();
+      render();
+      toast('Chat cleared');
+    };
+  }
+}
+
+function handleSendChatMessage() {
+  const input = $('#chatInputText');
+  const text = (input?.value || '').trim();
+  if (!text && !pendingChatAttachment) return;
+
+  let msg = null;
+  if (pendingChatAttachment) {
+    msg = {
+      id: uid(),
+      senderId: currentUserId(),
+      senderName: data.settings.displayName || 'Samuel',
+      catType: data.settings.catType || 'orange',
+      timestamp: Date.now(),
+      type: 'work_card',
+      text: text || '',
+      workCard: pendingChatAttachment
+    };
+    pendingChatAttachment = null;
+  } else {
+    msg = {
+      id: uid(),
+      senderId: currentUserId(),
+      senderName: data.settings.displayName || 'Samuel',
+      catType: data.settings.catType || 'orange',
+      timestamp: Date.now(),
+      type: 'text',
+      text
+    };
+  }
+
+  if (input) input.value = '';
+  sendChatMessage(msg);
+  render();
+}
+
+function sendStickerChatMessage(sticker) {
+  const msg = {
+    id: uid(),
+    senderId: currentUserId(),
+    senderName: data.settings.displayName || 'Samuel',
+    catType: data.settings.catType || 'orange',
+    timestamp: Date.now(),
+    type: 'sticker',
+    sticker: {
+      key: sticker.key,
+      color: sticker.color,
+      isAnimated: sticker.isAnimated,
+      format: sticker.format,
+      url: sticker.url,
+      title: sticker.title
+    }
+  };
+
+  sendChatMessage(msg);
+  render();
+}
+
+function sendChatMessage(msg) {
+  data.chatMessages = data.chatMessages || [];
+  data.chatMessages.push(msg);
+  if (data.chatMessages.length > 300) {
+    data.chatMessages = data.chatMessages.slice(-250);
+  }
+  save();
+
+  if (typeof channel !== 'undefined' && channel) {
+    try {
+      channel.send({
+        type: 'broadcast',
+        event: 'chat_message',
+        payload: msg
+      });
+    } catch (e) {
+      console.warn('Chat broadcast error:', e);
+    }
+  }
+
+  scheduleChatHistorySync();
+}
+
+function handleIncomingChatMessage(payload) {
+  data.chatMessages = data.chatMessages || [];
+  if (!data.chatMessages.some(m => m.id === payload.id)) {
+    data.chatMessages.push(payload);
+    save();
+  }
+
+  lastPartnerOnlineTime = Date.now();
+
+  if (tab === 'chat') {
+    render();
+    playChatChime();
+  } else {
+    unreadChatCount++;
+    updateChatUnreadBadge();
+    playChatChime();
+
+    let snippet = payload.text || '';
+    if (payload.type === 'sticker') snippet = 'Sent a cat sticker: ' + (payload.sticker?.title || '🐱');
+    if (payload.type === 'work_card') snippet = `Shared ${payload.workCard?.itemCount || ''} work rows (${payload.workCard?.clientName || ''})`;
+
+    smartNotify({
+      title: '💬 ' + (payload.senderName || 'Teammate'),
+      body: snippet,
+      catPayload: {
+        catType: payload.catType || 'orange',
+        reactionKey: payload.sticker?.key || 'happy',
+        senderName: payload.senderName || 'Teammate',
+        message: snippet
+      }
+    });
+  }
+}
+
+function shareSelectedRowsInChat() {
+  if (!selected.size) {
+    toast('Select row(s) to share in chat');
+    return;
+  }
+  const client = currentClient();
+  const allCurrent = groupedSheetItems(clientItems());
+  const selectedItems = allCurrent.filter(i => selected.has(i.id));
+  if (!selectedItems.length) {
+    toast('No rows selected');
+    return;
+  }
+
+  const clientName = client?.name || 'Client';
+  const totalVal = selectedItems.reduce((s, i) => s + num(i.quotedTotal), 0);
+
+  modal(
+    'Share in Team Chat',
+    `<p>Share <strong>${selectedItems.length} selected row${selectedItems.length === 1 ? '' : 's'}</strong> from <strong>${esc(clientName)}</strong> (Total: <strong>${money(totalVal)}</strong>) in Chat for reference & discussion.</p>
+     <div class="field" style="margin-top:12px">
+       <label for="shareChatNote">Add reference note or question (optional)</label>
+       <textarea id="shareChatNote" rows="2" placeholder="e.g. Can you check these rates before we send?" autofocus></textarea>
+     </div>
+     <div class="preview-list" style="max-height:160px;overflow-y:auto;margin-top:10px">
+       ${selectedItems.map((it, idx) => `
+         <div class="list-row" style="padding:6px 8px;font-size:12px">
+           <div><strong>${idx + 1}. ${esc(it.service || 'Item')}</strong> <small>(${it.quantity || 1} × ${money(it.rate || 0)})</small></div>
+           <div><span class="pill ${it.status}">${esc(displayStatus(it))}</span> <strong>${money(it.quotedTotal || 0)}</strong></div>
+         </div>
+       `).join('')}
+     </div>`,
+    `<div class="modal-actions">
+       <button type="button" class="small-btn" id="cancelShareChat">Cancel</button>
+       <button type="button" class="small-btn blue" id="confirmShareChat">💬 Send to Chat</button>
+     </div>`
+  );
+
+  $('#cancelShareChat').onclick = closeModal;
+  $('#confirmShareChat').onclick = () => {
+    const note = inputValue('shareChatNote');
+    const msg = {
+      id: uid(),
+      senderId: currentUserId(),
+      senderName: data.settings.displayName || 'Samuel',
+      catType: data.settings.catType || 'orange',
+      timestamp: Date.now(),
+      type: 'work_card',
+      text: note,
+      workCard: {
+        clientId: activeClient,
+        clientName,
+        itemCount: selectedItems.length,
+        totalAmount: totalVal,
+        items: selectedItems.map(i => ({
+          id: i.id,
+          service: i.service || 'Item',
+          quantity: num(i.quantity) || 1,
+          rate: num(i.rate) || 0,
+          quotedTotal: num(i.quotedTotal) || 0,
+          status: i.status || 'pending',
+          workDate: i.workDate || '',
+          remarks: i.remarks || ''
+        }))
+      }
+    };
+
+    closeModal();
+    sendChatMessage(msg);
+    tab = 'chat';
+    render();
+    toast(`Shared ${selectedItems.length} row(s) in Chat`);
+  };
+}
+
+function openAttachWorkDialog() {
+  let chosenClient = activeClient || data.clients[0]?.id;
+  let clientRowsSearch = '';
+  const checkedRowIds = new Set();
+
+  function renderAttachModalContent() {
+    const client = data.clients.find(c => c.id === chosenClient);
+    const rows = (data.items || []).filter(i => i.clientId === chosenClient && i.status !== 'discarded');
+    const filteredRows = clientRowsSearch
+      ? rows.filter(r => (r.service || '').toLowerCase().includes(clientRowsSearch.toLowerCase()) || (r.remarks || '').toLowerCase().includes(clientRowsSearch.toLowerCase()))
+      : rows;
+
+    return `
+      <p>Select rows from any client worksheet to attach and discuss in chat.</p>
+      <div class="field-grid" style="margin:12px 0">
+        <div class="field">
+          <label>Select client</label>
+          <select id="attachClientSelect">
+            ${data.clients.map(c => `<option value="${c.id}" ${c.id === chosenClient ? 'selected' : ''}>${esc(c.name)}</option>`).join('')}
+          </select>
+        </div>
+        <div class="field">
+          <label>Search rows</label>
+          <input type="text" id="attachRowSearch" placeholder="Filter by service..." value="${esc(clientRowsSearch)}" />
+        </div>
+      </div>
+      <div style="max-height:220px;overflow-y:auto;border:1px solid #334155;border-radius:8px;background:#0f172a;margin-bottom:12px">
+        ${filteredRows.length ? filteredRows.map(r => `
+          <label style="display:flex;align-items:center;gap:10px;padding:8px 12px;border-bottom:1px solid #1e293b;cursor:pointer;font-size:12px">
+            <input type="checkbox" data-attach-row="${r.id}" ${checkedRowIds.has(r.id) ? 'checked' : ''} />
+            <div style="flex:1">
+              <strong>${esc(r.service || 'Item')}</strong>
+              <small style="color:#94a3b8;margin-left:6px">${r.quantity || 1} × ${money(r.rate || 0)}</small>
+            </div>
+            <span class="pill ${r.status}">${esc(displayStatus(r))}</span>
+            <strong style="color:#34d399">${money(r.quotedTotal || 0)}</strong>
+          </label>
+        `).join('') : '<div style="padding:16px;text-align:center;color:#94a3b8;font-size:12px">No rows found</div>'}
+      </div>
+    `;
+  }
+
+  modal(
+    'Attach Work to Chat',
+    `<div id="attachModalRoot">${renderAttachModalContent()}</div>`,
+    `<div class="modal-actions">
+       <button type="button" class="small-btn" id="cancelAttachWork">Cancel</button>
+       <button type="button" class="small-btn blue" id="confirmAttachWork">Attach selected rows</button>
+     </div>`
+  );
+
+  function bindAttachModalEvents() {
+    const sel = $('#attachClientSelect');
+    if (sel) {
+      sel.onchange = () => {
+        chosenClient = sel.value;
+        checkedRowIds.clear();
+        refreshModal();
+      };
+    }
+    const search = $('#attachRowSearch');
+    if (search) {
+      search.oninput = () => {
+        clientRowsSearch = search.value;
+        refreshModal();
+        const next = $('#attachRowSearch');
+        if (next) {
+          next.focus();
+          next.setSelectionRange(clientRowsSearch.length, clientRowsSearch.length);
+        }
+      };
+    }
+    $$('[data-attach-row]').forEach(box => {
+      box.onchange = () => {
+        const id = box.dataset.attachRow;
+        if (box.checked) checkedRowIds.add(id);
+        else checkedRowIds.delete(id);
+      };
+    });
+  }
+
+  function refreshModal() {
+    const root = $('#attachModalRoot');
+    if (root) {
+      root.innerHTML = renderAttachModalContent();
+      bindAttachModalEvents();
+    }
+  }
+
+  bindAttachModalEvents();
+
+  $('#cancelAttachWork').onclick = closeModal;
+  $('#confirmAttachWork').onclick = () => {
+    if (!checkedRowIds.size) {
+      toast('Please select at least one row');
+      return;
+    }
+    const client = data.clients.find(c => c.id === chosenClient);
+    const chosenItems = (data.items || []).filter(i => checkedRowIds.has(i.id));
+
+    pendingChatAttachment = {
+      clientId: chosenClient,
+      clientName: client?.name || 'Client',
+      itemCount: chosenItems.length,
+      totalAmount: chosenItems.reduce((s, i) => s + num(i.quotedTotal), 0),
+      items: chosenItems.map(i => ({
+        id: i.id,
+        service: i.service || 'Item',
+        quantity: num(i.quantity) || 1,
+        rate: num(i.rate) || 0,
+        quotedTotal: num(i.quotedTotal) || 0,
+        status: i.status || 'pending',
+        workDate: i.workDate || '',
+        remarks: i.remarks || ''
+      }))
+    };
+
+    closeModal();
+    if (tab !== 'chat') tab = 'chat';
+    render();
+    toast(`Attached ${chosenItems.length} row(s). Type an optional message and send!`);
+  };
+}
+
+function jumpToWorkCardInSheet(clientId, itemIds) {
+  if (!clientId) return;
+  tab = 'sheet';
+  activeClient = clientId;
+  filter = 'all';
+  selected = new Set(itemIds || []);
+
+  if (itemIds && itemIds.length) {
+    const items = (data.items || []).filter(i => itemIds.includes(i.id));
+    for (const it of items) {
+      if (it.projectGroupId) collapsedGroups.delete('project:' + it.projectGroupId);
+      if (it.groupId) collapsedGroups.delete('deal:' + it.groupId);
+    }
+  }
+
+  render();
+
+  setTimeout(() => {
+    if (itemIds && itemIds.length) {
+      const firstRow = document.querySelector(`[data-row="${itemIds[0]}"]`);
+      if (firstRow) {
+        firstRow.scrollIntoView({ block: 'center', behavior: 'smooth' });
+        itemIds.forEach(id => {
+          const el = document.querySelector(`[data-row="${id}"]`);
+          if (el) {
+            el.classList.add('group-highlight-flash');
+            setTimeout(() => el.classList.remove('group-highlight-flash'), 2500);
+          }
+        });
+      }
+    }
+  }, 100);
+}
+
+function scheduleChatHistorySync() {
+  if (typeof clientApi === 'undefined' || !clientApi || !session || !data?.settings?.workspaceId) return;
+  clearTimeout(chatSyncTimer);
+  chatSyncTimer = setTimeout(async () => {
+    try {
+      const recent = (data.chatMessages || []).slice(-80);
+      data.settings.seller = data.settings.seller || {};
+      data.settings.seller.chat_history = recent;
+      await clientApi.from('workspaces').update({ business: data.settings.seller }).eq('id', data.settings.workspaceId);
+    } catch (err) {
+      console.warn('Chat history cloud sync warning:', err);
+    }
+  }, 1200);
 }
 
 function openCatReactionPicker(contextItem = null, targetName = null) {
@@ -2574,6 +3393,7 @@ function actions(action) {
   if(action==='assign')return assign([...selected]); if(action==='complete')return markSent([...selected]); if(action==='invoice')return invoiceDialog(); if(action==='group')return groupDialog();
   if(action==='project-group')return projectGroupDialog();
   if(action==='ungroup')return ungroupSelectedRows();
+  if(action==='share-chat')return shareSelectedRowsInChat();
   if(action==='cat-quick-ping')return openCatReactionPicker();
   if(action==='billing')return billingDialog(); if(action==='save-settings')return saveSettings();
   if(action==='save-connection'){data.settings.url=inputValue('supaUrl').replace(/\/$/,'');data.settings.key=inputValue('supaKey');save();setupSupabase();render();toast('Connection saved');return;}
@@ -3360,6 +4180,21 @@ async function pullRemote(){
     syncActiveBankDetails();
   }
   data.members=(m?.data||[]).map(x=>({userId:x.user_id,displayName:x.display_name,avatarData:x.avatar_data||''}));
+  if (Array.isArray(w.data?.business?.chat_history)) {
+    data.chatMessages = data.chatMessages || [];
+    const knownIds = new Set(data.chatMessages.map(m => m.id));
+    let added = false;
+    for (const remoteMsg of w.data.business.chat_history) {
+      if (!knownIds.has(remoteMsg.id)) {
+        data.chatMessages.push(remoteMsg);
+        knownIds.add(remoteMsg.id);
+        added = true;
+      }
+    }
+    if (added) {
+      data.chatMessages.sort((a, b) => (a.timestamp || 0) - (b.timestamp || 0));
+    }
+  }
   ['clients','groups','projectGroups','items','invoices','receipts'].forEach((table,k)=>{
     const pending=new Set(data.pending.filter(p=>p.table===table).map(p=>p.id));
     const pendingDeletes=new Set((data.pendingDeletes||[]).filter(p=>p.table===table).map(p=>p.id));
@@ -3380,6 +4215,8 @@ async function pullRemote(){
 const lastOnlineAlerts = {};
 async function handleUserOnline({ userId, displayName, catType, replyRequested }) {
   if (!userId || userId === currentUserId()) return;
+  lastPartnerOnlineTime = Date.now();
+  if (tab === 'chat') render();
   const now = Date.now();
   if (lastOnlineAlerts[userId] && now - lastOnlineAlerts[userId] < 60000) {
     return;
@@ -3434,11 +4271,20 @@ function subscribe(){
 
   channel.on('broadcast', { event: 'user_online' }, async ({ payload }) => {
     if (!payload) return;
+    lastPartnerOnlineTime = Date.now();
+    if (tab === 'chat') render();
     await handleUserOnline(payload);
+  });
+
+  channel.on('broadcast', { event: 'chat_message' }, async ({ payload }) => {
+    if (!payload || payload.senderId === currentUserId()) return;
+    handleIncomingChatMessage(payload);
   });
 
   channel.on('presence', { event: 'join' }, async ({ newPresences }) => {
     if (!Array.isArray(newPresences)) return;
+    lastPartnerOnlineTime = Date.now();
+    if (tab === 'chat') render();
     for (const p of newPresences) {
       if (p.userId && p.userId !== currentUserId()) {
         await handleUserOnline({
