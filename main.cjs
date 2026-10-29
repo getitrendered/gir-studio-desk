@@ -364,7 +364,8 @@ ipcMain.handle('save-invoice-pdf', async (_e, { defaultFileName }) => {
     const pdfBuffer = await win.webContents.printToPDF({
       printBackground: true,
       pageSize: 'A4',
-      landscape: false
+      landscape: false,
+      preferCSSPageSize: true
     });
 
     await fs.promises.writeFile(filePath, pdfBuffer);

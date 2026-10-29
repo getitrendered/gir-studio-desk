@@ -4489,6 +4489,16 @@ function invoiceHtml(i) {
   const balanceDue = isPaid ? 0 : Math.max(0, num(i.finalAmount) - invoiceAdvance(i));
   const adv = invoiceAdvance(i);
 
+  const formatPartyInfo = p => {
+    if (!p) return '';
+    const parts = [];
+    if (p.address && p.address.trim()) parts.push(esc(p.address.trim()).replace(/\n/g, '<br>'));
+    const contact = [p.email, p.phone].filter(Boolean).map(s => esc(s.trim())).join(' · ');
+    if (contact) parts.push(contact);
+    if (p.taxId && p.taxId.trim()) parts.push(`<span class="party-tax-id">Tax / GST: ${esc(p.taxId.trim())}</span>`);
+    return parts.join('<br>') || '';
+  };
+
   return `<div class="invoice-paper">
     <div class="invoice-accent-bar"></div>
     <div class="invoice-top">
@@ -4515,12 +4525,12 @@ function invoiceHtml(i) {
       <div class="invoice-party-box">
         <div class="label">FROM</div>
         <strong>${esc(i.seller?.name || '')}</strong>
-        <p>${esc(i.seller?.address || '').replace(/\n/g, '<br>')}<br>${esc(i.seller?.email || '')} ${esc(i.seller?.phone || '')}<br>${esc(i.seller?.taxId || '')}</p>
+        <p>${formatPartyInfo(i.seller)}</p>
       </div>
       <div class="invoice-party-box">
         <div class="label">BILL TO</div>
         <strong>${esc(i.buyer?.name || '')}</strong>
-        <p>${esc(i.buyer?.address || '').replace(/\n/g, '<br>')}<br>${esc(i.buyer?.email || '')} ${esc(i.buyer?.phone || '')}<br>${esc(i.buyer?.taxId || '')}</p>
+        <p>${formatPartyInfo(i.buyer)}</p>
       </div>
     </div>
     <div class="invoice-table-wrap">
