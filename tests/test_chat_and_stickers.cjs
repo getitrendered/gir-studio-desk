@@ -47,7 +47,20 @@ function setupTestEnvironment() {
     fmtDate: d => d ? `${d.slice(8,10)} ${d.slice(5,7)} ${d.slice(0,4)}` : '—',
     displayStatus: it => (it.status || 'pending').toUpperCase(),
     person: id => id || 'Someone',
-    avatar: (id, name) => `<span>${name?.[0] || 'U'}</span>`,
+    initials: name => String(name || '?').split(/\s+/).map(s => s[0]).join('').slice(0, 2).toUpperCase(),
+    avatar: (id, name, size = '', customSrc = '') => {
+      const isMe = id === context.currentUserId() || id === 'local-me';
+      const isPartner = id === 'local-partner' || id === 'partner';
+      const member = (context.data.members || []).find(m => m.userId === id) || (!isMe ? (context.data.members || []).find(m => m.userId !== context.currentUserId()) : null);
+      let src = customSrc;
+      if (!src) {
+        if (isMe) src = context.data.settings.avatarData || member?.avatarData || '';
+        else if (isPartner) src = member?.avatarData || context.data.settings.partnerAvatarData || '';
+        else src = member?.avatarData || (id === context.currentUserId() ? context.data.settings.avatarData : '');
+      }
+      const isValid = src && (/^data:image\/(?:png|jpeg|webp);base64,/i.test(src) || src.startsWith('http') || src.startsWith('assets/'));
+      return isValid ? `<img class="avatar-image ${size}" src="${src}" alt="${name}">` : `<span>${context.initials(name)}</span>`;
+    },
     currentClient: () => context.data.clients.find(c => c.id === context.activeClient),
     clientItems: () => context.data.items.filter(i => i.clientId === context.activeClient),
     groupedSheetItems: items => items,
@@ -310,6 +323,52 @@ console.log('Testing Team Chat, Work Sharing, and Cat Stickers...');
   assert.equal(msg.text, 'Paid for lighting');
   assert.equal(ctx.pendingChatAttachment, null, 'Attachment should clear after sending');
   console.log('✓ Test 7: Attach work modal from any client verified');
+}
+
+// Test 8: Display proper names and profile avatar images in chat header and message bubbles
+{
+  const ctx = setupTestEnvironment();
+  ctx.data.settings.displayName = 'Samuel Profile';
+  ctx.data.settings.avatarData = 'data:image/jpeg;base64,samuelProfileImgBase64';
+
+  const partnerMember = ctx.data.members.find(m => m.userId === 'user-partner');
+  partnerMember.displayName = 'Mezrid Partner';
+  partnerMember.avatarData = 'data:image/jpeg;base64,mezridProfileImgBase64';
+
+  // Render chat
+  const chatHtml = ctx.renderChat();
+  assert(chatHtml.includes('Samuel Profile'), 'Header must show own profile name');
+  assert(chatHtml.includes('Mezrid Partner'), 'Header must show partner profile name');
+  assert(chatHtml.includes('samuelProfileImgBase64'), 'Header must show own avatar image from settings');
+  assert(chatHtml.includes('mezridProfileImgBase64'), 'Header must show partner avatar image');
+  assert(chatHtml.includes('chat-self-badge'), 'Header must include self profile chip');
+
+  // Send message from self
+  ctx.elements['#chatInputText'] = { value: 'Checking the profile integration' };
+  ctx.handleSendChatMessage();
+
+  // Receive message from partner
+  ctx.handleIncomingChatMessage({
+    id: 'm-partner-1',
+    senderId: 'user-partner',
+    senderName: 'Mezrid Partner',
+    senderAvatar: 'data:image/jpeg;base64,mezridProfileImgBase64',
+    catType: 'black',
+    timestamp: Date.now(),
+    type: 'text',
+    text: 'Profile avatar and name are working!'
+  });
+
+  const threadHtml = ctx.renderChatMessagesList(ctx.data.chatMessages);
+  // Self message checks
+  assert(threadHtml.includes('Samuel Profile (You)'), 'Outgoing bubble must show proper display name with (You)');
+  assert(threadHtml.includes('samuelProfileImgBase64'), 'Outgoing bubble must display profile avatar image');
+
+  // Partner message checks
+  assert(threadHtml.includes('Mezrid Partner'), 'Incoming bubble must show partner proper display name');
+  assert(threadHtml.includes('mezridProfileImgBase64'), 'Incoming bubble must display partner profile avatar image');
+
+  console.log('✓ Test 8: Profile names and avatar images verified in chat header & thread');
 }
 
 console.log('\nALL CHAT, WORK SHARING, AND CAT STICKER TESTS PASSED! 🎉');

@@ -7,7 +7,7 @@ const num = v => Number(String(v ?? '').replace(/[^0-9.-]/g, '')) || 0;
 const esc = v => String(v ?? '').replace(/[&<>"']/g, c => ({ '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;' }[c]));
 const cleanSerial = v => { if (v == null || v === '') return ''; const s = String(v).trim(), n = Number(s); if (!isNaN(n) && Number.isInteger(n) && !s.includes('e') && !s.includes('E')) return String(n); return s.replace(/\.0+$/, ''); };
 const fmtDate = d => { if (!d) return '—'; const x = new Date(d + 'T00:00:00'); return Number.isNaN(x.getTime()) ? d : x.toLocaleDateString('en-IN', { day:'numeric', month:'short', year:'numeric' }); };
-const defaults = { clients:[], groups:[], projectGroups:[], items:[], invoices:[], receipts:[], members:[], chatMessages:[], pending:[], settings:{ seller:{ name:'GIR — Get It Rendered', address:'', email:'', phone:'', taxId:'', bankDetails:'', bankAccounts:[], activeBankAccountId:'', logoData:'' }, url:'https://isdxybpeagloikchhsbp.supabase.co', key:'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImlzZHh5YnBlYWdsb2lrY2hoc2JwIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTI1NzkzMjcsImV4cCI6MjEwODE1NTMyN30.ll1YG9uyrTqmLzE90miCk-O1Ab5VkBPfqrCPDDUc5u8', workspaceId:'17f39873-e10f-4bdf-93ee-1f92b3e25251', displayName:'Samuel', localPartner:'Mezrid', catType:'orange', zoom:100 } };
+const defaults = { clients:[], groups:[], projectGroups:[], items:[], invoices:[], receipts:[], members:[], chatMessages:[], pending:[], settings:{ seller:{ name:'GIR — Get It Rendered', address:'', email:'', phone:'', taxId:'', bankDetails:'', bankAccounts:[], activeBankAccountId:'', logoData:'' }, url:'https://isdxybpeagloikchhsbp.supabase.co', key:'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImlzZHh5YnBlYWdsb2lrY2hoc2JwIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTI1NzkzMjcsImV4cCI6MjEwODE1NTMyN30.ll1YG9uyrTqmLzE90miCk-O1Ab5VkBPfqrCPDDUc5u8', workspaceId:'17f39873-e10f-4bdf-93ee-1f92b3e25251', displayName:'Samuel', localPartner:'Mezrid', avatarData:'', partnerAvatarData:'', catType:'orange', zoom:100 } };
 const GIR_WORKSPACE_ID='17f39873-e10f-4bdf-93ee-1f92b3e25251';
 let data = structuredClone(defaults), tab = 'sheet', lastRenderedTab = null, lastRenderedClient = null, activeClient = null, selected = new Set(), selectionAnchor = null, selectionCell = null, collapsedGroups = new Set(), blankRows = 60, highlightUser = null, filter = 'all', clientApi = null, session = null, channel = null, syncing = false, toastTimer, syncTimer, lastSyncTime = Date.now(), importPreview = null, previewClientIndex = 0, migrating = false;
 let pendingChatAttachment = null, activeStickerTab = 'moving', stickerSearchQuery = '', lastPartnerOnlineTime = 0, unreadChatCount = 0, chatSyncTimer = null;
@@ -133,7 +133,7 @@ function sortedClients() {
   });
 }
 function selectionLabel(){const total=data.items.filter(i=>selected.has(i.id)).reduce((sum,i)=>sum+num(i.quotedTotal),0);return selected.size?`${selected.size} selected · Total ${money(total)}`:'0 selected';}
-function avatar(id,name,size='') { const src=data.members.find(m=>m.userId===id)?.avatarData || (id===currentUserId()?data.settings.avatarData:''); return src&&/^data:image\/(?:png|jpeg|webp);base64,/i.test(src)?`<img class="avatar-image ${size}" src="${esc(src)}" alt="${esc(name)}">`:`<span>${esc(initials(name))}</span>`; }
+function avatar(id,name,size='',customSrc='') { const isMe=id===currentUserId()||id==='local-me'; const isPartner=id==='local-partner'||id==='partner'; const member=(data.members||[]).find(m=>m.userId===id)||(!isMe?(data.members||[]).find(m=>m.userId!==currentUserId()):null); let src=customSrc; if(!src){ if(isMe){ src=data.settings.avatarData||member?.avatarData||''; }else if(isPartner){ src=member?.avatarData||data.settings.partnerAvatarData||''; }else{ src=member?.avatarData||(id===currentUserId()?data.settings.avatarData:''); } } const isValidImg=src&&(/^data:image\/(?:png|jpeg|webp);base64,/i.test(src)||src.startsWith('http')||src.startsWith('assets/')); return isValidImg?`<img class="avatar-image ${size}" src="${esc(src)}" alt="${esc(name)}">`:`<span>${esc(initials(name))}</span>`; }
 function billedIds() { return new Set(data.invoices.flatMap(inv => inv.itemIds || [])); }
 function receiptEffectiveItem(r) {
   if (r.referenceKind === 'item' && r.referenceId) return data.items.find(i => i.id === r.referenceId) || null;
@@ -973,7 +973,7 @@ function renderBankAccountsList() {
   </div>`;
 }
 
-function renderSettings() { const s=data.settings; return `<div class="section-top"><div><h2>Workspace settings</h2><p>Business details, people and Supabase connection.</p></div></div><div class="grid-2"><div class="panel"><h3>Business on invoices</h3><div class="field"><label>Business name</label><input data-setting="seller.name" value="${esc(s.seller.name)}"></div><div class="field"><label>Address</label><textarea data-setting="seller.address" rows="3">${esc(s.seller.address)}</textarea></div><div class="field-grid"><div class="field"><label>Email</label><input data-setting="seller.email" value="${esc(s.seller.email)}"></div><div class="field"><label>Phone</label><input data-setting="seller.phone" value="${esc(s.seller.phone)}"></div></div><div class="field"><label>Tax / GST ID (optional)</label><input data-setting="seller.taxId" value="${esc(s.seller.taxId)}"></div><label class="invoice-logo-upload"><span class="invoice-logo-preview">${s.seller.logoData?`<img src="${esc(s.seller.logoData)}" alt="Company logo">`:`<img src="assets/gir-icon.png" alt="Default MeowSheet logo">`}</span><span>Choose company logo</span><input id="companyLogoUpload" type="file" accept="image/png,image/jpeg,image/webp" hidden></label>${renderBankAccountsList()}<button class="small-btn blue" data-action="save-settings" style="margin-top:6px;">Save business details</button></div><div class="panel"><h3>Your team</h3><label class="avatar-upload"><span class="avatar">${avatar(currentUserId(),s.displayName)}</span><span>Choose your avatar image</span><input id="avatarUpload" type="file" accept="image/png,image/jpeg,image/webp" hidden></label><div class="field"><label>Your display name</label><input data-setting="displayName" value="${esc(s.displayName)}"></div><div class="field"><label>Your Cat Spirit (for animated reactions & pings)</label><select data-setting="catType"><option value="orange" ${s.catType!=='black'?'selected':''}>🐱 Orange Cat (Playful & Energetic)</option><option value="black" ${s.catType==='black'?'selected':''}>🐈‍⬛ Midnight Black Cat (Cool & Mysterious)</option></select></div>${!session?`<div class="field"><label>Second person (local view)</label><input data-setting="localPartner" value="${esc(s.localPartner)}"></div>`:''}<button class="small-btn blue" data-action="save-settings">Save names</button><div class="notice">When connected, both people sign in with their own Supabase accounts. Assignments and updates then appear live on both PCs.</div></div></div>
+function renderSettings() { const s=data.settings; return `<div class="section-top"><div><h2>Workspace settings</h2><p>Business details, people and Supabase connection.</p></div></div><div class="grid-2"><div class="panel"><h3>Business on invoices</h3><div class="field"><label>Business name</label><input data-setting="seller.name" value="${esc(s.seller.name)}"></div><div class="field"><label>Address</label><textarea data-setting="seller.address" rows="3">${esc(s.seller.address)}</textarea></div><div class="field-grid"><div class="field"><label>Email</label><input data-setting="seller.email" value="${esc(s.seller.email)}"></div><div class="field"><label>Phone</label><input data-setting="seller.phone" value="${esc(s.seller.phone)}"></div></div><div class="field"><label>Tax / GST ID (optional)</label><input data-setting="seller.taxId" value="${esc(s.seller.taxId)}"></div><label class="invoice-logo-upload"><span class="invoice-logo-preview">${s.seller.logoData?`<img src="${esc(s.seller.logoData)}" alt="Company logo">`:`<img src="assets/gir-icon.png" alt="Default MeowSheet logo">`}</span><span>Choose company logo</span><input id="companyLogoUpload" type="file" accept="image/png,image/jpeg,image/webp" hidden></label>${renderBankAccountsList()}<button class="small-btn blue" data-action="save-settings" style="margin-top:6px;">Save business details</button></div><div class="panel"><h3>Your team</h3><div style="display:flex;align-items:center;gap:12px;margin-bottom:14px"><label class="avatar-upload" style="margin:0;flex:1"><span class="avatar">${avatar(currentUserId(),s.displayName,'',s.avatarData)}</span><span>${s.avatarData?'Change your avatar image':'Choose your avatar image'}</span><input id="avatarUpload" type="file" accept="image/png,image/jpeg,image/webp" hidden></label>${s.avatarData?`<button type="button" class="small-btn quiet" id="removeAvatarBtn" title="Remove custom avatar">Remove</button>`:''}</div><div class="field"><label>Your display name</label><input data-setting="displayName" value="${esc(s.displayName)}"></div><div class="field"><label>Your Cat Spirit (for animated reactions & pings)</label><select data-setting="catType"><option value="orange" ${s.catType!=='black'?'selected':''}>🐱 Orange Cat (Playful & Energetic)</option><option value="black" ${s.catType==='black'?'selected':''}>🐈‍⬛ Midnight Black Cat (Cool & Mysterious)</option></select></div>${!session?`<div class="field" style="margin-top:14px;border-top:1px dashed #e2e8f0;padding-top:12px"><label>Second person (local view)</label><div style="display:flex;align-items:center;gap:12px;margin-bottom:8px"><label class="avatar-upload" style="margin:0;flex:1"><span class="avatar">${avatar('local-partner',s.localPartner,'',s.partnerAvatarData)}</span><span>${s.partnerAvatarData?'Change partner avatar':'Choose partner avatar image'}</span><input id="partnerAvatarUpload" type="file" accept="image/png,image/jpeg,image/webp" hidden></label>${s.partnerAvatarData?`<button type="button" class="small-btn quiet" id="removePartnerAvatarBtn" title="Remove partner avatar">Remove</button>`:''}</div><input data-setting="localPartner" value="${esc(s.localPartner)}" placeholder="Second person name"></div>`:''}<button class="small-btn blue" data-action="save-settings" style="margin-top:8px">Save names</button><div class="notice">When connected, both people sign in with their own Supabase accounts. Assignments, names, and avatar images update automatically on both PCs.</div></div></div>
     <div class="panel"><h3>Supabase connection</h3><div class="field-grid"><div class="field"><label>Project URL</label><input id="supaUrl" placeholder="https://project.supabase.co" value="${esc(s.url)}"></div><div class="field"><label>Publishable / anon key</label><input id="supaKey" type="password" placeholder="Never enter a service-role key" value="${esc(s.key)}"></div></div><div class="actions"><button class="small-btn" data-action="save-connection">Save connection</button>${session?`<span class="pill paid">Signed in as ${esc(session.user.email)}</span><button class="small-btn" data-action="sign-out">Sign out</button>`:`<button class="small-btn blue" data-action="sign-in">Sign in</button><button class="small-btn" data-action="sign-up">Create account</button>`}</div>${session?`<div class="notice">Workspace code: <strong>${esc(s.joinCode||'Create or join a workspace')}</strong> · Share this code with your second team member. Workspace ID: ${esc(s.workspaceId||'none')}</div><div class="actions"><button class="small-btn blue" data-action="sync">Sync now</button></div>`:''}</div><div class="panel"><h3>Desktop app</h3><p class="muted">Changes sync automatically while connected.</p><div class="actions"><button class="small-btn" data-action="sync">Sync now</button><button class="small-btn blue" id="updateBtn">Check for updates</button><span id="appVersion"></span></div><p class="muted" id="updateStatus"></p></div>`; }
 
 function bindMain() {
@@ -1063,6 +1063,18 @@ function bindMain() {
   });
   $$('[data-assignee-pick]').forEach(b=>b.onclick=()=>assignPersonDialog(b.dataset.assigneePick));
   $('#avatarUpload')?.addEventListener('change',e=>{if(e.target.files?.[0])saveAvatar(e.target.files[0]);});
+  $('#removeAvatarBtn')?.addEventListener('click',async ()=>{
+    data.settings.avatarData='';save();
+    if(clientApi&&session&&data.settings.workspaceId){
+      await clientApi.from('members').update({avatar_data:''}).eq('workspace_id',data.settings.workspaceId).eq('user_id',session.user.id);
+      const me=data.members.find(m=>m.userId===session.user.id);if(me)me.avatarData='';
+    }
+    render();toast('Avatar removed');
+  });
+  $('#partnerAvatarUpload')?.addEventListener('change',e=>{if(e.target.files?.[0])savePartnerAvatar(e.target.files[0]);});
+  $('#removePartnerAvatarBtn')?.addEventListener('click',()=>{
+    data.settings.partnerAvatarData='';save();render();toast('Partner avatar removed');
+  });
   $('#companyLogoUpload')?.addEventListener('change',e=>{if(e.target.files?.[0])saveCompanyLogo(e.target.files[0]);});
   $$('[data-row]').forEach(row=>{
     row.onmousedown=e=>{if(e.button===0&&e.shiftKey&&!e.target.closest('button, input.editing, input[type=checkbox]'))e.preventDefault();};
@@ -2193,7 +2205,9 @@ function getPartnerInfo() {
   const name = partnerMember?.displayName || data.settings.localPartner || 'Teammate';
   const cat = partnerMember?.catType || (data.settings.catType === 'black' ? 'orange' : 'black');
   const isOnline = (Date.now() - lastPartnerOnlineTime) < 180000;
-  return { name, cat, isOnline, member: partnerMember };
+  const avatarData = partnerMember?.avatarData || data.settings.partnerAvatarData || '';
+  const userId = partnerMember?.userId || 'local-partner';
+  return { name, cat, isOnline, member: partnerMember, avatarData, userId };
 }
 
 function updateChatUnreadBadge() {
@@ -2212,13 +2226,14 @@ function renderChat() {
   const partner = getPartnerInfo();
   data.chatMessages = data.chatMessages || [];
   const messages = data.chatMessages;
+  const myName = data.settings.displayName || 'Samuel';
 
   return `
     <div class="chat-container">
       <div class="chat-header">
         <div class="chat-peer-info">
           <div class="chat-avatar-wrap">
-            <span class="chat-peer-avatar">${avatar(partner.member?.userId || 'partner', partner.name)}</span>
+            <span class="chat-peer-avatar">${avatar(partner.userId, partner.name, '', partner.avatarData)}</span>
             <span class="chat-status-dot ${partner.isOnline ? 'online' : ''}" title="${partner.isOnline ? 'Online' : 'Offline'}"></span>
           </div>
           <div class="chat-peer-details">
@@ -2233,6 +2248,17 @@ function renderChat() {
             </div>
           </div>
         </div>
+
+        <div class="chat-self-badge" data-action="go-settings" title="Profile configured in Settings: ${esc(myName)} (Click to edit in Settings)">
+          <div class="chat-self-avatar-wrap">
+            <span class="chat-self-avatar">${avatar(currentUserId(), myName, '', data.settings.avatarData)}</span>
+          </div>
+          <div class="chat-self-details">
+            <strong>${esc(myName)}</strong>
+            <span class="chat-self-tag">(You)</span>
+          </div>
+        </div>
+
         <div class="chat-header-actions">
           <button type="button" class="small-btn blue" id="attachWorkTopBtn" title="Attach and discuss rows from any client worksheet">📎 Share Work</button>
           <button type="button" class="small-btn" id="chatClearBtn" title="Clear chat messages">🗑️ Clear</button>
@@ -2274,7 +2300,7 @@ function renderChat() {
         <button type="button" class="chat-icon-btn" id="chatAttachBtn" title="Attach work from worksheet">📎</button>
         <button type="button" class="chat-icon-btn" id="chatStickerBtn" title="Open cat stickers drawer">🐱</button>
         <div class="chat-input-box">
-          <textarea id="chatInputText" placeholder="Type a message or discuss work... (Enter to send, Shift+Enter for newline)" rows="1" autofocus></textarea>
+          <textarea id="chatInputText" placeholder="Message ${esc(partner.name)} as ${esc(myName)}... (Enter to send, Shift+Enter for newline)" rows="1" autofocus></textarea>
         </div>
         <button type="button" class="chat-send-btn" id="chatSendBtn" title="Send message">
           <svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor">
@@ -2287,13 +2313,19 @@ function renderChat() {
 }
 
 function renderChatMessagesList(messages) {
+  const partner = getPartnerInfo();
+  const myName = data.settings.displayName || 'Samuel';
+
   if (!messages || !messages.length) {
     return `
       <div style="text-align:center;padding:40px 20px;color:#94a3b8">
         <div style="font-size:42px;margin-bottom:10px">💬🐾</div>
         <h3 style="color:#f8fafc;font-size:16px;margin:0 0 6px 0">MeowSheet Team Chat</h3>
-        <p style="font-size:13px;max-width:360px;margin:0 auto;line-height:1.5">
-          Real-time chat with purpose. Send messages, use animated cat stickers, or attach worksheet rows to discuss numbers directly!
+        <p style="font-size:13px;max-width:380px;margin:0 auto 12px;line-height:1.5">
+          Real-time chat between <strong>${esc(myName)}</strong> and <strong>${esc(partner.name)}</strong>.
+        </p>
+        <p style="font-size:12px;color:#64748b;max-width:360px;margin:0 auto">
+          Send messages, use animated cat stickers, or attach worksheet rows to discuss numbers directly!
         </p>
       </div>
     `;
@@ -2303,7 +2335,7 @@ function renderChatMessagesList(messages) {
   let lastDate = '';
 
   for (const m of messages) {
-    const isMe = m.senderId === currentUserId();
+    const isMe = m.senderId === currentUserId() || m.senderId === 'local-me';
     const dStr = chatDateStr(m.timestamp);
     if (dStr !== lastDate) {
       html += `<div class="chat-date-divider"><span class="chat-date-pill">${esc(dStr)}</span></div>`;
@@ -2312,6 +2344,22 @@ function renderChatMessagesList(messages) {
 
     const rowClass = isMe ? 'out' : 'in';
     const time = chatTimeStr(m.timestamp);
+
+    // Resolve proper sender name and avatar image from profile / settings
+    const member = (data.members || []).find(mem => mem.userId && (mem.userId === m.senderId || mem.displayName === m.senderName));
+    const senderName = isMe
+      ? myName
+      : (member?.displayName || m.senderName || partner.name || 'Partner');
+      
+    const senderAvatarSrc = isMe
+      ? (data.settings.avatarData || m.senderAvatar || '')
+      : (member?.avatarData || m.senderAvatar || partner.avatarData || '');
+
+    const avatarHtml = `
+      <div class="chat-msg-avatar" title="${esc(senderName)}">
+        ${avatar(isMe ? currentUserId() : (member?.userId || m.senderId || partner.userId), senderName, '', senderAvatarSrc)}
+      </div>
+    `;
 
     let contentHtml = '';
     const isSticker = m.type === 'sticker';
@@ -2368,14 +2416,18 @@ function renderChatMessagesList(messages) {
 
     html += `
       <div class="chat-msg-row ${rowClass}">
-        <div class="chat-bubble ${rowClass} ${isSticker ? 'chat-sticker-bubble' : ''}">
-          ${!isMe ? `<span class="chat-sender-name">${esc(m.senderName || 'Partner')}</span>` : ''}
-          ${contentHtml}
-          <div class="chat-meta">
-            <span>${time}</span>
-            ${isMe ? `<span class="checkmarks">✓✓</span>` : ''}
+        ${!isMe ? avatarHtml : ''}
+        <div class="chat-msg-content">
+          <span class="chat-sender-name ${rowClass}">${esc(senderName)}${isMe ? ' (You)' : ''}</span>
+          <div class="chat-bubble ${rowClass} ${isSticker ? 'chat-sticker-bubble' : ''}">
+            ${contentHtml}
+            <div class="chat-meta">
+              <span>${time}</span>
+              ${isMe ? `<span class="checkmarks">✓✓</span>` : ''}
+            </div>
           </div>
         </div>
+        ${isMe ? avatarHtml : ''}
       </div>
     `;
   }
@@ -2557,6 +2609,7 @@ function handleSendChatMessage() {
       id: uid(),
       senderId: currentUserId(),
       senderName: data.settings.displayName || 'Samuel',
+      senderAvatar: data.settings.avatarData || '',
       catType: data.settings.catType || 'orange',
       timestamp: Date.now(),
       type: 'work_card',
@@ -2569,6 +2622,7 @@ function handleSendChatMessage() {
       id: uid(),
       senderId: currentUserId(),
       senderName: data.settings.displayName || 'Samuel',
+      senderAvatar: data.settings.avatarData || '',
       catType: data.settings.catType || 'orange',
       timestamp: Date.now(),
       type: 'text',
@@ -2586,6 +2640,7 @@ function sendStickerChatMessage(sticker) {
     id: uid(),
     senderId: currentUserId(),
     senderName: data.settings.displayName || 'Samuel',
+    senderAvatar: data.settings.avatarData || '',
     catType: data.settings.catType || 'orange',
     timestamp: Date.now(),
     type: 'sticker',
@@ -2704,6 +2759,7 @@ function shareSelectedRowsInChat() {
       id: uid(),
       senderId: currentUserId(),
       senderName: data.settings.displayName || 'Samuel',
+      senderAvatar: data.settings.avatarData || '',
       catType: data.settings.catType || 'orange',
       timestamp: Date.now(),
       type: 'work_card',
@@ -3135,9 +3191,26 @@ async function saveAvatar(file) {
     if(clientApi&&session&&data.settings.workspaceId){
       const {error}=await clientApi.from('members').update({avatar_data:avatarData}).eq('workspace_id',data.settings.workspaceId).eq('user_id',session.user.id);
       if(error)toast('Avatar saved locally; team sync failed: '+error.message);
-      else {const member=data.members.find(m=>m.userId===session.user.id);if(member)member.avatarData=avatarData;}
+      else {
+        const member=data.members.find(m=>m.userId===session.user.id);
+        if(member)member.avatarData=avatarData;
+        else data.members.push({userId:session.user.id,displayName:data.settings.displayName,avatarData});
+      }
     }
     render();toast('Avatar updated');
+  } catch(error){toast('Could not read that image');}
+  finally{URL.revokeObjectURL(url);}
+}
+async function savePartnerAvatar(file) {
+  if(!['image/png','image/jpeg','image/webp'].includes(file.type)||file.size>5_000_000){toast('Choose a PNG, JPG or WebP image under 5 MB');return;}
+  const url=URL.createObjectURL(file), image=new Image();
+  try {
+    await new Promise((resolve,reject)=>{image.onload=resolve;image.onerror=reject;image.src=url;});
+    const canvas=document.createElement('canvas');canvas.width=96;canvas.height=96;
+    const side=Math.min(image.naturalWidth,image.naturalHeight),x=(image.naturalWidth-side)/2,y=(image.naturalHeight-side)/2;
+    canvas.getContext('2d').drawImage(image,x,y,side,side,0,0,96,96);
+    const avatarData=canvas.toDataURL('image/jpeg',0.82);data.settings.partnerAvatarData=avatarData;save();
+    render();toast('Partner avatar updated');
   } catch(error){toast('Could not read that image');}
   finally{URL.revokeObjectURL(url);}
 }
@@ -3395,6 +3468,7 @@ function actions(action) {
   if(action==='ungroup')return ungroupSelectedRows();
   if(action==='share-chat')return shareSelectedRowsInChat();
   if(action==='cat-quick-ping')return openCatReactionPicker();
+  if(action==='go-settings'){tab='settings';render();return;}
   if(action==='billing')return billingDialog(); if(action==='save-settings')return saveSettings();
   if(action==='save-connection'){data.settings.url=inputValue('supaUrl').replace(/\/$/,'');data.settings.key=inputValue('supaKey');save();setupSupabase();render();toast('Connection saved');return;}
   if(action==='sign-in')return signInDialog(); if(action==='sign-up')return signUpDialog(); if(action==='sign-out')return signOut(); if(action==='create-workspace')return createWorkspace(); if(action==='join-workspace')return joinDialog(); if(action==='sync')return syncNow();
