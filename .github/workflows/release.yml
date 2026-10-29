@@ -41,6 +41,8 @@ jobs:
       - run: node tests/test_ungroup.cjs
       - run: node tests/test_nested_group_receipts.cjs
       - run: node tests/test_group_deals_and_totals.cjs
+      - run: node tests/test_background_tray_and_picker.cjs
+      - run: node tests/test_revenue_controls_and_group_dates.cjs
       - run: python tests/test_import.py
       - run: npm run build:win
       - name: Publish GitHub Release

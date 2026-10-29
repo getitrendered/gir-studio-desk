@@ -399,7 +399,7 @@ function groupHeader(kind,group,items) {
     }
   }
   const status=groupStatus(items);
-  return `<tr class="sheet-group-header ${kind}"><td colspan="11"><div class="group-heading"><button data-group-collapse="${kind}:${group.id}" aria-expanded="${!folded}"><svg class="group-chevron ${folded?'collapsed':''}" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="m3.5 5.75 4.5 4.5 4.5-4.5" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg><strong>${esc(group.label)}</strong><span>${done}/${active.length} complete${detail}</span></button><span class="group-status ${status.toLowerCase().replaceAll(' ','-')}">${status}</span><button class="group-quick" data-group-status="${kind}:${group.id}:sent" ${!active.length?'disabled':''}>Mark sent</button><button class="group-quick" data-group-status="${kind}:${group.id}:paid" ${!active.length?'disabled':''}>Mark paid</button><button class="group-deal-btn" data-group-deal="${kind}:${group.id}" title="Make or edit group deal">Group deal</button>${kind==='project'?`<button class="group-add" data-group-add="${group.id}" title="Add work under this project">＋ Row</button>`:''}<button class="group-rename" data-group-rename="${kind}:${group.id}" title="Rename group">Rename</button><button class="group-ungroup" data-group-ungroup="${kind}:${group.id}" title="Ungroup (keep rows, remove group)">Ungroup</button></div></td></tr>`;
+  return `<tr class="sheet-group-header ${kind}"><td colspan="11"><div class="group-heading"><button data-group-collapse="${kind}:${group.id}" aria-expanded="${!folded}"><svg class="group-chevron ${folded?'collapsed':''}" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="m3.5 5.75 4.5 4.5 4.5-4.5" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg><strong>${esc(group.label)}</strong><span>${done}/${active.length} complete${detail}</span></button><span class="group-status ${status.toLowerCase().replaceAll(' ','-')}">${status}</span><button class="group-quick" data-group-status="${kind}:${group.id}:sent" ${!active.length?'disabled':''}>Mark sent</button><button class="group-quick" data-group-status="${kind}:${group.id}:paid" ${!active.length?'disabled':''}>Mark paid</button><button class="group-deal-btn" data-group-deal="${kind}:${group.id}" title="Make or edit group deal">Group deal</button><button class="group-date-btn" data-group-paid-date="${kind}:${group.id}" title="Set or modify payment date for this group">Paid date</button>${kind==='project'?`<button class="group-add" data-group-add="${group.id}" title="Add work under this project">＋ Row</button>`:''}<button class="group-rename" data-group-rename="${kind}:${group.id}" title="Rename group">Rename</button><button class="group-ungroup" data-group-ungroup="${kind}:${group.id}" title="Ungroup (keep rows, remove group)">Ungroup</button></div></td></tr>`;
 }
 function groupStatus(items){const active=items.filter(i=>i.status!=='discarded');if(!active.length)return 'Discarded';if(active.every(i=>i.status==='paid'))return 'Paid';if(active.every(i=>['sent','paid'].includes(i.status)))return 'Sent';if(active.some(i=>['working','changes'].includes(i.status)))return 'Working';return 'Pending';}
 function blankRowHtml(order) {
@@ -769,7 +769,7 @@ function renderGroups() {
         amount=`<span>Total ${money(gVal.total)}</span>`;
       }
     }
-    return `<div class="group-card"><button class="group-card-open" data-open-group="${g.kind}:${g.id}"><span class="group-badge">${g.kind==='project'?'PROJECT GROUP':'DEAL GROUP'}</span><strong>${esc(g.label)}</strong><small>${esc(data.clients.find(c=>c.id===g.clientId)?.name)} · ${done}/${active.length} complete · ${active.length-done} left · ${groupStatus(rows)}</small>${amount}<div class="bar"><span style="width:${active.length?done/active.length*100:0}%"></span></div></button><div class="group-card-actions"><button class="group-quick" data-group-status="${g.kind}:${g.id}:sent">Mark sent</button><button class="group-quick" data-group-status="${g.kind}:${g.id}:paid">Mark paid</button><button class="group-quick" data-group-deal-card="${g.kind}:${g.id}">Group deal</button></div><button class="group-card-rename" data-rename-card="${g.kind}:${g.id}" title="Rename group">Rename</button><button class="group-card-rename" data-ungroup-card="${g.kind}:${g.id}" title="Ungroup group" style="margin-left:6px">Ungroup</button><div class="group-card-editor" hidden><label>Group name<input value="${esc(g.label)}" aria-label="Group name"></label><div><button type="button" data-save-card="${g.kind}:${g.id}">Save</button><button type="button" data-cancel-card>Cancel</button></div></div></div>`;
+    return `<div class="group-card"><button class="group-card-open" data-open-group="${g.kind}:${g.id}"><span class="group-badge">${g.kind==='project'?'PROJECT GROUP':'DEAL GROUP'}</span><strong>${esc(g.label)}</strong><small>${esc(data.clients.find(c=>c.id===g.clientId)?.name)} · ${done}/${active.length} complete · ${active.length-done} left · ${groupStatus(rows)}</small>${amount}<div class="bar"><span style="width:${active.length?done/active.length*100:0}%"></span></div></button><div class="group-card-actions"><button class="group-quick" data-group-status="${g.kind}:${g.id}:sent">Mark sent</button><button class="group-quick" data-group-status="${g.kind}:${g.id}:paid">Mark paid</button><button class="group-quick" data-group-deal-card="${g.kind}:${g.id}">Group deal</button><button class="group-quick" data-group-paid-date="${g.kind}:${g.id}">Paid date</button></div><button class="group-card-rename" data-rename-card="${g.kind}:${g.id}" title="Rename group">Rename</button><button class="group-card-rename" data-ungroup-card="${g.kind}:${g.id}" title="Ungroup group" style="margin-left:6px">Ungroup</button><div class="group-card-editor" hidden><label>Group name<input value="${esc(g.label)}" aria-label="Group name"></label><div><button type="button" data-save-card="${g.kind}:${g.id}">Save</button><button type="button" data-cancel-card>Cancel</button></div></div></div>`;
   }).join('');
   return `<div class="section-top"><div><h2>Groups</h2><p>Project folders and negotiated deals across clients.</p></div></div>${groups.length?`<div class="group-grid">${cards}</div>`:'<div class="empty"><h3>No groups yet</h3><p>Select rows on a worksheet to create a project group or grouped deal.</p></div>'}`;
 }function renderClientDetails() {
@@ -815,9 +815,9 @@ function renderRevenue() {
               </summary>
               <div class="revenue-month-breakdown">
                 <table class="table-list">
-                  <thead><tr><th>DATE</th><th>CLIENT</th><th>PAYMENT / SERVICE</th><th style="text-align:right">AMOUNT</th></tr></thead>
+                  <thead><tr><th>DATE</th><th>CLIENT</th><th>PAYMENT / SERVICE</th><th style="text-align:right">AMOUNT</th><th style="text-align:right">ACTIONS</th></tr></thead>
                   <tbody>
-                    ${m.receipts.map(r=>`<tr><td>${r.receivedOn?fmtDate(r.receivedOn):'<span class="muted">Day unconfirmed</span>'}</td><td><strong>${esc(r.effectiveClientName||r.clientName)}</strong></td><td>${esc(r.effectiveDescription||r.description||(r.source==='historical_workbook'?'Historical payment':'Payment'))}</td><td style="text-align:right"><strong>${money(r.effectiveAmount!=null?r.effectiveAmount:r.amount)}</strong></td></tr>`).join('')}
+                    ${m.receipts.map(r=>`<tr><td>${r.receivedOn?fmtDate(r.receivedOn):'<span class="muted">Day unconfirmed</span>'}</td><td><strong>${esc(r.effectiveClientName||r.clientName)}</strong></td><td>${esc(r.effectiveDescription||r.description||(r.source==='historical_workbook'?'Historical payment':'Payment'))}</td><td style="text-align:right"><strong>${money(r.effectiveAmount!=null?r.effectiveAmount:r.amount)}</strong></td><td style="text-align:right"><div class="revenue-row-actions"><button class="small-btn" data-receipt-date="${r.id}" title="Modify date of payment">📅 Date</button>${r.clientId?`<button class="small-btn" data-receipt-jump="${r.id}" title="Go to worksheet of this group">↗ View</button>`:''}${(r.referenceKind==='deal'||r.referenceKind==='project')?`<button class="small-btn" data-receipt-ungroup="${r.id}" title="Go to worksheet and ungroup this group">Ungroup</button>`:''}<button class="small-btn danger" data-receipt-delete="${r.id}" title="Delete this payment receipt">🗑 Delete</button></div></td></tr>`).join('')}
                   </tbody>
                 </table>
               </div>
@@ -1141,7 +1141,12 @@ function bindMain() {
   $$('[data-group-deal-card]').forEach(b=>b.onclick=()=>{const [kind,id]=b.dataset.groupDealCard.split(':');openGroupDealDialog(kind,id);});
   $$('[data-group-ungroup]').forEach(b=>b.onclick=()=>{const [kind,id]=b.dataset.groupUngroup.split(':');ungroupDialog(kind,id);});
   $$('[data-ungroup-card]').forEach(b=>b.onclick=()=>{const [kind,id]=b.dataset.ungroupCard.split(':');ungroupDialog(kind,id);});
-  $$('[data-group-status]').forEach(b=>b.onclick=()=>{const [kind,id,status]=b.dataset.groupStatus.split(':');const group=(kind==='project'?data.projectGroups:data.groups).find(g=>g.id===id);if(!group)return;const rows=data.items.filter(i=>(kind==='project'?i.projectGroupId:i.groupId)===id&&i.status!=='discarded'&&(status==='paid'?i.status!=='paid':!['sent','paid'].includes(i.status)));if(!rows.length){toast('Group is already '+status);return;}bulkSetStatus(status,rows.map(i=>i.id),{kind,id,label:group.label});});
+  $$('[data-group-status]').forEach(b=>b.onclick=()=>{const [kind,id,status]=b.dataset.groupStatus.split(':');const group=(kind==='project'?data.projectGroups:data.groups).find(g=>g.id===id);if(!group)return;const rows=data.items.filter(i=>(kind==='project'?i.projectGroupId:i.groupId)===id&&i.status!=='discarded'&&(status==='paid'?i.status!=='paid':!['sent','paid'].includes(i.status)));if(!rows.length){if(status==='paid'){setGroupPaidDateDialog(kind,id);return;}toast('Group is already '+status);return;}bulkSetStatus(status,rows.map(i=>i.id),{kind,id,label:group.label});});
+  $$('[data-group-paid-date]').forEach(b=>{b.onclick=()=>{const [kind,id]=b.dataset.groupPaidDate.split(':');setGroupPaidDateDialog(kind,id);};});
+  $$('[data-receipt-date]').forEach(b=>b.onclick=()=>modifyReceiptDateDialog(b.dataset.receiptDate));
+  $$('[data-receipt-delete]').forEach(b=>b.onclick=()=>deleteReceiptDialog(b.dataset.receiptDelete));
+  $$('[data-receipt-jump]').forEach(b=>b.onclick=()=>jumpToReceiptWorksheet(b.dataset.receiptJump));
+  $$('[data-receipt-ungroup]').forEach(b=>b.onclick=()=>jumpAndUngroupReceipt(b.dataset.receiptUngroup));
   const viewport=$('.sheet-viewport');if(tab==='sheet'&&viewport)viewport.onscroll=()=>{if(filter==='all'&&viewport.scrollHeight-viewport.scrollTop-viewport.clientHeight<700){blankRows+=40;render();}};
   $$('[data-group-edit]').forEach(b=>b.onclick=()=>groupDialog(b.dataset.groupEdit));
   $$('[data-rename-card]').forEach(b=>b.onclick=()=>{const card=b.closest('.group-card');card.querySelector('[data-open-group]').hidden=true;b.hidden=true;const editor=card.querySelector('.group-card-editor');editor.hidden=false;const input=editor.querySelector('input');input.focus();input.select();});
@@ -2712,6 +2717,297 @@ function openGroupDealDialog(kind, id) {
   $('#groupDealLabel').onkeydown = onKey;
   $('#groupDealAmount').onkeydown = onKey;
 }
+function modifyReceiptDateDialog(id) {
+  const r = (data.receipts || []).find(x => x.id === id);
+  if (!r) return;
+  const clientName = r.effectiveClientName || r.clientName || 'Client';
+  const desc = r.effectiveDescription || r.description || (r.source === 'historical_workbook' ? 'Historical payment' : 'Payment');
+  const amount = money(r.effectiveAmount != null ? r.effectiveAmount : r.amount);
+  const currentDate = r.receivedOn || today();
+
+  modal(
+    'Modify Payment Date',
+    `<p>Update payment date for <strong>${esc(desc)}</strong> (${esc(clientName)}) — <strong>${amount}</strong>.</p>
+     <div class="field">
+       <label for="modifyReceiptDateInput">Received on date</label>
+       <input type="date" id="modifyReceiptDateInput" value="${currentDate}" autofocus>
+     </div>
+     <div class="notice">
+       Updating the date will adjust which month this revenue appears under, and update the payment date on any linked worksheet items.
+     </div>`,
+    `<div class="modal-actions">
+       <button type="button" class="small-btn" id="cancelReceiptDate">Cancel</button>
+       <button type="button" class="small-btn blue" id="saveReceiptDate">Save payment date</button>
+     </div>`
+  );
+
+  $('#cancelReceiptDate').onclick = closeModal;
+
+  const handleSave = () => {
+    const val = $('#modifyReceiptDateInput')?.value?.trim();
+    if (!val || !/^\d{4}-\d{2}-\d{2}$/.test(val)) {
+      toast('Please choose a valid date (YYYY-MM-DD)');
+      return;
+    }
+    pushUndo('Modify payment date');
+    const month = val.slice(0, 7) + '-01';
+    const stamp = val + 'T12:00:00.000Z';
+
+    r.receivedOn = val;
+    r.receivedMonth = month;
+    r.receivedAt = stamp;
+    enqueue('receipts', r.id);
+
+    if (r.referenceKind === 'deal' && r.referenceId) {
+      const items = (data.items || []).filter(i => i.groupId === r.referenceId && i.status === 'paid');
+      items.forEach(i => {
+        i.paidAt = val;
+        i.paidAtTs = stamp;
+        enqueue('items', i.id);
+      });
+    } else if (r.referenceKind === 'project' && r.referenceId) {
+      const items = (data.items || []).filter(i => i.projectGroupId === r.referenceId && i.status === 'paid');
+      items.forEach(i => {
+        i.paidAt = val;
+        i.paidAtTs = stamp;
+        enqueue('items', i.id);
+      });
+    } else if (r.referenceKind === 'item' && r.referenceId) {
+      const it = (data.items || []).find(i => i.id === r.referenceId);
+      if (it && it.status === 'paid') {
+        it.paidAt = val;
+        it.paidAtTs = stamp;
+        enqueue('items', it.id);
+      }
+    }
+
+    save();
+    scheduleSync();
+    closeModal();
+    render();
+    toast(`Payment date updated to ${fmtDate(val)}`);
+  };
+
+  $('#saveReceiptDate').onclick = handleSave;
+  const modifyDateInput = $('#modifyReceiptDateInput');
+  if (modifyDateInput) {
+    modifyDateInput.onkeydown = e => {
+      if (e.key === 'Enter') { e.preventDefault(); handleSave(); }
+    };
+  }
+}
+
+function deleteReceiptDialog(id) {
+  const r = (data.receipts || []).find(x => x.id === id);
+  if (!r) return;
+  const clientName = r.effectiveClientName || r.clientName || 'Client';
+  const desc = r.effectiveDescription || r.description || (r.source === 'historical_workbook' ? 'Historical payment' : 'Payment');
+  const amount = money(r.effectiveAmount != null ? r.effectiveAmount : r.amount);
+  const dateStr = r.receivedOn ? fmtDate(r.receivedOn) : 'Unconfirmed date';
+
+  const hasLinkedActiveWork = (
+    (r.referenceKind === 'deal' && (data.items || []).some(i => i.groupId === r.referenceId && i.status === 'paid')) ||
+    (r.referenceKind === 'project' && (data.items || []).some(i => i.projectGroupId === r.referenceId && i.status === 'paid')) ||
+    (r.referenceKind === 'item' && (data.items || []).some(i => i.id === r.referenceId && i.status === 'paid'))
+  );
+
+  modal(
+    'Delete Payment Receipt',
+    `<p>Are you sure you want to delete this payment receipt?</p>
+     <div style="background:#f8fafc;padding:12px;border-radius:8px;margin:12px 0;border:1px solid #e2e8f0;font-size:12px;line-height:1.6">
+       <div><strong>Description:</strong> ${esc(desc)}</div>
+       <div><strong>Client:</strong> ${esc(clientName)}</div>
+       <div><strong>Date:</strong> ${esc(dateStr)}</div>
+       <div><strong>Amount:</strong> <span style="color:#168451;font-weight:700">${amount}</span></div>
+     </div>
+     ${hasLinkedActiveWork ? `
+       <label style="display:flex;align-items:center;gap:8px;margin:12px 0;font-size:12px;cursor:pointer">
+         <input type="checkbox" id="unmarkWorkCheckbox" checked>
+         <span>Also unmark this work as unpaid in the worksheet (revert to Sent)</span>
+       </label>
+     ` : `
+       <div class="notice">
+         This receipt will be permanently removed from your recorded revenue totals.
+       </div>
+     `}`,
+    `<div class="modal-actions">
+       <button type="button" class="small-btn" id="cancelDeleteReceipt">Cancel</button>
+       <button type="button" class="small-btn danger" id="confirmDeleteReceipt">Delete receipt</button>
+     </div>`
+  );
+
+  $('#cancelDeleteReceipt').onclick = closeModal;
+
+  $('#confirmDeleteReceipt').onclick = () => {
+    pushUndo('Delete payment receipt');
+    const shouldUnmark = $('#unmarkWorkCheckbox')?.checked;
+
+    if (shouldUnmark) {
+      if (r.referenceKind === 'deal' && r.referenceId) {
+        const items = (data.items || []).filter(i => i.groupId === r.referenceId && i.status === 'paid');
+        items.forEach(i => {
+          i.status = 'sent';
+          i.paidAt = null;
+          i.paidAtTs = null;
+          enqueue('items', i.id);
+        });
+      } else if (r.referenceKind === 'project' && r.referenceId) {
+        const items = (data.items || []).filter(i => i.projectGroupId === r.referenceId && i.status === 'paid');
+        items.forEach(i => {
+          i.status = 'sent';
+          i.paidAt = null;
+          i.paidAtTs = null;
+          enqueue('items', i.id);
+        });
+      } else if (r.referenceKind === 'item' && r.referenceId) {
+        const it = (data.items || []).find(i => i.id === r.referenceId);
+        if (it && it.status === 'paid') {
+          it.status = 'sent';
+          it.paidAt = null;
+          it.paidAtTs = null;
+          enqueue('items', it.id);
+        }
+      }
+    }
+
+    removeReceipt(r.id);
+    save();
+    scheduleSync();
+    closeModal();
+    render();
+    toast('Payment receipt deleted');
+  };
+}
+
+function jumpToReceiptWorksheet(id) {
+  const r = (data.receipts || []).find(x => x.id === id);
+  if (!r) return;
+
+  const targetClientId = r.clientId || (data.items || []).find(i => i.id === r.referenceId || i.groupId === r.referenceId || i.projectGroupId === r.referenceId)?.clientId;
+  if (!targetClientId) {
+    toast('No linked client found for this payment');
+    return;
+  }
+
+  activeClient = targetClientId;
+  filter = 'all';
+  tab = 'sheet';
+
+  if (r.referenceKind === 'deal' && r.referenceId) {
+    collapsedGroups.delete('deal:' + r.referenceId);
+    const it = (data.items || []).find(i => i.groupId === r.referenceId && i.projectGroupId);
+    if (it) collapsedGroups.delete('project:' + it.projectGroupId);
+  } else if (r.referenceKind === 'project' && r.referenceId) {
+    collapsedGroups.delete('project:' + r.referenceId);
+  } else if (r.referenceKind === 'item' && r.referenceId) {
+    const it = (data.items || []).find(i => i.id === r.referenceId);
+    if (it?.projectGroupId) collapsedGroups.delete('project:' + it.projectGroupId);
+    if (it?.groupId) collapsedGroups.delete('deal:' + it.groupId);
+  }
+
+  render();
+
+  setTimeout(() => {
+    let target = null;
+    if (r.referenceKind === 'deal' && r.referenceId) {
+      target = document.querySelector(`[data-group-collapse="deal:${r.referenceId}"]`)?.closest('tr');
+    } else if (r.referenceKind === 'project' && r.referenceId) {
+      target = document.querySelector(`[data-group-collapse="project:${r.referenceId}"]`)?.closest('tr');
+    } else if (r.referenceKind === 'item' && r.referenceId) {
+      target = document.querySelector(`[data-row="${r.referenceId}"]`);
+    }
+
+    if (target) {
+      target.scrollIntoView({ block: 'center', behavior: 'smooth' });
+      target.classList.add('group-highlight-flash');
+      setTimeout(() => target.classList.remove('group-highlight-flash'), 2500);
+    }
+  }, 80);
+}
+
+function jumpAndUngroupReceipt(id) {
+  const r = (data.receipts || []).find(x => x.id === id);
+  if (!r || !(r.referenceKind === 'deal' || r.referenceKind === 'project')) {
+    toast('This payment is not linked to a group');
+    return;
+  }
+  jumpToReceiptWorksheet(id);
+  setTimeout(() => {
+    ungroupDialog(r.referenceKind, r.referenceId);
+  }, 220);
+}
+
+function setGroupPaidDateDialog(kind, id) {
+  const table = kind === 'project' ? 'projectGroups' : 'groups';
+  const group = (data[table] || []).find(g => g.id === id);
+  if (!group) return;
+
+  const items = (data.items || []).filter(i => (kind === 'project' ? i.projectGroupId : i.groupId) === id && i.status !== 'discarded');
+  if (!items.length) {
+    toast('Group has no rows');
+    return;
+  }
+
+  const existingPaidItem = items.find(i => i.paidAt);
+  const currentPaidDate = existingPaidItem?.paidAt || today();
+  const allAlreadyPaid = items.every(i => i.status === 'paid');
+
+  modal(
+    allAlreadyPaid ? `Modify Payment Date for ${group.label}` : `Set Payment Date for ${group.label}`,
+    `<p>${allAlreadyPaid ? 'Modify' : 'Set'} the date of payment for <strong>${esc(group.label)}</strong> (${items.length} rows).</p>
+     <div class="field">
+       <label for="groupPaidDateInput">Payment date</label>
+       <input type="date" id="groupPaidDateInput" value="${currentPaidDate}" autofocus>
+     </div>
+     <div class="notice">
+       ${allAlreadyPaid
+         ? 'This will update the payment date on all paid rows in this group and update your revenue tracking month.'
+         : 'This will mark all active rows in this group as Paid on this date and record revenue in your selected month.'}
+     </div>`,
+    `<div class="modal-actions">
+       <button type="button" class="small-btn" id="cancelGroupPaidDate">Cancel</button>
+       <button type="button" class="small-btn blue" id="saveGroupPaidDate">Save payment date</button>
+     </div>`
+  );
+
+  $('#cancelGroupPaidDate').onclick = closeModal;
+
+  const handleSave = () => {
+    const chosenDate = $('#groupPaidDateInput')?.value?.trim();
+    if (!chosenDate || !/^\d{4}-\d{2}-\d{2}$/.test(chosenDate)) {
+      toast('Please choose a valid date (YYYY-MM-DD)');
+      return;
+    }
+
+    pushUndo(`Set payment date for ${group.label}`);
+    const stamp = chosenDate + 'T12:00:00.000Z';
+
+    items.forEach(i => {
+      i.status = 'paid';
+      i.paidAt = chosenDate;
+      i.paidAtTs = stamp;
+      enqueue('items', i.id);
+    });
+
+    if (kind === 'deal') syncDealReceipt(id, chosenDate);
+    else syncProjectReceipt(id, chosenDate);
+
+    save();
+    scheduleSync();
+    closeModal();
+    render();
+    toast(`Payment date set to ${fmtDate(chosenDate)}`);
+  };
+
+  $('#saveGroupPaidDate').onclick = handleSave;
+  const groupDateInput = $('#groupPaidDateInput');
+  if (groupDateInput) {
+    groupDateInput.onkeydown = e => {
+      if (e.key === 'Enter') { e.preventDefault(); handleSave(); }
+    };
+  }
+}
+
 function renameGroup(kind,id){const table=kind==='project'?'projectGroups':'groups',group=data[table].find(g=>g.id===id);if(!group)return;modal('Rename group',`<div class="field"><label>Group name</label><input id="renameGroupName" value="${esc(group.label)}" autofocus></div>`,`<div class="modal-actions"><button class="small-btn blue" id="saveGroupName">Save name</button></div>`);const saveName=()=>{const label=inputValue('renameGroupName');if(!label){toast('Enter a group name');return;}group.label=label;mutate(table,group);closeModal();toast('Group renamed');};$('#saveGroupName').onclick=saveName;$('#renameGroupName').onkeydown=e=>{if(e.key==='Enter')saveName();};}
 function ungroupDialog(kind, id) {
   const table = kind === 'project' ? 'projectGroups' : 'groups';
