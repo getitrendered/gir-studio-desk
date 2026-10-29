@@ -394,4 +394,37 @@ console.log('Testing Team Chat, Work Sharing, and Cat Stickers...');
   console.log('✓ Test 8: Profile names and avatar images verified in chat header & thread');
 }
 
+// Test 9: High-contrast legible text colors and class structure for chat bubbles
+{
+  const ctx = setupTestEnvironment();
+  ctx.elements['#chatInputText'] = { value: 'Testing readability of text' };
+  ctx.handleSendChatMessage();
+
+  ctx.handleIncomingChatMessage({
+    id: 'm-contrast-1',
+    senderId: 'user-partner',
+    senderName: 'Partner User',
+    timestamp: Date.now(),
+    type: 'text',
+    text: 'Partner text must be clearly legible and bright'
+  });
+
+  const threadHtml = ctx.renderChatMessagesList(ctx.data.chatMessages);
+  assert(threadHtml.includes('chat-bubble out'), 'Self bubble must have "chat-bubble out" class');
+  assert(threadHtml.includes('chat-bubble in'), 'Partner bubble must have "chat-bubble in" class');
+  assert(threadHtml.includes('chat-bubble-sender out'), 'Self sender header must have "chat-bubble-sender out" class');
+  assert(threadHtml.includes('chat-bubble-sender in'), 'Partner sender header must have "chat-bubble-sender in" class');
+  assert(threadHtml.includes('chat-ticks checkmarks'), 'Self message must include checkmarks');
+
+  const css = fs.readFileSync(path.join(__dirname, '..', 'extras.css'), 'utf8');
+  assert(css.includes('.chat-bubble.out') && css.includes('linear-gradient'), 'extras.css must style outgoing bubble background');
+  assert(css.includes('.chat-bubble.in') && css.includes('#1e293b'), 'extras.css must style incoming bubble background');
+  assert(css.includes('.chat-msg-row.out .chat-text') && css.includes('#ffffff'), 'extras.css must enforce white text for outgoing');
+  assert(css.includes('.chat-msg-row.in .chat-text') && css.includes('#f8fafc'), 'extras.css must enforce bright light text for incoming');
+  assert(css.includes('.chat-msg-row.out .chat-bubble-sender') && css.includes('#86efac'), 'extras.css must enforce bright mint sender for outgoing');
+  assert(css.includes('.chat-msg-row.in .chat-bubble-sender') && css.includes('#38bdf8'), 'extras.css must enforce bright sky blue sender for incoming');
+
+  console.log('✓ Test 9: Chat bubble high-contrast legibility and color styling verified');
+}
+
 console.log('\nALL CHAT, WORK SHARING, AND CAT STICKER TESTS PASSED! 🎉');

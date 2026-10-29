@@ -2467,12 +2467,12 @@ function renderChatMessagesList(messages, initialLastDate = '') {
     html += `
       <div class="chat-msg-row ${rowClass} ${isSticker ? 'msg-sticker' : ''}">
         ${avatarHtml}
-        <div class="chat-bubble">
-          <div class="chat-bubble-sender">${esc(senderName)}${isMe ? ' (You)' : ''}</div>
+        <div class="chat-bubble ${rowClass} ${isSticker ? 'chat-sticker-bubble' : ''}">
+          <div class="chat-bubble-sender ${rowClass} chat-sender-name">${esc(senderName)}${isMe ? ' (You)' : ''}</div>
           ${contentHtml}
-          <div class="chat-bubble-footer">
+          <div class="chat-bubble-footer chat-meta">
             <span class="chat-time">${esc(time)}</span>
-            ${isMe ? '<span class="chat-ticks">✓✓</span>' : ''}
+            ${isMe ? '<span class="chat-ticks checkmarks">✓✓</span>' : ''}
           </div>
         </div>
       </div>
