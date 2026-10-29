@@ -299,11 +299,11 @@ console.log('Testing Lump Sum Invoices, Group Deals Default, and Toggle Modes...
   assert(ctx.modalActions.includes('Download PDF'), 'Must have "Download PDF" label');
   assert(ctx.modalActions.includes('printInvoice'), 'Must also provide print button');
 
-  // Verify new modern executive invoice design elements
-  assert(ctx.modalHtml.includes('invoice-accent-bar'), 'Must include top brand accent bar');
-  assert(ctx.modalHtml.includes('invoice-party-box'), 'Must render structured party cards');
-  assert(ctx.modalHtml.includes('invoice-table-wrap'), 'Must render styled table wrap');
-  assert(ctx.modalHtml.includes('invoice-bottom-grid'), 'Must render bottom grid with bank card and totals');
+  // Verify initial clean invoice layout and direct PDF download handler
+  assert(ctx.modalHtml.includes('invoice-paper'), 'Must render invoice paper');
+  assert(ctx.modalHtml.includes('invoice-top'), 'Must render invoice top');
+  assert(ctx.modalHtml.includes('invoice-parties'), 'Must render invoice parties');
+  assert(ctx.modalHtml.includes('invoice-bank'), 'Must render bank details section');
 
   // Click Download PDF
   ctx.$('#downloadInvoicePdf').onclick();

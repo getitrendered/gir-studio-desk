@@ -4485,88 +4485,47 @@ function invoiceAdvance(i) {
 }
 
 function invoiceHtml(i) {
-  const isPaid = i.status === 'paid';
-  const balanceDue = isPaid ? 0 : Math.max(0, num(i.finalAmount) - invoiceAdvance(i));
-  const adv = invoiceAdvance(i);
-
-  const formatPartyInfo = p => {
-    if (!p) return '';
-    const parts = [];
-    if (p.address && p.address.trim()) parts.push(esc(p.address.trim()).replace(/\n/g, '<br>'));
-    const contact = [p.email, p.phone].filter(Boolean).map(s => esc(s.trim())).join(' · ');
-    if (contact) parts.push(contact);
-    if (p.taxId && p.taxId.trim()) parts.push(`<span class="party-tax-id">Tax / GST: ${esc(p.taxId.trim())}</span>`);
-    return parts.join('<br>') || '';
-  };
-
   return `<div class="invoice-paper">
-    <div class="invoice-accent-bar"></div>
     <div class="invoice-top">
-      <div class="invoice-brand-col">
+      <div>
         <img class="invoice-company-logo" src="${esc(i.seller?.logoData || 'assets/gir-icon.png')}" alt="${esc(i.seller?.name || 'GIR')} logo">
-        <h1 class="invoice-title">Invoice</h1>
-        <div class="invoice-seller-name">${esc(i.seller?.name || 'GIR')}</div>
+        <h1>Invoice</h1>
+        <div class="muted">${esc(i.seller?.name || 'GIR')}</div>
       </div>
       <div class="invoice-meta">
-        <div class="invoice-number-badge">
-          <div class="label">INVOICE NO.</div>
-          <strong>${esc(i.number)}</strong>
-        </div>
-        <div class="invoice-date-line">
-          <p>${fmtDate(i.issueDate)}</p>
-        </div>
-        <div class="invoice-status-badges">
-          <span class="pill ${isPaid ? 'paid' : 'sent'}">${isPaid ? 'PAID' : 'ISSUED'}</span>
-          ${i.isLumpSum ? '<span class="pill blue" style="margin-left:4px;">LUMP SUM</span>' : ''}
-        </div>
+        <div class="label">INVOICE NO.</div>
+        <strong>${esc(i.number)}</strong>
+        <p>${fmtDate(i.issueDate)}</p>
+        <span class="pill ${i.status === 'paid' ? 'paid' : 'sent'}">${i.status === 'paid' ? 'PAID' : 'ISSUED'}</span>
+        ${i.isLumpSum ? '<span class="pill blue" style="margin-left:4px;">LUMP SUM</span>' : ''}
       </div>
     </div>
     <div class="invoice-parties">
-      <div class="invoice-party-box">
+      <div>
         <div class="label">FROM</div>
         <strong>${esc(i.seller?.name || '')}</strong>
-        <p>${formatPartyInfo(i.seller)}</p>
+        <p>${esc(i.seller?.address || '').replace(/\n/g, '<br>')}<br>${esc(i.seller?.email || '')} ${esc(i.seller?.phone || '')}<br>${esc(i.seller?.taxId || '')}</p>
       </div>
-      <div class="invoice-party-box">
+      <div>
         <div class="label">BILL TO</div>
         <strong>${esc(i.buyer?.name || '')}</strong>
-        <p>${formatPartyInfo(i.buyer)}</p>
+        <p>${esc(i.buyer?.address || '').replace(/\n/g, '<br>')}<br>${esc(i.buyer?.email || '')} ${esc(i.buyer?.phone || '')}<br>${esc(i.buyer?.taxId || '')}</p>
       </div>
     </div>
-    <div class="invoice-table-wrap">
-      <table>
-        <thead><tr><th>#</th><th>SERVICE</th><th>QTY</th><th>RATE</th><th>TOTAL</th></tr></thead>
-        <tbody>
-          ${(i.lines || []).map((l, idx) => `
-            <tr class="${idx % 2 === 1 ? 'alt-row' : ''}">
-              <td class="col-serial">${l.serial}</td>
-              <td class="col-service">
-                <strong>${esc(l.service)}</strong>
-                ${i.isLumpSum ? '<span class="deal-pill">Deal</span>' : ''}
-              </td>
-              <td class="col-qty">${l.quantity}</td>
-              <td class="col-rate">${money(l.rate)}</td>
-              <td class="col-total">${money(l.total)}</td>
-            </tr>
-          `).join('')}
-        </tbody>
-      </table>
+    <table>
+      <thead><tr><th>#</th><th>SERVICE</th><th>QTY</th><th>RATE</th><th>TOTAL</th></tr></thead>
+      <tbody>
+        ${(i.lines || []).map(l => `<tr><td>${l.serial}</td><td>${esc(l.service)}</td><td>${l.quantity}</td><td>${money(l.rate)}</td><td>${money(l.total)}</td></tr>`).join('')}
+      </tbody>
+    </table>
+    <div class="totals">
+      <div><span>Subtotal</span><strong>${money(i.subtotal)}</strong></div>
+      <div><span>Discount / adjustment</span><strong>${money(i.discount)}</strong></div>
+      <div><span>Final agreed amount</span><strong>${money(i.finalAmount)}</strong></div>
+      <div><span>Advance received</span><strong>− ${money(invoiceAdvance(i))}</strong></div>
+      <div class="grand"><span>Balance due</span><strong>${money(i.status === 'paid' ? 0 : Math.max(0, num(i.finalAmount) - invoiceAdvance(i)))}</strong></div>
     </div>
-    <div class="invoice-bottom-grid">
-      <div class="invoice-bank-wrap">
-        ${i.seller?.bankDetails ? `<div class="invoice-bank"><div class="label">BANK DETAILS · PAY GIR</div><div class="bank-details-content">${esc(i.seller.bankDetails).replace(/\n/g, '<br>')}</div></div>` : ''}
-      </div>
-      <div class="totals">
-        <div><span>Subtotal</span><strong>${money(i.subtotal)}</strong></div>
-        ${num(i.discount) ? `<div><span>Discount / adjustment</span><strong>- ${money(i.discount)}</strong></div>` : ''}
-        <div><span>Final agreed amount</span><strong>${money(i.finalAmount)}</strong></div>
-        <div><span>Advance received</span><strong>- ${money(adv)}</strong></div>
-        <div class="grand ${isPaid ? 'paid' : 'due'}">
-          <span>${isPaid ? 'Balance due (Paid)' : 'Balance due'}</span>
-          <strong>${money(balanceDue)}</strong>
-        </div>
-      </div>
-    </div>
+    ${i.seller?.bankDetails ? `<div class="invoice-bank"><div class="label">BANK DETAILS · PAY GIR</div>${esc(i.seller.bankDetails).replace(/\n/g, '<br>')}</div>` : ''}
     <div class="thankyou">Thank you for working with ${esc(i.seller?.name || 'GIR')}.</div>
   </div>`;
 }
