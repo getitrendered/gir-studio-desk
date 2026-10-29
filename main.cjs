@@ -1,4 +1,4 @@
-const { app, BrowserWindow, ipcMain, dialog, Notification, Tray, Menu } = require('electron');
+const { app, BrowserWindow, ipcMain, dialog, Notification, Tray, Menu, shell } = require('electron');
 const fs = require('node:fs');
 const path = require('node:path');
 const { spawn } = require('node:child_process');
@@ -341,6 +341,49 @@ ipcMain.handle('choose-workbook', async () => {
   });
 });
 ipcMain.handle('print-invoice', async () => { if (!win) return; await win.webContents.print({ silent: false, printBackground: true }); });
+ipcMain.handle('save-invoice-pdf', async (_e, { defaultFileName }) => {
+  if (!win || win.isDestroyed()) return { success: false, error: 'No active window' };
+  try {
+    const downloadsFolder = app.getPath('downloads');
+    const safeName = (defaultFileName || 'Invoice').replace(/[/\\?%*:|"<>]/g, '_');
+    const defaultPath = path.join(downloadsFolder, `${safeName}.pdf`);
+
+    const { canceled, filePath } = await dialog.showSaveDialog(win, {
+      title: 'Save Invoice PDF',
+      defaultPath,
+      filters: [
+        { name: 'PDF Documents (*.pdf)', extensions: ['pdf'] },
+        { name: 'All Files (*.*)', extensions: ['*'] }
+      ]
+    });
+
+    if (canceled || !filePath) {
+      return { success: false, canceled: true };
+    }
+
+    const pdfBuffer = await win.webContents.printToPDF({
+      printBackground: true,
+      pageSize: 'A4',
+      landscape: false
+    });
+
+    await fs.promises.writeFile(filePath, pdfBuffer);
+    return { success: true, filePath, canceled: false };
+  } catch (err) {
+    console.error('Error saving invoice PDF:', err);
+    return { success: false, error: err.message };
+  }
+});
+ipcMain.handle('open-path', async (_e, filePath) => {
+  try {
+    if (filePath && shell) {
+      shell.showItemInFolder(filePath);
+      return { success: true };
+    }
+  } catch (err) {
+    return { success: false, error: err.message };
+  }
+});
 ipcMain.handle('show-notification', (_e, { title, body, catPayload }) => {
   const cleanTitle = title || 'MeowSheet';
   const cleanBody = body || '';

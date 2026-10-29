@@ -4366,48 +4366,79 @@ function invoiceAdvance(i) {
 }
 
 function invoiceHtml(i) {
+  const isPaid = i.status === 'paid';
+  const balanceDue = isPaid ? 0 : Math.max(0, num(i.finalAmount) - invoiceAdvance(i));
+  const adv = invoiceAdvance(i);
+
   return `<div class="invoice-paper">
+    <div class="invoice-accent-bar"></div>
     <div class="invoice-top">
-      <div>
+      <div class="invoice-brand-col">
         <img class="invoice-company-logo" src="${esc(i.seller?.logoData || 'assets/gir-icon.png')}" alt="${esc(i.seller?.name || 'GIR')} logo">
-        <h1>Invoice</h1>
-        <div class="muted">${esc(i.seller?.name || 'GIR')}</div>
+        <h1 class="invoice-title">Invoice</h1>
+        <div class="invoice-seller-name">${esc(i.seller?.name || 'GIR')}</div>
       </div>
       <div class="invoice-meta">
-        <div class="label">INVOICE NO.</div>
-        <strong>${esc(i.number)}</strong>
-        <p>${fmtDate(i.issueDate)}</p>
-        <span class="pill ${i.status === 'paid' ? 'paid' : 'sent'}">${i.status === 'paid' ? 'PAID' : 'ISSUED'}</span>
-        ${i.isLumpSum ? '<span class="pill blue" style="margin-left:4px;">LUMP SUM</span>' : ''}
+        <div class="invoice-number-badge">
+          <div class="label">INVOICE NO.</div>
+          <strong>${esc(i.number)}</strong>
+        </div>
+        <div class="invoice-date-line">
+          <p>${fmtDate(i.issueDate)}</p>
+        </div>
+        <div class="invoice-status-badges">
+          <span class="pill ${isPaid ? 'paid' : 'sent'}">${isPaid ? 'PAID' : 'ISSUED'}</span>
+          ${i.isLumpSum ? '<span class="pill blue" style="margin-left:4px;">LUMP SUM</span>' : ''}
+        </div>
       </div>
     </div>
     <div class="invoice-parties">
-      <div>
+      <div class="invoice-party-box">
         <div class="label">FROM</div>
         <strong>${esc(i.seller?.name || '')}</strong>
         <p>${esc(i.seller?.address || '').replace(/\n/g, '<br>')}<br>${esc(i.seller?.email || '')} ${esc(i.seller?.phone || '')}<br>${esc(i.seller?.taxId || '')}</p>
       </div>
-      <div>
+      <div class="invoice-party-box">
         <div class="label">BILL TO</div>
         <strong>${esc(i.buyer?.name || '')}</strong>
         <p>${esc(i.buyer?.address || '').replace(/\n/g, '<br>')}<br>${esc(i.buyer?.email || '')} ${esc(i.buyer?.phone || '')}<br>${esc(i.buyer?.taxId || '')}</p>
       </div>
     </div>
-    <table>
-      <thead><tr><th>#</th><th>SERVICE</th><th>QTY</th><th>RATE</th><th>TOTAL</th></tr></thead>
-      <tbody>
-        ${(i.lines || []).map(l => `<tr><td>${l.serial}</td><td>${esc(l.service)}</td><td>${l.quantity}</td><td>${money(l.rate)}</td><td>${money(l.total)}</td></tr>`).join('')}
-      </tbody>
-    </table>
-    <div class="totals">
-      <div><span>Subtotal</span><strong>${money(i.subtotal)}</strong></div>
-      <div><span>Discount / adjustment</span><strong>${money(i.discount)}</strong></div>
-      <div><span>Final agreed amount</span><strong>${money(i.finalAmount)}</strong></div>
-      <div><span>Advance received</span><strong>− ${money(invoiceAdvance(i))}</strong></div>
-      <div class="grand"><span>Balance due</span><strong>${money(i.status === 'paid' ? 0 : Math.max(0, num(i.finalAmount) - invoiceAdvance(i)))}</strong></div>
+    <div class="invoice-table-wrap">
+      <table>
+        <thead><tr><th>#</th><th>SERVICE</th><th>QTY</th><th>RATE</th><th>TOTAL</th></tr></thead>
+        <tbody>
+          ${(i.lines || []).map((l, idx) => `
+            <tr class="${idx % 2 === 1 ? 'alt-row' : ''}">
+              <td class="col-serial">${l.serial}</td>
+              <td class="col-service">
+                <strong>${esc(l.service)}</strong>
+                ${i.isLumpSum ? '<span class="deal-pill">Deal</span>' : ''}
+              </td>
+              <td class="col-qty">${l.quantity}</td>
+              <td class="col-rate">${money(l.rate)}</td>
+              <td class="col-total">${money(l.total)}</td>
+            </tr>
+          `).join('')}
+        </tbody>
+      </table>
     </div>
-    ${i.seller?.bankDetails ? `<div class="invoice-bank"><div class="label">BANK DETAILS · PAY GIR</div><div>${esc(i.seller.bankDetails).replace(/\n/g, '<br>')}</div></div>` : ''}
-    <div class="thankyou">Thank you for working with GIR.</div>
+    <div class="invoice-bottom-grid">
+      <div class="invoice-bank-wrap">
+        ${i.seller?.bankDetails ? `<div class="invoice-bank"><div class="label">BANK DETAILS · PAY GIR</div><div class="bank-details-content">${esc(i.seller.bankDetails).replace(/\n/g, '<br>')}</div></div>` : ''}
+      </div>
+      <div class="totals">
+        <div><span>Subtotal</span><strong>${money(i.subtotal)}</strong></div>
+        ${num(i.discount) ? `<div><span>Discount / adjustment</span><strong>- ${money(i.discount)}</strong></div>` : ''}
+        <div><span>Final agreed amount</span><strong>${money(i.finalAmount)}</strong></div>
+        <div><span>Advance received</span><strong>- ${money(adv)}</strong></div>
+        <div class="grand ${isPaid ? 'paid' : 'due'}">
+          <span>${isPaid ? 'Balance due (Paid)' : 'Balance due'}</span>
+          <strong>${money(balanceDue)}</strong>
+        </div>
+      </div>
+    </div>
+    <div class="thankyou">Thank you for working with ${esc(i.seller?.name || 'GIR')}.</div>
   </div>`;
 }
 
@@ -4419,25 +4450,80 @@ function viewInvoice(id) {
     const isLump = !!i.isLumpSum;
     const actionsHtml = `
       <div class="modal-actions">
-        <button class="small-btn" id="printInvoice">Print / save PDF</button>
+        <button class="small-btn blue" id="downloadInvoicePdf" style="display:inline-flex;align-items:center;gap:6px;font-weight:700">📥 Download PDF</button>
+        <button class="small-btn" id="printInvoice" title="Open OS Print Dialog">🖨️ Print</button>
         <button class="small-btn" id="toggleViewInvoiceMode" title="Switch between lump sum and itemized breakup on this invoice">
           ${isLump ? '📋 Show Breakup' : '💰 Show as Lump Sum'}
         </button>
         <button class="small-btn" id="deleteInvoice">Delete invoice</button>
-        ${i.status === 'issued' ? `<button class="small-btn blue" id="recordPayment">Record paid</button>` : ''}
+        ${i.status === 'issued' ? `<button class="small-btn green" id="recordPayment">Record paid</button>` : ''}
       </div>
     `;
 
     modal('Invoice preview', `<div id="invoicePreview">${invoiceHtml(i)}</div>`, actionsHtml, true);
 
-    $('#printInvoice').onclick = () => {
-      $('#printArea')?.remove();
+    const triggerSavePdf = async () => {
+      const existing = $('#printArea');
+      if (existing && typeof existing.remove === 'function') existing.remove();
       const div = document.createElement('div');
       div.id = 'printArea';
       div.className = 'print-only';
       div.innerHTML = invoiceHtml(i);
-      document.body.appendChild(div);
-      window.desk.print().finally(() => setTimeout(() => div.remove(), 500));
+      if (document.body && typeof document.body.appendChild === 'function') {
+        document.body.appendChild(div);
+      }
+
+      const client = data.clients.find(c => c.id === i.clientId);
+      const clientName = (client?.name || i.buyer?.name || 'Client').replace(/[/\\?%*:|"<>]/g, '_');
+      const invNum = (i.number || 'INV').replace(/[/\\?%*:|"<>]/g, '_');
+      const defaultFileName = `Invoice_${invNum}_${clientName}`;
+
+      try {
+        if (window.desk && typeof window.desk.savePdf === 'function') {
+          const res = await window.desk.savePdf({ defaultFileName });
+          if (res && res.success) {
+            const fileName = res.filePath.split(/[/\\]/).pop();
+            toast(`✅ Invoice saved to Downloads: ${fileName}`);
+          } else if (res && !res.canceled && res.error) {
+            toast(`Failed to save PDF: ${res.error}`);
+          }
+        } else if (window.desk && typeof window.desk.print === 'function') {
+          await window.desk.print();
+        } else {
+          window.print();
+        }
+      } catch (err) {
+        toast(`Error saving PDF: ${err.message}`);
+      } finally {
+        setTimeout(() => {
+          if (div && typeof div.remove === 'function') div.remove();
+        }, 600);
+      }
+    };
+
+    const dlBtn = $('#downloadInvoicePdf');
+    if (dlBtn) dlBtn.onclick = triggerSavePdf;
+
+    $('#printInvoice').onclick = () => {
+      const existing = $('#printArea');
+      if (existing && typeof existing.remove === 'function') existing.remove();
+      const div = document.createElement('div');
+      div.id = 'printArea';
+      div.className = 'print-only';
+      div.innerHTML = invoiceHtml(i);
+      if (document.body && typeof document.body.appendChild === 'function') {
+        document.body.appendChild(div);
+      }
+      if (window.desk && window.desk.print) {
+        window.desk.print().finally(() => setTimeout(() => {
+          if (div && typeof div.remove === 'function') div.remove();
+        }, 500));
+      } else {
+        window.print();
+        setTimeout(() => {
+          if (div && typeof div.remove === 'function') div.remove();
+        }, 500);
+      }
     };
 
     const toggleBtn = $('#toggleViewInvoiceMode');

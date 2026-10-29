@@ -4,6 +4,8 @@ contextBridge.exposeInMainWorld('desk', {
   write: value => ipcRenderer.invoke('write-store', value),
   chooseWorkbook: () => ipcRenderer.invoke('choose-workbook'),
   print: () => ipcRenderer.invoke('print-invoice'),
+  savePdf: options => ipcRenderer.invoke('save-invoice-pdf', options || {}),
+  openPath: p => ipcRenderer.invoke('open-path', p),
   notify: (title, body, catPayload) => ipcRenderer.invoke('show-notification', { title, body, catPayload }),
   focusApp: () => ipcRenderer.invoke('focus-app'),
   hideBanner: () => ipcRenderer.invoke('hide-banner'),

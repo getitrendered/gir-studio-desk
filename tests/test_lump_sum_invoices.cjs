@@ -73,6 +73,7 @@ function setupTestEnvironment() {
           textContent: '',
           innerHTML: '',
           classList: { add: () => {}, remove: () => {}, toggle: () => {} },
+          remove: () => {},
           addEventListener: () => {},
           focus: () => {}
         };
@@ -82,9 +83,13 @@ function setupTestEnvironment() {
     $$: () => [],
     document: {
       getElementById: id => context.elements['#' + id] || null,
-      querySelector: sel => context.elements[sel] || { innerHTML: '', textContent: '' }
+      querySelector: sel => context.elements[sel] || { innerHTML: '', textContent: '' },
+      createElement: tag => ({ id: '', className: '', innerHTML: '', remove: () => {} }),
+      body: { appendChild: () => {} }
     },
-    window: { desk: { print: async () => {} } }
+    setTimeout: (fn, ms) => setTimeout(fn, ms),
+    clearTimeout: id => clearTimeout(id),
+    window: { desk: { print: async () => {}, savePdf: async () => ({ success: true, filePath: 'test.pdf' }) } }
   };
 
   vm.createContext(context);
@@ -259,6 +264,63 @@ console.log('Testing Lump Sum Invoices, Group Deals Default, and Toggle Modes...
   assert.equal(local.lumpSumDescription, 'Full Decor Package');
   assert.equal(local.originalLines.length, 1);
   console.log('✓ Test 4: remoteRow and localRow serialization roundtrip passed');
+}
+
+// Test 5: Modern invoice design elements and direct PDF download handler
+{
+  const ctx = setupTestEnvironment();
+  let savePdfCalledWith = null;
+  ctx.window.desk.savePdf = async (opts) => {
+    savePdfCalledWith = opts;
+    return { success: true, filePath: 'C:\\Users\\test\\Downloads\\Invoice_GIR-2026-0001_Bling_it_on.pdf' };
+  };
+
+  const inv = {
+    id: 'inv-pdf-1',
+    clientId: 'c1',
+    number: 'GIR-2026-0001',
+    issueDate: '2026-10-30',
+    itemIds: ['i1'],
+    lines: [{ serial: 1, service: '3D Event Render', quantity: 1, rate: 5000, total: 5000 }],
+    subtotal: 5000,
+    discount: 0,
+    finalAmount: 5000,
+    advanceAmount: 1000,
+    status: 'issued',
+    seller: { name: 'GIR Studios', bankDetails: 'HDFC Bank\nA/C: 12345\nIFSC: HDFC0001' },
+    buyer: { name: 'Bling it on' }
+  };
+  ctx.data.invoices.push(inv);
+
+  ctx.viewInvoice('inv-pdf-1');
+
+  // Verify Download PDF button and print option
+  assert(ctx.modalActions.includes('downloadInvoicePdf'), 'Must render Download PDF button');
+  assert(ctx.modalActions.includes('Download PDF'), 'Must have "Download PDF" label');
+  assert(ctx.modalActions.includes('printInvoice'), 'Must also provide print button');
+
+  // Verify new modern executive invoice design elements
+  assert(ctx.modalHtml.includes('invoice-accent-bar'), 'Must include top brand accent bar');
+  assert(ctx.modalHtml.includes('invoice-party-box'), 'Must render structured party cards');
+  assert(ctx.modalHtml.includes('invoice-table-wrap'), 'Must render styled table wrap');
+  assert(ctx.modalHtml.includes('invoice-bottom-grid'), 'Must render bottom grid with bank card and totals');
+
+  // Click Download PDF
+  ctx.$('#downloadInvoicePdf').onclick();
+
+  setTimeout(() => {
+    assert(savePdfCalledWith, 'savePdf must be called');
+    assert(savePdfCalledWith.defaultFileName.includes('Invoice_GIR-2026-0001'), 'Must supply proper default filename');
+  }, 10);
+
+  // Check main.cjs and preload.cjs
+  const mainCjs = fs.readFileSync(path.join(__dirname, '..', 'main.cjs'), 'utf8');
+  const preloadCjs = fs.readFileSync(path.join(__dirname, '..', 'preload.cjs'), 'utf8');
+  assert(mainCjs.includes("'save-invoice-pdf'"), 'main.cjs must define save-invoice-pdf handler');
+  assert(mainCjs.includes("printToPDF"), 'main.cjs must call printToPDF');
+  assert(preloadCjs.includes("savePdf:"), 'preload.cjs must expose savePdf API');
+
+  console.log('✓ Test 5: Modern invoice design and direct PDF download handler verified');
 }
 
 console.log('\nALL LUMP SUM AND INVOICE TESTS PASSED! 🎉\n');
