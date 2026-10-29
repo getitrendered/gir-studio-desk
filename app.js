@@ -2096,22 +2096,7 @@ function displayCatReactionBanner(payload) {
   const animBox = document.getElementById(animBoxId);
   const catColor = payload.catType || 'orange';
   if (animBox) {
-    if (typeof window !== 'undefined' && window.bodymovin) {
-      getCatLottie(catColor, payload.reactionKey).then(data => {
-        if (data && animBox) {
-          animBox.innerHTML = '';
-          window.bodymovin.loadAnimation({
-            container: animBox,
-            renderer: 'svg',
-            loop: true,
-            autoplay: true,
-            animationData: data
-          });
-        }
-      });
-    } else {
-      animBox.innerHTML = `<img src="assets/cats/${catColor}/${payload.reactionKey}.webp" alt="Cat reaction">`;
-    }
+    animBox.innerHTML = `<img src="assets/cats/moving/${catColor}/${payload.reactionKey}.webp" alt="Cat reaction" style="width:100%;height:100%;object-fit:contain;">`;
   }
 
   if (isMe) {
@@ -2936,15 +2921,17 @@ function openCatReactionPicker(contextItem = null, targetName = null) {
   const renderPickerContent = () => `
     <div id="catPickerRoot">
       <div class="cat-type-toggle-bar">
-        <button type="button" class="cat-toggle-pill ${chosenCat==='orange'?'active-orange':''}" id="pickerCatOrange">🐱 Orange Cat</button>
-        <button type="button" class="cat-toggle-pill ${chosenCat==='black'?'active-black':''}" id="pickerCatBlack">🐈‍⬛ Midnight Black Cat</button>
+        <button type="button" class="cat-toggle-pill ${chosenCat==='orange'?'active-orange':''}" id="pickerCatOrange">🐱 Ginger Cat</button>
+        <button type="button" class="cat-toggle-pill ${chosenCat==='black'?'active-black':''}" id="pickerCatBlack">🐈‍⬛ Midnight Cat</button>
+        <button type="button" class="cat-toggle-pill ${chosenCat==='calico'?'active-calico':''}" id="pickerCatCalico">🐾 Calico Cat</button>
+        <button type="button" class="cat-toggle-pill ${chosenCat==='white'?'active-white':''}" id="pickerCatWhite">🤍 Snow Persian</button>
       </div>
       <p class="muted" style="text-align:center;font-size:12px;margin-bottom:10px;">Select an animated cat state to ping ${targetText}:</p>
       <div class="cat-picker-grid">
         ${CAT_REACTIONS.map(r => `
           <div class="cat-picker-item ${chosenCat==='black'?'black-cat-active':''}" data-cat-pick="${r.key}">
             <div class="cat-picker-anim" id="picker-anim-${r.key}">
-              <div class="lottie-slot" style="width:68px;height:68px;"></div>
+              <img src="assets/cats/moving/${chosenCat}/${r.key}.webp" alt="${esc(r.title)}" loading="lazy" />
             </div>
             <div class="cat-picker-title">${esc(r.title.split('/')[0].trim())}</div>
             <div class="cat-picker-action">${esc(r.action)} 🐾</div>
@@ -2957,26 +2944,6 @@ function openCatReactionPicker(contextItem = null, targetName = null) {
   modal('🐾 Animated Cat Reaction & Team Ping', renderPickerContent(), '', true);
 
   function initPickerAnimations() {
-    if (window.bodymovin) {
-      CAT_REACTIONS.forEach(r => {
-        const slot = document.querySelector('#picker-anim-' + r.key + ' .lottie-slot');
-        if (slot) {
-          getCatLottie(chosenCat, r.key).then(animData => {
-            if (animData && slot.parentElement) {
-              slot.innerHTML = '';
-              window.bodymovin.loadAnimation({
-                container: slot,
-                renderer: 'svg',
-                loop: true,
-                autoplay: true,
-                animationData: animData
-              });
-            }
-          });
-        }
-      });
-    }
-
     const oBtn = document.getElementById('pickerCatOrange');
     if (oBtn) oBtn.onclick = (e) => {
       e.preventDefault();
@@ -2994,6 +2961,26 @@ function openCatReactionPicker(contextItem = null, targetName = null) {
       if (chosenCat === 'black') return;
       chosenCat = 'black';
       data.settings.catType = 'black';
+      save();
+      updateModalBody();
+    };
+    const cBtn = document.getElementById('pickerCatCalico');
+    if (cBtn) cBtn.onclick = (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      if (chosenCat === 'calico') return;
+      chosenCat = 'calico';
+      data.settings.catType = 'calico';
+      save();
+      updateModalBody();
+    };
+    const wBtn = document.getElementById('pickerCatWhite');
+    if (wBtn) wBtn.onclick = (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      if (chosenCat === 'white') return;
+      chosenCat = 'white';
+      data.settings.catType = 'white';
       save();
       updateModalBody();
     };
