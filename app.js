@@ -543,7 +543,7 @@ function renderSheet() {
       ${value('remarks',i.remarks||'')}</tr>`;
   }
   if(filter==='all')rows+=Array.from({length:blankRows},(_,n)=>blankRowHtml(all.length+n)).join('');
-  return `<div class="sheet-shell"><div class="sheet-toolbar"><div class="actions"><button class="small-btn blue" data-action="assign" ${selected.size?'':'disabled'}>● Start work</button><button class="small-btn" data-action="complete" ${selected.size?'':'disabled'}>✓ Mark sent</button><button class="small-btn" data-action="invoice" ${selected.size?'':'disabled'}>▣ Create invoice</button><button class="small-btn" data-action="share-chat" ${selected.size?'':'disabled'} title="Share selected row(s) in Team Chat">💬 Share in chat</button><button class="small-btn danger" data-action="delete" title="Delete selected row(s) (Del)" ${selected.size?'':'disabled'}>🗑 Delete row</button><button class="small-btn" data-action="undo" title="Undo (Ctrl+Z)" ${undoStack.length?'':'disabled'}>↶ Undo</button><button class="small-btn" data-action="redo" title="Redo (Ctrl+Y)" ${redoStack.length?'':'disabled'}>↷ Redo</button><button class="small-btn" data-action="group" ${selected.size>1?'':'disabled'}>Group deal</button><button class="small-btn" data-action="project-group" ${selected.size?'':'disabled'}>Group project</button><button class="small-btn" data-action="ungroup" ${hasGroupedSelected()?'':'disabled'} title="Ungroup selected row(s)">Ungroup</button><select id="bulkStatus" aria-label="Set selected rows status" ${selected.size?'':'disabled'}><option value="">Set status…</option>${['pending','working','changes','sent','paid','discarded'].map(s=>`<option value="${s}">${s[0].toUpperCase()+s.slice(1)}</option>`).join('')}<option value="paid-date">Paid on date…</option></select><select id="workFilter" aria-label="Filter work">${['all','pending','working','changes','sent','paid','discarded'].map(s=>`<option value="${s}" ${filter===s?'selected':''}>${s==='all'?'All work':s[0].toUpperCase()+s.slice(1)}</option>`).join('')}</select></div><span class="hint" id="selectedCount">${selectionLabelHtml()}</span></div>
+  return `<div class="sheet-shell"><div class="sheet-toolbar"><div class="actions"><button class="small-btn green" data-action="add-multiples" title="Add multiple rows from formatted WhatsApp/text">➕ Add Multiples</button><button class="small-btn blue" data-action="assign" ${selected.size?'':'disabled'}>● Start work</button><button class="small-btn" data-action="complete" ${selected.size?'':'disabled'}>✓ Mark sent</button><button class="small-btn" data-action="invoice" ${selected.size?'':'disabled'}>▣ Create invoice</button><button class="small-btn" data-action="share-chat" ${selected.size?'':'disabled'} title="Share selected row(s) in Team Chat">💬 Share in chat</button><button class="small-btn danger" data-action="delete" title="Delete selected row(s) (Del)" ${selected.size?'':'disabled'}>🗑 Delete row</button><button class="small-btn" data-action="undo" title="Undo (Ctrl+Z)" ${undoStack.length?'':'disabled'}>↶ Undo</button><button class="small-btn" data-action="redo" title="Redo (Ctrl+Y)" ${redoStack.length?'':'disabled'}>↷ Redo</button><button class="small-btn" data-action="group" ${selected.size>1?'':'disabled'}>Group deal</button><button class="small-btn" data-action="project-group" ${selected.size?'':'disabled'}>Group project</button><button class="small-btn" data-action="ungroup" ${hasGroupedSelected()?'':'disabled'} title="Ungroup selected row(s)">Ungroup</button><select id="bulkStatus" aria-label="Set selected rows status" ${selected.size?'':'disabled'}><option value="">Set status…</option>${['pending','working','changes','sent','paid','discarded'].map(s=>`<option value="${s}">${s[0].toUpperCase()+s.slice(1)}</option>`).join('')}<option value="paid-date">Paid on date…</option></select><select id="workFilter" aria-label="Filter work">${['all','pending','working','changes','sent','paid','discarded'].map(s=>`<option value="${s}" ${filter===s?'selected':''}>${s==='all'?'All work':s[0].toUpperCase()+s.slice(1)}</option>`).join('')}</select></div><span class="hint" id="selectedCount">${selectionLabelHtml()}</span></div>
     <div class="sheet-viewport"><table class="sheet"><thead><tr><th class="row-selector"><input type="checkbox" id="selectAll" aria-label="Select visible rows"></th><th>SR</th><th>DATE</th><th>SERVICE PROVIDED</th><th>QTY</th><th>RATE</th><th>TOTAL</th><th>STATUS</th><th>ADVANCE</th><th>ASSIGNED</th><th>REMARKS</th></tr></thead><tbody>${rows}</tbody></table></div></div>`;
 }
 
@@ -1147,6 +1147,7 @@ function bindMain() {
         `<button id="contextCopy"><span class="context-icon">⎘</span><span>Copy row</span><kbd>Ctrl+C</kbd></button>`+
         `<button id="contextPaste" ${hasClipboard?'':'disabled'}><span class="context-icon">📋</span><span>Paste row</span><kbd>Ctrl+V</kbd></button>`+
         `<button id="contextDuplicate"><span class="context-icon">⧉</span><span>Duplicate row</span><kbd>Ctrl+D</kbd></button>`+
+        `<button id="contextAddMulti"><span class="context-icon">➕</span><span>Add multiples…</span></button>`+
         `<div class="context-divider"></div>`+
         `<button id="contextDelete" class="context-danger"><span class="context-icon">🗑</span><span>${selected.size>1?`Delete ${selected.size} rows`:'Delete row'}</span><kbd>Del</kbd></button>`+
         `<div class="context-divider"></div>`+
@@ -1168,6 +1169,7 @@ function bindMain() {
       $('#contextCopy').onclick=()=>{menu.remove();copySelectedRows(false);};
       if($('#contextPaste'))$('#contextPaste').onclick=()=>{menu.remove();pasteCopiedRows(rowId);};
       $('#contextDuplicate').onclick=()=>{menu.remove();duplicateSelectedRow(rowId);};
+      if($('#contextAddMulti'))$('#contextAddMulti').onclick=()=>{menu.remove();addMultiplesDialog();};
       $('#contextDelete').onclick=()=>{menu.remove();deleteSelectedRows([...selected]);};
       if($('#contextUndo'))$('#contextUndo').onclick=()=>{menu.remove();undo();};
       if($('#contextRedo'))$('#contextRedo').onclick=()=>{menu.remove();redo();};
@@ -1190,6 +1192,7 @@ function bindMain() {
       const menu=$('#contextMenu')||document.createElement('div');
       menu.id='contextMenu';menu.className='context-menu';
       menu.innerHTML=`<button id="contextPasteBlank" ${rowClipboard.items.length?'':'disabled'}><span class="context-icon">📋</span><span>Paste row here</span><kbd>Ctrl+V</kbd></button>`+
+        `<button id="contextAddMultiBlank"><span class="context-icon">➕</span><span>Add multiples…</span></button>`+
         `<div class="context-divider"></div>`+
         `<button id="contextUndoBlank" ${undoStack.length?'':'disabled'}><span class="context-icon">↶</span><span>Undo</span><kbd>Ctrl+Z</kbd></button>`+
         `<button id="contextRedoBlank" ${redoStack.length?'':'disabled'}><span class="context-icon">↷</span><span>Redo</span><kbd>Ctrl+Y</kbd></button>`;
@@ -1197,6 +1200,7 @@ function bindMain() {
       menu.style.left=Math.max(8,Math.min(e.clientX,innerWidth-220))+'px';
       menu.style.top=Math.max(8,Math.min(e.clientY,innerHeight-140))+'px';
       if($('#contextPasteBlank'))$('#contextPasteBlank').onclick=()=>{menu.remove();pasteCopiedRows(null,blankOrder);};
+      if($('#contextAddMultiBlank'))$('#contextAddMultiBlank').onclick=()=>{menu.remove();addMultiplesDialog();};
       if($('#contextUndoBlank'))$('#contextUndoBlank').onclick=()=>{menu.remove();undo();};
       if($('#contextRedoBlank'))$('#contextRedoBlank').onclick=()=>{menu.remove();redo();};
       setTimeout(()=>document.addEventListener('click',()=>menu.remove(),{once:true}),0);
@@ -1791,6 +1795,422 @@ function moveRowDialog(itemId) {
     }
   });
 }
+
+function getNextWorksheetSerial(clientId = activeClient) {
+  const existing = clientItems(clientId);
+  if (!existing.length) return 1;
+  let maxSerial = 0;
+  for (const it of existing) {
+    const s = cleanSerial(it.serial);
+    const n = parseInt(s, 10);
+    if (!isNaN(n) && n > maxSerial) maxSerial = n;
+  }
+  return Math.max(existing.length + 1, maxSerial + 1);
+}
+
+function parseMultiRowLine(rawLine, nextSerial = 1, defaultDate = today(), defaultStatus = 'pending') {
+  if (!rawLine || !rawLine.trim()) return null;
+
+  let text = rawLine.trim();
+
+  // 1. Check for tab-separated (TSV spreadsheet paste)
+  if (text.includes('\t')) {
+    const cols = text.split('\t').map(c => c.trim());
+    if (cols.length >= 2) {
+      let workDate = defaultDate;
+      let service = '';
+      let qty = 1;
+      let rate = 0;
+      let total = 0;
+      let status = defaultStatus;
+      let remarks = '';
+
+      let startIdx = 0;
+      if (/^\d+$/.test(cols[0]) && cols.length >= 3) {
+        startIdx = 1;
+      }
+      if (validDate(cols[startIdx])) {
+        workDate = validDate(cols[startIdx]);
+        startIdx++;
+      }
+
+      const rest = cols.slice(startIdx);
+      if (rest.length === 1) {
+        service = rest[0];
+      } else if (rest.length === 2) {
+        service = rest[0];
+        const val = num(rest[1]);
+        rate = val;
+        total = val;
+      } else if (rest.length >= 3) {
+        service = rest[0];
+        qty = num(rest[1]) || 1;
+        rate = num(rest[2]);
+        total = qty * rate;
+        if (rest[3] && !isNaN(num(rest[3]))) total = num(rest[3]);
+        if (rest[4]) status = rest[4].toLowerCase();
+        if (rest[5]) remarks = rest[5];
+      }
+
+      return {
+        serial: cleanSerial(String(nextSerial)),
+        workDate,
+        service: service || 'Service',
+        quantity: qty,
+        rate,
+        quotedTotal: total,
+        status: ['pending', 'working', 'changes', 'sent', 'paid', 'discarded'].includes(status) ? status : defaultStatus,
+        remarks
+      };
+    }
+  }
+
+  // 2. Strip leading list numbering/bullets (e.g. "1. ", "1) ", "1 - ", "* ", "- ")
+  const numPrefixMatch = text.match(/^(\d+)[\.\)\-:]\s+(.+)$/);
+  if (numPrefixMatch) {
+    text = numPrefixMatch[2].trim();
+  } else {
+    text = text.replace(/^[-*•]\s+/, '').trim();
+  }
+
+  // 3. Extract bracketed remarks at the end e.g. (approved by client) or [urgent]
+  let remarks = '';
+  const remarksMatch = text.match(/\s*[\(\[]([^\)\]]+)[\)\]]\s*$/);
+  if (remarksMatch) {
+    remarks = remarksMatch[1].trim();
+    text = text.slice(0, remarksMatch.index).trim();
+  }
+
+  // 4. Check for leading date e.g. "2026-10-31 - Service..." or "31-10-2026 Service..."
+  let workDate = defaultDate;
+  const datePrefixMatch = text.match(/^(\d{4}-\d{2}-\d{2}|\d{1,2}[/-]\d{1,2}[/-]\d{2,4})\s*[-–—:\s]\s*(.+)$/);
+  if (datePrefixMatch) {
+    const parsedD = validDate(datePrefixMatch[1]);
+    if (parsedD) {
+      workDate = parsedD;
+      text = datePrefixMatch[2].trim();
+    }
+  }
+
+  let service = text;
+  let qty = 1;
+  let rate = 0;
+  let total = 0;
+  let status = defaultStatus;
+
+  // 5. Pattern A: Qty x Rate (e.g. "HALDI - FLOOR FLEX 2 × 400", "3D CARNIVAL 1 × 13,500", "Arch 2 * 400", "Console 2 @ 400")
+  const qtyRateMatch = text.match(/^(.*?)(?:[-–—:,|/\s]+|\s+)(\d+(?:\.\d+)?)\s*(?:[xX*×@]|nos?\.?\s*@?)\s*(?:₹|Rs\.?|INR)?\s*([\d,]+(?:\.\d+)?)\s*$/i);
+  if (qtyRateMatch && qtyRateMatch[1].trim()) {
+    service = qtyRateMatch[1].trim();
+    qty = num(qtyRateMatch[2]) || 1;
+    rate = num(qtyRateMatch[3].replace(/,/g, ''));
+    total = qty * rate;
+  } else {
+    // 6. Pattern B: Comma or pipe separated: "HALDI - FLOOR FLEX, 2, 400"
+    if (text.includes(',') || text.includes('|')) {
+      const parts = text.split(/[,|]/).map(p => p.trim()).filter(Boolean);
+      if (parts.length >= 3 && !isNaN(num(parts[parts.length - 2])) && !isNaN(num(parts[parts.length - 1]))) {
+        rate = num(parts.pop().replace(/,/g, ''));
+        qty = num(parts.pop()) || 1;
+        service = parts.join(' ');
+        total = qty * rate;
+      } else if (parts.length === 2 && !isNaN(num(parts[1]))) {
+        rate = num(parts[1].replace(/,/g, ''));
+        qty = 1;
+        service = parts[0];
+        total = rate;
+      }
+    }
+
+    // 7. Pattern C: Service followed by single amount (e.g. "Stage Design - 5000", "Mandap 12000/-", "Entrance: ₹15,000")
+    if (!total && !rate) {
+      const singleAmountMatch = text.match(/^(.*?)(?:[-–—:,|/\s]+|\s+)(?:₹|Rs\.?|INR)?\s*([\d,]+(?:\.\d+)?)\s*(?:\/-)?$/i);
+      if (singleAmountMatch && singleAmountMatch[1].trim()) {
+        const parsedAmt = num(singleAmountMatch[2].replace(/,/g, ''));
+        if (parsedAmt > 0) {
+          service = singleAmountMatch[1].trim();
+          qty = 1;
+          rate = parsedAmt;
+          total = parsedAmt;
+        }
+      }
+    }
+  }
+
+  // Cleanup service name: strip trailing/leading punctuation
+  service = service.replace(/^[-–—:,.\s]+|[-–—:,.\s]+$/g, '').trim();
+  if (!service) service = 'Service';
+
+  return {
+    serial: cleanSerial(String(nextSerial)),
+    workDate,
+    service,
+    quantity: qty,
+    rate,
+    quotedTotal: total,
+    status,
+    remarks
+  };
+}
+
+function parseMultiRowText(rawText, startSerial = 1, defaultDate = today(), defaultStatus = 'pending') {
+  if (!rawText || !rawText.trim()) return [];
+  const lines = rawText.split(/\r?\n/);
+  const rows = [];
+  let currentSerial = parseInt(startSerial, 10) || 1;
+
+  for (const line of lines) {
+    if (!line.trim()) continue;
+    const row = parseMultiRowLine(line, currentSerial, defaultDate, defaultStatus);
+    if (row) {
+      rows.push(row);
+      currentSerial++;
+    }
+  }
+  return rows;
+}
+
+function addMultiplesDialog() {
+  const client = currentClient();
+  if (!client) {
+    toast('Select a client first');
+    return;
+  }
+
+  const nextSerial = getNextWorksheetSerial(activeClient);
+  const defDate = today();
+  const defStatus = 'pending';
+
+  const bodyHtml = `
+    <div class="multi-modal-wrap">
+      <p class="multi-modal-desc">
+        Paste your WhatsApp message, notes, or list below for <strong>${esc(client.name)}</strong>. Every new line is automatically detected as a new row.
+      </p>
+
+      <div class="multi-split-grid">
+        <!-- Left: Input Pane -->
+        <div class="multi-input-pane">
+          <div class="multi-pane-header">
+            <span class="multi-pane-title">Input Text</span>
+            <button class="small-btn text-btn" id="multiClearBtn" style="padding:2px 8px; font-size:11px;">Clear</button>
+          </div>
+          <textarea id="multiRowInput" class="multi-textarea" placeholder="Paste formatted WhatsApp text here...
+
+Examples:
+LINE DRAWING - HALDI BALLROOM ENTRANCE ARCH 1 × 300
+HALDI - FLOOR FLEX 2 × 400
+HALDI - INSIDE CONSOLE 2 × 400
+HALDI - SIGNAGE 3 × 100
+3D CARNIVAL 1 × 13,500
+Stage Design 5000
+Mandap Setup - 12000/-
+Passage Decor (night render)"></textarea>
+
+          <div class="multi-controls-bar">
+            <div class="multi-control-group">
+              <label for="multiStartSerial">Start Serial #</label>
+              <input id="multiStartSerial" type="number" min="1" value="${nextSerial}">
+            </div>
+            <div class="multi-control-group">
+              <label for="multiDefaultDate">Default Date</label>
+              <input id="multiDefaultDate" type="date" value="${defDate}">
+            </div>
+            <div class="multi-control-group">
+              <label for="multiDefaultStatus">Default Status</label>
+              <select id="multiDefaultStatus">
+                <option value="pending" selected>Pending</option>
+                <option value="working">Working</option>
+                <option value="changes">Changes</option>
+                <option value="sent">Sent</option>
+                <option value="paid">Paid</option>
+              </select>
+            </div>
+          </div>
+
+          <div class="multi-hint-box">
+            💡 Supports WhatsApp formats like <code>2 × 400</code>, <code>1 x 13,500</code>, <code>@ 400</code>, single amounts like <code>5000</code> or <code>12000/-</code>, remarks in brackets <code>(render)</code>, and Excel tabs.
+          </div>
+        </div>
+
+        <!-- Right: Live Preview Pane -->
+        <div class="multi-preview-pane">
+          <div class="multi-pane-header">
+            <span class="multi-pane-title">Live Preview</span>
+            <div class="multi-preview-badges" id="multiBadgesArea">
+              <span class="multi-badge multi-badge-blue">0 rows</span>
+              <span class="multi-badge multi-badge-green">₹0</span>
+              <span class="multi-badge multi-badge-purple">Start #${nextSerial}</span>
+            </div>
+          </div>
+
+          <div class="multi-table-wrap" id="multiPreviewContainer">
+            <div class="multi-preview-empty">
+              <p>No rows detected yet</p>
+              <small>Paste or type formatted text on the left to see live preview.</small>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  `;
+
+  const footerHtml = `
+    <div class="modal-actions" style="display:flex; justify-content:space-between; align-items:center;">
+      <button class="small-btn" id="cancelMultiModal">Cancel</button>
+      <button class="small-btn blue" id="insertMultiRowsBtn" disabled>Insert in Worksheet (0 rows)</button>
+    </div>
+  `;
+
+  modal('Add Multiple Rows', bodyHtml, footerHtml, true);
+
+  const inputEl = $('#multiRowInput');
+  const startSerialEl = $('#multiStartSerial');
+  const defaultDateEl = $('#multiDefaultDate');
+  const defaultStatusEl = $('#multiDefaultStatus');
+  const badgesEl = $('#multiBadgesArea');
+  const previewContainer = $('#multiPreviewContainer');
+  const insertBtn = $('#insertMultiRowsBtn');
+  const cancelBtn = $('#cancelMultiModal');
+  const clearBtn = $('#multiClearBtn');
+
+  let currentParsedRows = [];
+
+  function updatePreview() {
+    const raw = inputEl.value;
+    const startNum = parseInt(startSerialEl.value, 10) || nextSerial;
+    const dDate = defaultDateEl.value || defDate;
+    const dStatus = defaultStatusEl.value || defStatus;
+
+    currentParsedRows = parseMultiRowText(raw, startNum, dDate, dStatus);
+    const count = currentParsedRows.length;
+    const totalAmount = currentParsedRows.reduce((sum, r) => sum + num(r.quotedTotal), 0);
+
+    badgesEl.innerHTML = `
+      <span class="multi-badge multi-badge-blue">${count} row${count === 1 ? '' : 's'}</span>
+      <span class="multi-badge multi-badge-green">${money(totalAmount)}</span>
+      <span class="multi-badge multi-badge-purple">Start #${startNum}</span>
+    `;
+
+    if (!count) {
+      previewContainer.innerHTML = `
+        <div class="multi-preview-empty">
+          <p>No rows detected yet</p>
+          <small>Paste or type formatted text on the left to see live preview.</small>
+        </div>
+      `;
+      insertBtn.disabled = true;
+      insertBtn.textContent = 'Insert in Worksheet (0 rows)';
+    } else {
+      let tableHtml = `
+        <table class="multi-preview-table">
+          <thead>
+            <tr>
+              <th style="text-align:center; width:36px;">SR</th>
+              <th>DATE</th>
+              <th>SERVICE</th>
+              <th style="text-align:right;">QTY</th>
+              <th style="text-align:right;">RATE</th>
+              <th style="text-align:right;">TOTAL</th>
+              <th>STATUS</th>
+              <th>REMARKS</th>
+            </tr>
+          </thead>
+          <tbody>
+      `;
+
+      for (const row of currentParsedRows) {
+        tableHtml += `
+          <tr>
+            <td class="multi-preview-sr">${esc(row.serial)}</td>
+            <td>${esc(fmtDate(row.workDate))}</td>
+            <td class="multi-preview-service">${esc(row.service)}</td>
+            <td class="multi-preview-num">${row.quantity}</td>
+            <td class="multi-preview-num">${money(row.rate)}</td>
+            <td class="multi-preview-total">${money(row.quotedTotal)}</td>
+            <td><span class="pill ${row.status}">${esc(row.status[0].toUpperCase() + row.status.slice(1))}</span></td>
+            <td><small style="color:#64748b;">${esc(row.remarks || '-')}</small></td>
+          </tr>
+        `;
+      }
+
+      tableHtml += `</tbody></table>`;
+      previewContainer.innerHTML = tableHtml;
+      insertBtn.disabled = false;
+      insertBtn.textContent = `Insert in Worksheet (${count} row${count === 1 ? '' : 's'} · ${money(totalAmount)})`;
+    }
+  }
+
+  inputEl.addEventListener('input', updatePreview);
+  startSerialEl.addEventListener('input', updatePreview);
+  defaultDateEl.addEventListener('change', updatePreview);
+  defaultStatusEl.addEventListener('change', updatePreview);
+
+  if (clearBtn) {
+    clearBtn.onclick = () => {
+      inputEl.value = '';
+      inputEl.focus();
+      updatePreview();
+    };
+  }
+
+  if (cancelBtn) {
+    cancelBtn.onclick = closeModal;
+  }
+
+  if (insertBtn) {
+    insertBtn.onclick = () => {
+      if (!currentParsedRows.length) return;
+
+      const existing = clientItems(activeClient);
+      const maxSortOrder = existing.length ? Math.max(...existing.map(i => Number(i.sortOrder) || 0)) : -1;
+      const startSortOrder = maxSortOrder + 1;
+
+      pushUndo(`Add ${currentParsedRows.length} rows`);
+
+      const addedItems = [];
+      currentParsedRows.forEach((parsedRow, idx) => {
+        const item = newItem(activeClient, startSortOrder + idx);
+        item.serial = cleanSerial(parsedRow.serial);
+        item.sortOrder = startSortOrder + idx;
+        item.workDate = parsedRow.workDate;
+        item.service = parsedRow.service;
+        item.quantity = parsedRow.quantity;
+        item.rate = parsedRow.rate;
+        item.quotedTotal = parsedRow.quotedTotal;
+        item.manualTotal = true;
+        item.status = parsedRow.status;
+        item.remarks = parsedRow.remarks;
+        item.updatedAt = new Date().toISOString();
+
+        data.items.push(item);
+        enqueue('items', item.id);
+        addedItems.push(item);
+      });
+
+      save();
+      scheduleSync();
+      closeModal();
+
+      selected = new Set(addedItems.map(i => i.id));
+      if (addedItems.length) selectionAnchor = addedItems[0].id;
+
+      render();
+
+      setTimeout(() => {
+        if (addedItems.length) {
+          const firstRow = document.querySelector(`[data-row="${addedItems[0].id}"]`);
+          firstRow?.scrollIntoView({ block: 'center', behavior: 'smooth' });
+        }
+      }, 100);
+
+      toast(`Added ${addedItems.length} row${addedItems.length === 1 ? '' : 's'} to worksheet`);
+    };
+  }
+
+  setTimeout(() => inputEl.focus(), 80);
+}
+
+
 
 function newItem(clientId,order) { return { id:uid(), clientId, groupId:null, projectGroupId:null, sourceRow:null, sortOrder:order, serial:cleanSerial(String(order+1)), workDate:today(), dueDate:'', service:'', quantity:1, rate:0, quotedTotal:0, advanceAmount:0, status:'pending', revisionCount:0, assigneeId:'', remarks:'', manualTotal:false }; }
 function effectiveItemValue(item){
@@ -3711,6 +4131,7 @@ function actions(action) {
   if(action==='redo')return redo();
   if(action==='delete')return deleteSelectedRows([...selected]);
   if(action==='add-row'){const i=newItem(activeClient,clientItems().length);mutate('items',i);setTimeout(()=>document.querySelector(`[data-id="${i.id}"][data-cell="service"]`)?.focus(),80);return;}
+  if(action==='add-multiples')return addMultiplesDialog();
   if(action==='assign')return assign([...selected]); if(action==='complete')return markSent([...selected]); if(action==='invoice')return invoiceDialog(); if(action==='group')return groupDialog();
   if(action==='project-group')return projectGroupDialog();
   if(action==='ungroup')return ungroupSelectedRows();
