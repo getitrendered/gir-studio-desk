@@ -12,6 +12,7 @@ const GIR_WORKSPACE_ID='17f39873-e10f-4bdf-93ee-1f92b3e25251';
 let data = structuredClone(defaults), tab = 'sheet', lastRenderedTab = null, lastRenderedClient = null, activeClient = null, selected = new Set(), selectionAnchor = null, selectionCell = null, collapsedGroups = new Set(), blankRows = 60, highlightUser = null, filter = 'all', clientApi = null, session = null, channel = null, syncing = false, toastTimer, syncTimer, lastSyncTime = Date.now(), importPreview = null, previewClientIndex = 0, migrating = false;
 let isRowDragSelecting = false, hasRowDragged = false, justDraggedSelection = false, dragStartRowId = null, dragTargetRowId = null, dragStartCellKey = null, dragStartShift = false, dragStartWithCtrl = false, dragInitialSelected = null;
 let pendingChatAttachment = null, chatDraftText = '', activeStickerTab = 'stickers', stickerSearchQuery = '', lastPartnerOnlineTime = 0, unreadChatCount = 0, chatSyncTimer = null;
+let lastCellClick = { rowId: null, cellKey: null, blankOrder: null, time: 0 };
 let authLoading=true,workspaceReady=false,workspaceResolving=false,accessMode='signin',accessError='',activeStatusMenu=null;
 let desktopUpdate = { status: 'unavailable', message: 'Checking update support…' };
 const navHistory = [];
@@ -1102,9 +1103,23 @@ function bindMain() {
     window.addEventListener('mouseup', e => handleRowDragEnd(e));
   }
 
+  if (typeof window !== 'undefined' && !window._editBlurRegistered) {
+    window._editBlurRegistered = true;
+    document.addEventListener('mousedown', e => {
+      const active = document.querySelector('input.editing, select.editing, [data-cell].editing, [data-blank-cell].editing');
+      if (active && !active.contains(e.target)) {
+        deactivateAllEditingFields();
+      }
+    }, true);
+  }
+
   $$('[data-row]').forEach(row=>{
     row.onmousedown = e => {
       if (e.button !== 0) return;
+      const activeEditing = document.querySelector('input.editing, select.editing, [data-cell].editing, [data-blank-cell].editing');
+      if (activeEditing && !activeEditing.contains(e.target)) {
+        deactivateAllEditingFields();
+      }
       if (e.target.closest('button, input.editing, input[type=checkbox]')) return;
       const field = e.target.closest('td')?.querySelector('[data-cell]');
       selectionCell = field ? { id: row.dataset.row, key: field.dataset.cell } : null;
@@ -1129,11 +1144,28 @@ function bindMain() {
       if (e.target.closest('button') || e.target.matches('[type=checkbox]')) return;
       const field = e.target.closest('td')?.querySelector('[data-cell]');
       selectionCell = field ? { id: row.dataset.row, key: field.dataset.cell } : null;
+
+      const now = Date.now();
+      const isSameCell = lastCellClick.rowId === row.dataset.row &&
+                         lastCellClick.cellKey === field?.dataset?.cell &&
+                         field;
+      const timeDiff = now - lastCellClick.time;
+
+      if (isSameCell && timeDiff < 900) {
+        activateSheetField(field);
+        lastCellClick = { rowId: null, cellKey: null, blankOrder: null, time: 0 };
+        return;
+      }
+
+      lastCellClick = { rowId: row.dataset.row, cellKey: field?.dataset?.cell || null, blankOrder: null, time: now };
       selectSheetRow(row.dataset.row, e.shiftKey, e.ctrlKey || e.metaKey);
     };
     row.ondblclick = e => {
       const td = e.target.closest('td'), field = td?.querySelector('[data-cell]');
-      if (field) activateSheetField(field);
+      if (field) {
+        activateSheetField(field);
+        lastCellClick = { rowId: null, cellKey: null, blankOrder: null, time: 0 };
+      }
     };
     row.oncontextmenu=e=>{
       e.preventDefault();
@@ -1186,8 +1218,35 @@ function bindMain() {
     };
   });
   $$('[data-blank-row]').forEach(row=>{
-    row.onclick=e=>{const field=e.target.closest('td')?.querySelector('[data-blank-cell]');selectionCell=field?{blankOrder:Number(row.dataset.blankRow),key:field.dataset.blankCell}:null;};
-    row.ondblclick=e=>{const field=e.target.closest('td')?.querySelector('[data-blank-cell]');if(field)activateSheetField(field);};
+    row.onmousedown=e=>{
+      if (e.button !== 0) return;
+      const activeEditing = document.querySelector('input.editing, select.editing, [data-cell].editing, [data-blank-cell].editing');
+      if (activeEditing && !activeEditing.contains(e.target)) {
+        deactivateAllEditingFields();
+      }
+    };
+    row.onclick=e=>{
+      const field=e.target.closest('td')?.querySelector('[data-blank-cell]');
+      selectionCell=field?{blankOrder:Number(row.dataset.blankRow),key:field.dataset.blankCell}:null;
+      const now = Date.now();
+      const isSameBlank = lastCellClick.blankOrder === Number(row.dataset.blankRow) &&
+                          lastCellClick.cellKey === field?.dataset?.blankCell &&
+                          field;
+      const timeDiff = now - lastCellClick.time;
+      if (isSameBlank && timeDiff < 900) {
+        activateSheetField(field);
+        lastCellClick = { rowId: null, cellKey: null, blankOrder: null, time: 0 };
+        return;
+      }
+      lastCellClick = { rowId: null, blankOrder: Number(row.dataset.blankRow), cellKey: field?.dataset?.blankCell || null, time: now };
+    };
+    row.ondblclick=e=>{
+      const field=e.target.closest('td')?.querySelector('[data-blank-cell]');
+      if(field) {
+        activateSheetField(field);
+        lastCellClick = { rowId: null, cellKey: null, blankOrder: null, time: 0 };
+      }
+    };
     row.oncontextmenu=e=>{
       e.preventDefault();
       const blankOrder=Number(row.dataset.blankRow);
@@ -1486,10 +1545,75 @@ function selectSheetRow(id,shift=false,add=false) {
   else {selected.clear();selected.add(id);selectionAnchor=id;}
   refreshSelection();
 }
+function deactivateAllEditingFields(exceptEl = null) {
+  const editings = document.querySelectorAll('input.editing, select.editing, [data-cell].editing, [data-blank-cell].editing');
+  editings.forEach(el => {
+    if (exceptEl && el === exceptEl) return;
+    const isInput = el.tagName === 'INPUT';
+    const val = el.value ?? '';
+    el.classList.remove('editing');
+    if (isInput) {
+      el.readOnly = true;
+    } else {
+      el.style.pointerEvents = '';
+      el.tabIndex = -1;
+    }
+    if (document.activeElement === el && typeof el.blur === 'function') {
+      try { el.blur(); } catch {}
+    }
+    if (el.dataset.id && el.dataset.cell) {
+      const it = (data.items || []).find(x => x.id === el.dataset.id);
+      if (it && String(it[el.dataset.cell] ?? '') !== String(val)) {
+        editCell(el.dataset.id, el.dataset.cell, val, true);
+      }
+    } else if (el.dataset.blankOrder && el.dataset.blankCell && val.trim()) {
+      materializeBlankRow(el);
+    }
+  });
+}
+
 function activateSheetField(field) {
-  if(field.tagName==='INPUT'){field.readOnly=false;field.focus();field.select();field.onblur=()=>{field.readOnly=true;field.classList.remove('editing');};}
-  else {field.style.pointerEvents='auto';field.tabIndex=0;field.focus();try{field.showPicker?.();}catch{}field.onblur=()=>{field.style.pointerEvents='';field.tabIndex=-1;field.classList.remove('editing');};}
-  field.classList.add('editing');
+  if (!field) return;
+  deactivateAllEditingFields(field);
+  if (field.tagName === 'INPUT') {
+    field.readOnly = false;
+    field.classList.add('editing');
+    if (typeof field.focus === 'function') field.focus();
+    if (typeof field.select === 'function') field.select();
+    field.onkeydown = e => {
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        deactivateAllEditingFields();
+      } else if (e.key === 'Escape') {
+        e.preventDefault();
+        if (field.dataset.id && field.dataset.cell) {
+          const it = (data.items || []).find(x => x.id === field.dataset.id);
+          if (it) field.value = it[field.dataset.cell] ?? '';
+        } else if (field.dataset.blankCell) {
+          field.value = '';
+        }
+        field.classList.remove('editing');
+        field.readOnly = true;
+        field.blur();
+      }
+    };
+    field.onblur = () => {
+      if (field.classList.contains('editing')) {
+        deactivateAllEditingFields();
+      }
+    };
+  } else {
+    field.style.pointerEvents = 'auto';
+    field.tabIndex = 0;
+    field.classList.add('editing');
+    if (typeof field.focus === 'function') field.focus();
+    try { field.showPicker?.(); } catch {}
+    field.onblur = () => {
+      field.style.pointerEvents = '';
+      field.tabIndex = -1;
+      field.classList.remove('editing');
+    };
+  }
 }
 function materializeBlankRow(field) {
   const value=field.value.trim();if(!value)return;
@@ -1513,7 +1637,7 @@ function pasteBlankGrid(event,field) {
   }
   save();scheduleSync();render();
 }
-function editCell(id, key, value) {
+function editCell(id, key, value, skipRender = false) {
   const i=data.items.find(x=>x.id===id); if(!i)return;
   if(key==='status'){bulkSetStatus(value,[id]);return;}
   if(['quantity','rate','quotedTotal','advanceAmount'].includes(key)) value=Math.max(0,num(value));
@@ -1522,7 +1646,22 @@ function editCell(id, key, value) {
   i[key]=value;
   if(key==='quantity'||key==='rate') { i.manualTotal=false; i.quotedTotal=num(i.quantity)*num(i.rate); }
   if(key==='quotedTotal')i.manualTotal=true;
-  mutate('items',i);
+  if(skipRender) {
+    i.updatedAt = new Date().toISOString();
+    queue('items', i.id);
+    const rowEl = document.querySelector(`[data-row="${id}"]`);
+    if (rowEl) {
+      const input = rowEl.querySelector(`[data-cell="${key}"]`);
+      if (input && input.value !== String(value)) input.value = value;
+      if (key === 'quantity' || key === 'rate') {
+        const totalInput = rowEl.querySelector('[data-cell="quotedTotal"]');
+        if (totalInput) totalInput.value = i.quotedTotal;
+      }
+    }
+    refreshSelection();
+  } else {
+    mutate('items',i);
+  }
   if(i.status==='paid'||data.receipts?.some(r=>(r.referenceKind==='item'&&r.referenceId===i.id)||(r.source==='app'&&r.sourceKey==='app:'+i.id))) {
     syncItemReceipt(i);
   }
