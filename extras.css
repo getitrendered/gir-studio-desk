@@ -2042,3 +2042,289 @@ tr[data-row].selected td {
   font-size: 11.5px;
   color: #94a3b8;
 }
+
+/* ==========================================================================
+   Toolbar Layout & Button Styles (Prevent Overflow)
+   ========================================================================== */
+#app.sheet-mode .sheet-toolbar {
+  display: flex !important;
+  align-items: center !important;
+  justify-content: space-between !important;
+  gap: 10px !important;
+  padding: 6px 14px !important;
+  min-height: 44px !important;
+  height: auto !important;
+  flex-wrap: wrap !important;
+}
+
+#app.sheet-mode .sheet-toolbar .actions {
+  display: flex !important;
+  align-items: center !important;
+  gap: 7px !important;
+  flex-wrap: wrap !important;
+  min-width: 0 !important;
+  overflow: visible !important;
+}
+
+#app.sheet-mode .sheet-toolbar #selectedCount {
+  margin-left: auto !important;
+  flex-shrink: 0 !important;
+}
+
+.small-btn.purple {
+  background: #f5f3ff !important;
+  color: #6d28d9 !important;
+  border: 1px solid #ddd6fe !important;
+  font-weight: 700 !important;
+}
+.small-btn.purple:hover:not(:disabled) {
+  background: #ede9fe !important;
+  color: #5b21b6 !important;
+  border-color: #c4b5fd !important;
+}
+
+.small-btn.green {
+  background: #ecfdf5 !important;
+  color: #047857 !important;
+  border: 1px solid #a7f3d0 !important;
+  font-weight: 700 !important;
+}
+.small-btn.green:hover:not(:disabled) {
+  background: #d1fae5 !important;
+  color: #065f46 !important;
+  border-color: #6ee7b7 !important;
+}
+
+/* ==========================================================================
+   Cell Drag Copy & Fill Down Styles
+   ========================================================================== */
+td.cell-fill-drag {
+  background: #ecfdf5 !important;
+  outline: 2px dashed #059669 !important;
+  outline-offset: -2px !important;
+  position: relative;
+  z-index: 3;
+}
+
+td.cell-fill-drag input {
+  background: transparent !important;
+  color: #065f46 !important;
+  font-weight: 700 !important;
+}
+
+tr.row-fill-drag {
+  background: #f0fdf4 !important;
+  outline: 2px dashed #059669 !important;
+  outline-offset: -2px !important;
+}
+
+/* ==========================================================================
+   Smart Update Modal & Component Styles
+   ========================================================================== */
+.smart-update-wrap {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  width: 100%;
+}
+
+.smart-update-desc {
+  font-size: 13px;
+  color: #64748b;
+  margin: 0;
+  line-height: 1.5;
+}
+
+.smart-section {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 9px;
+  padding: 12px 14px;
+}
+
+.smart-section-label {
+  font-size: 11px;
+  font-weight: 800;
+  color: #334155;
+  text-transform: uppercase;
+  letter-spacing: 0.6px;
+}
+
+.smart-preset-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.smart-chip {
+  padding: 4px 10px;
+  font-size: 11px;
+  font-weight: 700;
+  border-radius: 6px;
+  border: 1px solid #cbd5e1;
+  background: #ffffff;
+  color: #475569;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.smart-chip:hover {
+  background: #f1f5f9;
+  border-color: #94a3b8;
+  color: #1e293b;
+}
+
+.smart-chip.active {
+  background: #6d28d9 !important;
+  border-color: #6d28d9 !important;
+  color: #ffffff !important;
+}
+
+.smart-input {
+  width: 100%;
+  padding: 8px 10px;
+  font-size: 13px;
+  font-weight: 600;
+  border: 1.5px solid #cbd5e1;
+  border-radius: 7px;
+  background: #fff;
+  color: #0f172a;
+  outline: none;
+  box-sizing: border-box;
+}
+
+.smart-input:focus {
+  border-color: #7c3aed;
+  box-shadow: 0 0 0 3px rgba(124, 58, 237, 0.15);
+}
+
+.smart-scope-options {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.smart-radio-label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12.5px;
+  color: #1e293b;
+  cursor: pointer;
+}
+
+.smart-range-inputs {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-left: 24px;
+  font-size: 12px;
+  color: #475569;
+}
+
+.smart-mini-input {
+  width: 70px;
+  padding: 4px 8px;
+  font-size: 12px;
+  font-weight: 700;
+  border: 1px solid #cbd5e1;
+  border-radius: 5px;
+  text-align: center;
+}
+
+.smart-update-fields {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.smart-field-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  justify-content: space-between;
+}
+
+.smart-check-label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: #1e293b;
+  cursor: pointer;
+  min-width: 150px;
+}
+
+.smart-val-input,
+.smart-val-select {
+  flex: 1;
+  max-width: 220px;
+  padding: 6px 10px;
+  font-size: 12.5px;
+  border: 1px solid #cbd5e1;
+  border-radius: 6px;
+  background: #fff;
+  outline: none;
+}
+
+.smart-val-input:focus,
+.smart-val-select:focus {
+  border-color: #7c3aed;
+}
+
+.smart-badge {
+  font-size: 11px;
+  font-weight: 700;
+  color: #6d28d9;
+  background: #ede9fe;
+  padding: 3px 9px;
+  border-radius: 6px;
+  border: 1px solid #ddd6fe;
+}
+
+.smart-preview-wrap {
+  max-height: 200px;
+  overflow-y: auto;
+  border: 1px solid #e2e8f0;
+  border-radius: 7px;
+  background: #ffffff;
+}
+
+.smart-preview-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 11.5px;
+}
+
+.smart-preview-table th {
+  position: sticky;
+  top: 0;
+  background: #f8fafc;
+  color: #64748b;
+  font-weight: 700;
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  padding: 6px 8px;
+  border-bottom: 1px solid #e2e8f0;
+  text-align: left;
+}
+
+.smart-preview-table td {
+  padding: 6px 8px;
+  border-bottom: 1px solid #f1f5f9;
+  color: #1e293b;
+  vertical-align: middle;
+}
+
+.smart-highlight-match {
+  background: #fef08a;
+  color: #854d0e;
+  font-weight: 800;
+  padding: 1px 3px;
+  border-radius: 3px;
+}

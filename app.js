@@ -10,7 +10,7 @@ const fmtDate = d => { if (!d) return '—'; const x = new Date(d + 'T00:00:00')
 const defaults = { clients:[], groups:[], projectGroups:[], items:[], invoices:[], receipts:[], members:[], chatMessages:[], pending:[], settings:{ seller:{ name:'GIR — Get It Rendered', address:'', email:'', phone:'', taxId:'', bankDetails:'', bankAccounts:[], activeBankAccountId:'', logoData:'' }, url:'https://isdxybpeagloikchhsbp.supabase.co', key:'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImlzZHh5YnBlYWdsb2lrY2hoc2JwIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTI1NzkzMjcsImV4cCI6MjEwODE1NTMyN30.ll1YG9uyrTqmLzE90miCk-O1Ab5VkBPfqrCPDDUc5u8', workspaceId:'17f39873-e10f-4bdf-93ee-1f92b3e25251', displayName:'Samuel', localPartner:'Mezrid', avatarData:'', partnerAvatarData:'', catType:'orange', zoom:100 } };
 const GIR_WORKSPACE_ID='17f39873-e10f-4bdf-93ee-1f92b3e25251';
 let data = structuredClone(defaults), tab = 'sheet', lastRenderedTab = null, lastRenderedClient = null, activeClient = null, selected = new Set(), selectionAnchor = null, selectionCell = null, collapsedGroups = new Set(), blankRows = 60, highlightUser = null, filter = 'all', clientApi = null, session = null, channel = null, syncing = false, toastTimer, syncTimer, lastSyncTime = Date.now(), importPreview = null, previewClientIndex = 0, migrating = false;
-let isRowDragSelecting = false, hasRowDragged = false, justDraggedSelection = false, dragStartRowId = null, dragStartWithCtrl = false, dragInitialSelected = null;
+let isRowDragSelecting = false, hasRowDragged = false, justDraggedSelection = false, dragStartRowId = null, dragTargetRowId = null, dragStartCellKey = null, dragStartShift = false, dragStartWithCtrl = false, dragInitialSelected = null;
 let pendingChatAttachment = null, chatDraftText = '', activeStickerTab = 'stickers', stickerSearchQuery = '', lastPartnerOnlineTime = 0, unreadChatCount = 0, chatSyncTimer = null;
 let authLoading=true,workspaceReady=false,workspaceResolving=false,accessMode='signin',accessError='',activeStatusMenu=null;
 let desktopUpdate = { status: 'unavailable', message: 'Checking update support…' };
@@ -543,7 +543,7 @@ function renderSheet() {
       ${value('remarks',i.remarks||'')}</tr>`;
   }
   if(filter==='all')rows+=Array.from({length:blankRows},(_,n)=>blankRowHtml(all.length+n)).join('');
-  return `<div class="sheet-shell"><div class="sheet-toolbar"><div class="actions"><button class="small-btn green" data-action="add-multiples" title="Add multiple rows from formatted WhatsApp/text">➕ Add Multiples</button><button class="small-btn blue" data-action="assign" ${selected.size?'':'disabled'}>● Start work</button><button class="small-btn" data-action="complete" ${selected.size?'':'disabled'}>✓ Mark sent</button><button class="small-btn" data-action="invoice" ${selected.size?'':'disabled'}>▣ Create invoice</button><button class="small-btn" data-action="share-chat" ${selected.size?'':'disabled'} title="Share selected row(s) in Team Chat">💬 Share in chat</button><button class="small-btn danger" data-action="delete" title="Delete selected row(s) (Del)" ${selected.size?'':'disabled'}>🗑 Delete row</button><button class="small-btn" data-action="undo" title="Undo (Ctrl+Z)" ${undoStack.length?'':'disabled'}>↶ Undo</button><button class="small-btn" data-action="redo" title="Redo (Ctrl+Y)" ${redoStack.length?'':'disabled'}>↷ Redo</button><button class="small-btn" data-action="group" ${selected.size>1?'':'disabled'}>Group deal</button><button class="small-btn" data-action="project-group" ${selected.size?'':'disabled'}>Group project</button><button class="small-btn" data-action="ungroup" ${hasGroupedSelected()?'':'disabled'} title="Ungroup selected row(s)">Ungroup</button><select id="bulkStatus" aria-label="Set selected rows status" ${selected.size?'':'disabled'}><option value="">Set status…</option>${['pending','working','changes','sent','paid','discarded'].map(s=>`<option value="${s}">${s[0].toUpperCase()+s.slice(1)}</option>`).join('')}<option value="paid-date">Paid on date…</option></select><select id="workFilter" aria-label="Filter work">${['all','pending','working','changes','sent','paid','discarded'].map(s=>`<option value="${s}" ${filter===s?'selected':''}>${s==='all'?'All work':s[0].toUpperCase()+s.slice(1)}</option>`).join('')}</select></div><span class="hint" id="selectedCount">${selectionLabelHtml()}</span></div>
+  return `<div class="sheet-shell"><div class="sheet-toolbar"><div class="actions"><button class="small-btn green" data-action="add-multiples" title="Add multiple rows from formatted WhatsApp/text">➕ Add Multiples</button><button class="small-btn purple" data-action="smart-update" title="Find words and bulk update rate or status across rows">⚡ Smart Update</button><button class="small-btn blue" data-action="assign" ${selected.size?'':'disabled'}>● Start work</button><button class="small-btn" data-action="complete" ${selected.size?'':'disabled'}>✓ Mark sent</button><button class="small-btn" data-action="invoice" ${selected.size?'':'disabled'}>▣ Create invoice</button><button class="small-btn" data-action="share-chat" ${selected.size?'':'disabled'} title="Share selected row(s) in Team Chat">💬 Share in chat</button><button class="small-btn danger" data-action="delete" title="Delete selected row(s) (Del)" ${selected.size?'':'disabled'}>🗑 Delete row</button><button class="small-btn" data-action="group" ${selected.size>1?'':'disabled'}>Group deal</button><button class="small-btn" data-action="project-group" ${selected.size?'':'disabled'}>Group project</button><button class="small-btn" data-action="ungroup" ${hasGroupedSelected()?'':'disabled'} title="Ungroup selected row(s)">Ungroup</button><select id="bulkStatus" aria-label="Set selected rows status" ${selected.size?'':'disabled'}><option value="">Set status…</option>${['pending','working','changes','sent','paid','discarded'].map(s=>`<option value="${s}">${s[0].toUpperCase()+s.slice(1)}</option>`).join('')}<option value="paid-date">Paid on date…</option></select><select id="workFilter" aria-label="Filter work">${['all','pending','working','changes','sent','paid','discarded'].map(s=>`<option value="${s}" ${filter===s?'selected':''}>${s==='all'?'All work':s[0].toUpperCase()+s.slice(1)}</option>`).join('')}</select></div><span class="hint" id="selectedCount">${selectionLabelHtml()}</span></div>
     <div class="sheet-viewport"><table class="sheet"><thead><tr><th class="row-selector"><input type="checkbox" id="selectAll" aria-label="Select visible rows"></th><th>SR</th><th>DATE</th><th>SERVICE PROVIDED</th><th>QTY</th><th>RATE</th><th>TOTAL</th><th>STATUS</th><th>ADVANCE</th><th>ASSIGNED</th><th>REMARKS</th></tr></thead><tbody>${rows}</tbody></table></div></div>`;
 }
 
@@ -1099,7 +1099,7 @@ function bindMain() {
   $('#companyLogoUpload')?.addEventListener('change',e=>{if(e.target.files?.[0])saveCompanyLogo(e.target.files[0]);});
   if (typeof window !== 'undefined' && !window._rowDragEndRegistered) {
     window._rowDragEndRegistered = true;
-    window.addEventListener('mouseup', () => handleRowDragEnd());
+    window.addEventListener('mouseup', e => handleRowDragEnd(e));
   }
 
   $$('[data-row]').forEach(row=>{
@@ -1113,12 +1113,12 @@ function bindMain() {
     };
     row.onmouseenter = e => {
       if (isRowDragSelecting) {
-        handleRowDragOver(row.dataset.row);
+        handleRowDragOver(row.dataset.row, e);
       }
     };
     row.onmousemove = e => {
       if (isRowDragSelecting && (e.buttons === 1 || e.which === 1)) {
-        handleRowDragOver(row.dataset.row);
+        handleRowDragOver(row.dataset.row, e);
       }
     };
     row.onclick = e => {
@@ -1148,6 +1148,7 @@ function bindMain() {
         `<button id="contextPaste" ${hasClipboard?'':'disabled'}><span class="context-icon">📋</span><span>Paste row</span><kbd>Ctrl+V</kbd></button>`+
         `<button id="contextDuplicate"><span class="context-icon">⧉</span><span>Duplicate row</span><kbd>Ctrl+D</kbd></button>`+
         `<button id="contextAddMulti"><span class="context-icon">➕</span><span>Add multiples…</span></button>`+
+        `<button id="contextSmartUpdate"><span class="context-icon">⚡</span><span>Smart Update…</span></button>`+
         `<div class="context-divider"></div>`+
         `<button id="contextDelete" class="context-danger"><span class="context-icon">🗑</span><span>${selected.size>1?`Delete ${selected.size} rows`:'Delete row'}</span><kbd>Del</kbd></button>`+
         `<div class="context-divider"></div>`+
@@ -1170,6 +1171,7 @@ function bindMain() {
       if($('#contextPaste'))$('#contextPaste').onclick=()=>{menu.remove();pasteCopiedRows(rowId);};
       $('#contextDuplicate').onclick=()=>{menu.remove();duplicateSelectedRow(rowId);};
       if($('#contextAddMulti'))$('#contextAddMulti').onclick=()=>{menu.remove();addMultiplesDialog();};
+      if($('#contextSmartUpdate'))$('#contextSmartUpdate').onclick=()=>{menu.remove();smartUpdateDialog();};
       $('#contextDelete').onclick=()=>{menu.remove();deleteSelectedRows([...selected]);};
       if($('#contextUndo'))$('#contextUndo').onclick=()=>{menu.remove();undo();};
       if($('#contextRedo'))$('#contextRedo').onclick=()=>{menu.remove();redo();};
@@ -1290,12 +1292,29 @@ function refreshSelection() {
   const ungroup=$('[data-action="ungroup"]');if(ungroup)ungroup.disabled=!hasGroupedSelected();
   updateUndoRedoUI();
 }
+function clearCellDragHighlights() {
+  $$('.cell-fill-drag').forEach(el => el.classList.remove('cell-fill-drag'));
+  $$('.row-fill-drag').forEach(el => el.classList.remove('row-fill-drag'));
+}
+
 function handleRowDragStart(rowId, e = {}) {
   isRowDragSelecting = true;
   hasRowDragged = false;
   dragStartRowId = rowId;
+  dragTargetRowId = rowId;
+  dragStartShift = !!e.shiftKey;
   dragStartWithCtrl = !!(e.ctrlKey || e.metaKey);
   dragInitialSelected = dragStartWithCtrl ? new Set(selected) : new Set();
+
+  const targetTd = e.target?.closest?.('td');
+  const field = targetTd?.querySelector?.('[data-cell]');
+  const isRowSelector = !!targetTd?.classList?.contains('row-selector');
+
+  if (isRowSelector || field?.dataset?.cell === 'serial') {
+    dragStartCellKey = null;
+  } else {
+    dragStartCellKey = field?.dataset?.cell || null;
+  }
 
   if (e.shiftKey && selectionAnchor) {
     selectSheetRow(rowId, true, false);
@@ -1319,12 +1338,14 @@ function handleRowDragStart(rowId, e = {}) {
   }
 }
 
-function handleRowDragOver(targetRowId) {
+function handleRowDragOver(targetRowId, e = {}) {
   if (!isRowDragSelecting || !dragStartRowId || !targetRowId) return;
 
   if (targetRowId !== dragStartRowId) {
     hasRowDragged = true;
   }
+  dragTargetRowId = targetRowId;
+  if (e.shiftKey) dragStartShift = true;
 
   const allRowIds = $$('[data-row]').map(r => r.dataset.row);
   const startIdx = allRowIds.indexOf(dragStartRowId);
@@ -1341,20 +1362,117 @@ function handleRowDragOver(targetRowId) {
       selected = new Set(rangeIds);
     }
     refreshSelection();
+
+    clearCellDragHighlights();
+    if (hasRowDragged) {
+      if (dragStartShift || e.shiftKey) {
+        rangeIds.forEach(rId => {
+          const rowEl = document.querySelector(`[data-row="${rId}"]`);
+          if (rowEl) rowEl.classList.add('row-fill-drag');
+        });
+      } else if (dragStartCellKey) {
+        rangeIds.forEach(rId => {
+          const cellInput = document.querySelector(`[data-row="${rId}"] [data-cell="${dragStartCellKey}"]`);
+          if (cellInput) {
+            cellInput.closest('td')?.classList.add('cell-fill-drag');
+          }
+        });
+      }
+    }
   }
 }
 
-function handleRowDragEnd() {
+function handleRowDragEnd(e = {}) {
   if (isRowDragSelecting) {
     isRowDragSelecting = false;
     if (typeof document !== 'undefined' && document.body?.classList) {
       document.body.classList.remove('row-drag-selecting');
     }
-    if (hasRowDragged) {
+    clearCellDragHighlights();
+
+    const isShift = dragStartShift || (e && e.shiftKey);
+
+    if (hasRowDragged && dragStartRowId && dragTargetRowId && dragStartRowId !== dragTargetRowId) {
       justDraggedSelection = true;
       setTimeout(() => { justDraggedSelection = false; }, 150);
+
+      const allRowIds = $$('[data-row]').map(r => r.dataset.row);
+      const startIdx = allRowIds.indexOf(dragStartRowId);
+      const currentIdx = allRowIds.indexOf(dragTargetRowId);
+
+      if (startIdx !== -1 && currentIdx !== -1) {
+        const minIdx = Math.min(startIdx, currentIdx);
+        const maxIdx = Math.max(startIdx, currentIdx);
+        const rangeIds = allRowIds.slice(minIdx, maxIdx + 1);
+        const targetIds = rangeIds.filter(id => id !== dragStartRowId);
+
+        const sourceItem = (data.items || []).find(i => i.id === dragStartRowId);
+
+        if (sourceItem && targetIds.length > 0) {
+          if (isShift) {
+            pushUndo(`Copy row to ${targetIds.length} rows`);
+            targetIds.forEach(tId => {
+              const targetItem = (data.items || []).find(i => i.id === tId);
+              if (targetItem) {
+                targetItem.service = sourceItem.service;
+                targetItem.quantity = sourceItem.quantity;
+                targetItem.rate = sourceItem.rate;
+                targetItem.quotedTotal = sourceItem.quotedTotal;
+                targetItem.manualTotal = true;
+                targetItem.status = sourceItem.status;
+                targetItem.remarks = sourceItem.remarks;
+                targetItem.workDate = sourceItem.workDate;
+                targetItem.advanceAmount = sourceItem.advanceAmount;
+                targetItem.updatedAt = new Date().toISOString();
+                enqueue('items', targetItem.id);
+              }
+            });
+            save();
+            scheduleSync();
+            selected = new Set(rangeIds);
+            selectionAnchor = dragStartRowId;
+            render();
+            toast(`Copied entire row to ${targetIds.length} row${targetIds.length > 1 ? 's' : ''}`);
+          } else if (dragStartCellKey) {
+            const colName = dragStartCellKey[0].toUpperCase() + dragStartCellKey.slice(1);
+            pushUndo(`Fill ${colName} down`);
+            targetIds.forEach(tId => {
+              const targetItem = (data.items || []).find(i => i.id === tId);
+              if (targetItem) {
+                if (dragStartCellKey === 'rate') {
+                  targetItem.rate = num(sourceItem.rate);
+                  targetItem.quotedTotal = num(targetItem.quantity) * num(targetItem.rate);
+                  targetItem.manualTotal = true;
+                } else if (dragStartCellKey === 'quantity') {
+                  targetItem.quantity = num(sourceItem.quantity) || 1;
+                  targetItem.quotedTotal = num(targetItem.quantity) * num(targetItem.rate);
+                  targetItem.manualTotal = true;
+                } else if (dragStartCellKey === 'quotedTotal') {
+                  targetItem.quotedTotal = num(sourceItem.quotedTotal);
+                  targetItem.manualTotal = true;
+                } else {
+                  targetItem[dragStartCellKey] = sourceItem[dragStartCellKey] ?? '';
+                }
+                targetItem.updatedAt = new Date().toISOString();
+                enqueue('items', targetItem.id);
+              }
+            });
+            save();
+            scheduleSync();
+            selected = new Set(rangeIds);
+            selectionAnchor = dragStartRowId;
+            render();
+            const displayVal = dragStartCellKey === 'rate' ? money(sourceItem.rate) : (sourceItem[dragStartCellKey] ?? '');
+            toast(`Copied ${colName} (${displayVal}) to ${targetIds.length} cell${targetIds.length > 1 ? 's' : ''}`);
+          }
+        }
+      }
     }
+
     dragStartRowId = null;
+    dragTargetRowId = null;
+    dragStartCellKey = null;
+    dragStartShift = false;
     dragInitialSelected = null;
   }
 }
@@ -2208,6 +2326,377 @@ Passage Decor (night render)"></textarea>
   }
 
   setTimeout(() => inputEl.focus(), 80);
+}
+
+const SMART_UPDATE_PRESETS = ['FLEX', 'FOAM BOARD', 'WELCOME BOARD', 'BOARD', 'SIGNAGE'];
+
+function smartUpdateDialog() {
+  const client = currentClient();
+  if (!client) {
+    toast('Select a client first');
+    return;
+  }
+
+  const items = clientItems(activeClient);
+  if (!items.length) {
+    toast('No rows in this client worksheet');
+    return;
+  }
+
+  const serialNums = items.map(i => parseInt(cleanSerial(i.serial), 10)).filter(n => !isNaN(n));
+  const minSerial = serialNums.length ? Math.min(...serialNums) : 1;
+  const maxSerial = serialNums.length ? Math.max(...serialNums) : items.length;
+
+  let defaultScope = 'all';
+  let defaultFromSerial = minSerial;
+  let defaultToSerial = maxSerial;
+
+  if (selected.size > 0) {
+    const selItems = items.filter(i => selected.has(i.id));
+    const selSerials = selItems.map(i => parseInt(cleanSerial(i.serial), 10)).filter(n => !isNaN(n));
+    if (selSerials.length) {
+      defaultFromSerial = Math.min(...selSerials);
+      defaultToSerial = Math.max(...selSerials);
+      defaultScope = 'range';
+    }
+  }
+
+  let currentKeyword = 'FLEX';
+  let currentScope = defaultScope;
+  let fromSerialVal = defaultFromSerial;
+  let toSerialVal = defaultToSerial;
+  let updateRateEnabled = true;
+  let newRateVal = '';
+  let updateStatusEnabled = false;
+  let newStatusVal = 'pending';
+  let updateQtyEnabled = false;
+  let newQtyVal = '';
+
+  const bodyHtml = `
+    <div class="smart-update-wrap">
+      <p class="smart-update-desc">
+        Search for words across rows for <strong>${esc(client.name)}</strong> and bulk-update their rate, status, or quantity.
+      </p>
+
+      <!-- 1. Word to find -->
+      <div class="smart-section">
+        <label class="smart-section-label">1. Word to find (case-insensitive)</label>
+        <div class="smart-preset-chips" id="smartPresetChips">
+          ${SMART_UPDATE_PRESETS.map(preset => `
+            <button type="button" class="smart-chip ${preset === currentKeyword ? 'active' : ''}" data-preset="${esc(preset)}">
+              ${esc(preset)}
+            </button>
+          `).join('')}
+        </div>
+        <div style="margin-top:8px;">
+          <input id="smartKeywordInput" class="smart-input" value="${esc(currentKeyword)}" placeholder="Type word (e.g. FLEX, BOARD, SIGNAGE)...">
+        </div>
+      </div>
+
+      <!-- 2. Target row scope -->
+      <div class="smart-section">
+        <label class="smart-section-label">2. Target row range</label>
+        <div class="smart-scope-options">
+          <label class="smart-radio-label">
+            <input type="radio" name="smartScope" value="all" ${currentScope === 'all' ? 'checked' : ''}>
+            <span>All rows in sheet (#${minSerial} to #${maxSerial})</span>
+          </label>
+          <label class="smart-radio-label">
+            <input type="radio" name="smartScope" value="range" ${currentScope === 'range' ? 'checked' : ''}>
+            <span>Specific Serial Range:</span>
+          </label>
+          <div class="smart-range-inputs" id="smartRangeInputsArea" style="${currentScope === 'range' ? '' : 'opacity:0.5; pointer-events:none;'}">
+            <label>From #</label>
+            <input type="number" id="smartFromSerial" class="smart-mini-input" value="${fromSerialVal}" min="1">
+            <label>to #</label>
+            <input type="number" id="smartToSerial" class="smart-mini-input" value="${toSerialVal}" min="1">
+          </div>
+          ${selected.size > 0 ? `
+            <label class="smart-radio-label" style="margin-top:2px;">
+              <input type="radio" name="smartScope" value="selected" ${currentScope === 'selected' ? 'checked' : ''}>
+              <span>Selected rows only (${selected.size} selected)</span>
+            </label>
+          ` : ''}
+        </div>
+      </div>
+
+      <!-- 3. What to update -->
+      <div class="smart-section">
+        <label class="smart-section-label">3. What to update</label>
+        <div class="smart-update-fields">
+          <div class="smart-field-row">
+            <label class="smart-check-label">
+              <input type="checkbox" id="smartCheckRate" ${updateRateEnabled ? 'checked' : ''}>
+              <span>Update Rate (₹):</span>
+            </label>
+            <input type="number" id="smartRateVal" class="smart-val-input" placeholder="e.g. 400" value="${newRateVal}" min="0" step="0.01" ${updateRateEnabled ? '' : 'disabled'}>
+          </div>
+
+          <div class="smart-field-row">
+            <label class="smart-check-label">
+              <input type="checkbox" id="smartCheckStatus" ${updateStatusEnabled ? 'checked' : ''}>
+              <span>Update Status:</span>
+            </label>
+            <select id="smartStatusVal" class="smart-val-select" ${updateStatusEnabled ? '' : 'disabled'}>
+              <option value="pending" ${newStatusVal==='pending'?'selected':''}>Pending</option>
+              <option value="working" ${newStatusVal==='working'?'selected':''}>Working</option>
+              <option value="changes" ${newStatusVal==='changes'?'selected':''}>Changes</option>
+              <option value="sent" ${newStatusVal==='sent'?'selected':''}>Sent</option>
+              <option value="paid" ${newStatusVal==='paid'?'selected':''}>Paid</option>
+              <option value="discarded" ${newStatusVal==='discarded'?'selected':''}>Discarded</option>
+            </select>
+          </div>
+
+          <div class="smart-field-row">
+            <label class="smart-check-label">
+              <input type="checkbox" id="smartCheckQty" ${updateQtyEnabled ? 'checked' : ''}>
+              <span>Update Quantity:</span>
+            </label>
+            <input type="number" id="smartQtyVal" class="smart-val-input" placeholder="New quantity" value="${newQtyVal}" min="1" ${updateQtyEnabled ? '' : 'disabled'}>
+          </div>
+        </div>
+      </div>
+
+      <!-- 4. Matching preview -->
+      <div class="smart-section">
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
+          <label class="smart-section-label" style="margin:0;">4. Matching rows preview</label>
+          <span id="smartMatchBadge" class="smart-badge">0 matching rows</span>
+        </div>
+        <div class="smart-preview-wrap" id="smartPreviewList">
+        </div>
+      </div>
+    </div>
+  `;
+
+  const footerHtml = `
+    <div class="modal-actions" style="display:flex; justify-content:space-between; align-items:center;">
+      <button class="small-btn" id="cancelSmartModal">Cancel</button>
+      <button class="small-btn blue" id="applySmartBtn" disabled>Apply Smart Update (0 rows)</button>
+    </div>
+  `;
+
+  modal('⚡ Smart Update', bodyHtml, footerHtml, true);
+
+  const keywordInput = $('#smartKeywordInput');
+  const scopeRadios = $$('input[name="smartScope"]');
+  const rangeInputsArea = $('#smartRangeInputsArea');
+  const fromSerialInput = $('#smartFromSerial');
+  const toSerialInput = $('#smartToSerial');
+  const checkRate = $('#smartCheckRate');
+  const rateValInput = $('#smartRateVal');
+  const checkStatus = $('#smartCheckStatus');
+  const statusValInput = $('#smartStatusVal');
+  const checkQty = $('#smartCheckQty');
+  const qtyValInput = $('#smartQtyVal');
+  const matchBadge = $('#smartMatchBadge');
+  const previewList = $('#smartPreviewList');
+  const applyBtn = $('#applySmartBtn');
+  const cancelBtn = $('#cancelSmartModal');
+
+  let currentMatchedItems = [];
+
+  function updateSmartPreview() {
+    currentKeyword = keywordInput.value.trim();
+    const selScope = $('input[name="smartScope"]:checked')?.value || 'all';
+    currentScope = selScope;
+
+    if (rangeInputsArea) {
+      if (currentScope === 'range') {
+        rangeInputsArea.style.opacity = '1';
+        rangeInputsArea.style.pointerEvents = 'auto';
+      } else {
+        rangeInputsArea.style.opacity = '0.5';
+        rangeInputsArea.style.pointerEvents = 'none';
+      }
+    }
+
+    fromSerialVal = parseInt(fromSerialInput?.value, 10);
+    toSerialVal = parseInt(toSerialInput?.value, 10);
+
+    updateRateEnabled = checkRate?.checked;
+    rateValInput.disabled = !updateRateEnabled;
+    newRateVal = rateValInput.value;
+
+    updateStatusEnabled = checkStatus?.checked;
+    statusValInput.disabled = !updateStatusEnabled;
+    newStatusVal = statusValInput.value;
+
+    updateQtyEnabled = checkQty?.checked;
+    qtyValInput.disabled = !updateQtyEnabled;
+    newQtyVal = qtyValInput.value;
+
+    let candidateItems = items;
+    if (currentScope === 'selected' && selected.size > 0) {
+      candidateItems = items.filter(i => selected.has(i.id));
+    } else if (currentScope === 'range') {
+      candidateItems = items.filter(i => {
+        const s = parseInt(cleanSerial(i.serial), 10);
+        if (isNaN(s)) return false;
+        if (!isNaN(fromSerialVal) && s < fromSerialVal) return false;
+        if (!isNaN(toSerialVal) && s > toSerialVal) return false;
+        return true;
+      });
+    }
+
+    const kw = currentKeyword.toLowerCase();
+    if (!kw) {
+      currentMatchedItems = [];
+    } else {
+      currentMatchedItems = candidateItems.filter(i => {
+        const svc = String(i.service || '').toLowerCase();
+        const rem = String(i.remarks || '').toLowerCase();
+        return svc.includes(kw) || rem.includes(kw);
+      });
+    }
+
+    $$('#smartPresetChips .smart-chip').forEach(chip => {
+      chip.classList.toggle('active', chip.dataset.preset.toLowerCase() === kw);
+    });
+
+    const count = currentMatchedItems.length;
+    let totalPreviewAmount = 0;
+    currentMatchedItems.forEach(i => {
+      const effRate = (updateRateEnabled && newRateVal !== '') ? num(newRateVal) : num(i.rate);
+      const effQty = (updateQtyEnabled && newQtyVal !== '') ? num(newQtyVal) : num(i.quantity);
+      totalPreviewAmount += effRate * effQty;
+    });
+
+    matchBadge.textContent = `${count} matching row${count === 1 ? '' : 's'}`;
+
+    if (!count) {
+      previewList.innerHTML = `
+        <div style="padding:24px 16px; text-align:center; color:#94a3b8; font-size:12px;">
+          ${!kw ? 'Type or pick a word above to preview matching rows.' : `No rows matching "${esc(currentKeyword)}" found in the selected range.`}
+        </div>
+      `;
+      applyBtn.disabled = true;
+      applyBtn.textContent = 'Apply Smart Update (0 rows)';
+    } else {
+      const hasAction = (updateRateEnabled && newRateVal !== '') || updateStatusEnabled || (updateQtyEnabled && newQtyVal !== '');
+      applyBtn.disabled = !hasAction;
+      applyBtn.textContent = hasAction 
+        ? `Apply Smart Update (${count} row${count === 1 ? '' : 's'} · ${money(totalPreviewAmount)})`
+        : `Choose what to update above (${count} row${count === 1 ? '' : 's'})`;
+
+      let tableHtml = `
+        <table class="smart-preview-table">
+          <thead>
+            <tr>
+              <th style="width:36px; text-align:center;">SR</th>
+              <th>SERVICE</th>
+              <th style="text-align:right;">RATE</th>
+              <th style="text-align:center;">STATUS</th>
+              <th style="text-align:right;">TOTAL</th>
+            </tr>
+          </thead>
+          <tbody>
+      `;
+
+      for (const i of currentMatchedItems) {
+        const effRate = (updateRateEnabled && newRateVal !== '') ? num(newRateVal) : num(i.rate);
+        const effQty = (updateQtyEnabled && newQtyVal !== '') ? num(newQtyVal) : num(i.quantity);
+        const effTotal = effRate * effQty;
+
+        const escapedService = esc(i.service);
+        const highlightRegex = new RegExp(`(${kw.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')})`, 'gi');
+        const highlightedService = escapedService.replace(highlightRegex, '<span class="smart-highlight-match">$1</span>');
+
+        tableHtml += `
+          <tr>
+            <td style="font-weight:700; color:#3b82f6; text-align:center;">${esc(cleanSerial(i.serial))}</td>
+            <td>${highlightedService}</td>
+            <td style="text-align:right; font-variant-numeric:tabular-nums;">
+              ${(updateRateEnabled && newRateVal !== '') 
+                ? `<span style="color:#64748b; text-decoration:line-through; font-size:10px;">${money(i.rate)}</span> ➔ <strong style="color:#047857">${money(effRate)}</strong>`
+                : money(i.rate)}
+            </td>
+            <td style="text-align:center;">
+              ${updateStatusEnabled 
+                ? `<span class="pill ${i.status}" style="font-size:10px;">${i.status}</span> ➔ <span class="pill ${newStatusVal}" style="font-size:10px;">${newStatusVal}</span>`
+                : `<span class="pill ${i.status}" style="font-size:10px;">${i.status}</span>`}
+            </td>
+            <td style="text-align:right; font-weight:700; color:#047857; font-variant-numeric:tabular-nums;">
+              ${money(effTotal)}
+            </td>
+          </tr>
+        `;
+      }
+
+      tableHtml += `</tbody></table>`;
+      previewList.innerHTML = tableHtml;
+    }
+  }
+
+  $$('#smartPresetChips .smart-chip').forEach(chip => {
+    chip.onclick = () => {
+      keywordInput.value = chip.dataset.preset;
+      updateSmartPreview();
+      keywordInput.focus();
+    };
+  });
+
+  keywordInput.addEventListener('input', updateSmartPreview);
+  scopeRadios.forEach(r => r.addEventListener('change', updateSmartPreview));
+  fromSerialInput?.addEventListener('input', updateSmartPreview);
+  toSerialInput?.addEventListener('input', updateSmartPreview);
+  checkRate.addEventListener('change', updateSmartPreview);
+  rateValInput.addEventListener('input', updateSmartPreview);
+  checkStatus.addEventListener('change', updateSmartPreview);
+  statusValInput.addEventListener('change', updateSmartPreview);
+  checkQty.addEventListener('change', updateSmartPreview);
+  qtyValInput.addEventListener('input', updateSmartPreview);
+
+  if (cancelBtn) cancelBtn.onclick = closeModal;
+
+  if (applyBtn) {
+    applyBtn.onclick = () => {
+      if (!currentMatchedItems.length) return;
+      const hasAction = (updateRateEnabled && newRateVal !== '') || updateStatusEnabled || (updateQtyEnabled && newQtyVal !== '');
+      if (!hasAction) return;
+
+      pushUndo(`Smart update "${currentKeyword}" (${currentMatchedItems.length} rows)`);
+
+      currentMatchedItems.forEach(i => {
+        if (updateRateEnabled && newRateVal !== '') {
+          i.rate = num(newRateVal);
+          i.quotedTotal = num(i.quantity) * num(i.rate);
+          i.manualTotal = true;
+        }
+        if (updateStatusEnabled) {
+          i.status = newStatusVal;
+        }
+        if (updateQtyEnabled && newQtyVal !== '') {
+          i.quantity = num(newQtyVal) || 1;
+          i.quotedTotal = num(i.quantity) * num(i.rate);
+          i.manualTotal = true;
+        }
+        i.updatedAt = new Date().toISOString();
+        enqueue('items', i.id);
+      });
+
+      save();
+      scheduleSync();
+      closeModal();
+
+      selected = new Set(currentMatchedItems.map(i => i.id));
+      if (currentMatchedItems.length) selectionAnchor = currentMatchedItems[0].id;
+
+      render();
+
+      setTimeout(() => {
+        if (currentMatchedItems.length) {
+          const firstRow = document.querySelector(`[data-row="${currentMatchedItems[0].id}"]`);
+          firstRow?.scrollIntoView({ block: 'center', behavior: 'smooth' });
+        }
+      }, 100);
+
+      toast(`Smart Update applied to ${currentMatchedItems.length} row${currentMatchedItems.length > 1 ? 's' : ''}`);
+    };
+  }
+
+  updateSmartPreview();
+  setTimeout(() => rateValInput.focus(), 80);
 }
 
 
@@ -4132,6 +4621,7 @@ function actions(action) {
   if(action==='delete')return deleteSelectedRows([...selected]);
   if(action==='add-row'){const i=newItem(activeClient,clientItems().length);mutate('items',i);setTimeout(()=>document.querySelector(`[data-id="${i.id}"][data-cell="service"]`)?.focus(),80);return;}
   if(action==='add-multiples')return addMultiplesDialog();
+  if(action==='smart-update')return smartUpdateDialog();
   if(action==='assign')return assign([...selected]); if(action==='complete')return markSent([...selected]); if(action==='invoice')return invoiceDialog(); if(action==='group')return groupDialog();
   if(action==='project-group')return projectGroupDialog();
   if(action==='ungroup')return ungroupSelectedRows();
