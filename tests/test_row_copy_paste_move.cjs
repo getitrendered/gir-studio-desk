@@ -260,7 +260,7 @@ assert.strictEqual(context.selectedSize, 3, 'Drag selection across 3 rows should
 assert.ok(context.has0 && context.has1 && context.has2, 'Rows 0, 1, and 2 should all be selected');
 assert.ok(!context.has3, 'Row 3 should not be selected');
 assert.ok(context.labelHtml.includes('sel-badge-active'), 'Label HTML should contain sel-badge-active');
-assert.ok(context.labelHtml.includes('3 rows selected'), 'Label HTML should display "3 rows selected"');
+assert.ok(!context.labelHtml.includes('rows selected'), 'Label HTML should NOT display "rows selected" to prevent cropping');
 assert.ok(context.labelHtml.includes('sel-total-amount'), 'Label HTML should contain sel-total-amount');
 assert.ok(context.lastCopiedText.split('\n').filter(Boolean).length >= 3, 'Copied clipboard text should contain 3 rows');
 console.log('✓ Test 7: Excel-style row drag selection, prominent total badge, and copy-paste verified');

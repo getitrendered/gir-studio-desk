@@ -136,13 +136,11 @@ function sortedClients() {
 }
 function selectionLabel(){const total=data.items.filter(i=>selected.has(i.id)).reduce((sum,i)=>sum+num(i.quotedTotal),0);return selected.size?`${selected.size} selected · Total ${money(total)}`:'0 selected';}
 function selectionLabelHtml() {
-  if (!selected.size) return '<span class="sel-count-zero">0 selected</span>';
+  if (!selected.size) return '';
   const selectedItems = (data.items || []).filter(i => selected.has(i.id));
   const total = selectedItems.reduce((sum, i) => sum + num(i.quotedTotal), 0);
-  const count = selected.size;
   return `
-    <span class="sel-badge-active">
-      <span class="sel-count-pill">${count} row${count === 1 ? '' : 's'} selected</span>
+    <span class="sel-badge-active" title="Total amount of selected rows">
       <span class="sel-total-wrap">
         <span class="sel-total-label">TOTAL:</span>
         <strong class="sel-total-amount">${money(total)}</strong>
@@ -364,11 +362,132 @@ function renderTeam() {
 function renderDashboard() {
   const c=counts(), f=financials(), completion=c.total?Math.round(c.done/c.total*100):0;
   const priority=data.clients.map(cl=>({cl,items:clientItems(cl.id).filter(i=>!['sent','paid','discarded'].includes(i.status))})).filter(x=>x.items.length).sort((a,b)=>b.items.length-a.items.length).slice(0,6);
-  const byClient=data.clients.map(cl=>{ const its=clientItems(cl.id).filter(i=>i.status!=='discarded');return {cl,total:its.length,done:its.filter(i=>['sent','paid'].includes(i.status)).length,pending:unfinishedCount(cl.id)};}).filter(x=>x.pending>0).sort((a,b)=>a.pending-b.pending || b.done/b.total-a.done/a.total || a.cl.name.localeCompare(b.cl.name)).slice(0,5);
+
+  const clientDue = (cid) => {
+    return (f.outstandingItems || []).filter(o => o.clientId === cid).reduce((sum, o) => sum + num(o.balance), 0);
+  };
+
+  const closestClients = data.clients.map(cl => {
+    const its = clientItems(cl.id).filter(i => i.status !== 'discarded');
+    const done = its.filter(i => ['sent', 'paid'].includes(i.status)).length;
+    const pending = unfinishedCount(cl.id);
+    const due = clientDue(cl.id);
+    return { cl, total: its.length, done, pending, due };
+  }).filter(x => x.total > 0 && x.pending > 0).sort((a,b) => a.pending - b.pending || (b.done/b.total - a.done/a.total) || a.cl.name.localeCompare(b.cl.name)).slice(0, 6);
+
+  const allGroups = [
+    ...(data.projectGroups || []).map(g => ({ ...g, isProject: true, kind: 'project' })),
+    ...(data.groups || []).map(g => ({ ...g, isProject: false, kind: 'deal' }))
+  ];
+
+  const sentGroups = [];
+  const nearlyDoneGroups = [];
+
+  for (const g of allGroups) {
+    const cl = data.clients.find(c => c.id === g.clientId);
+    if (!cl) continue;
+    const items = (data.items || []).filter(i => (g.isProject ? i.projectGroupId : i.groupId) === g.id && i.status !== 'discarded');
+    if (!items.length) continue;
+
+    const gItemIds = new Set(items.map(i => i.id));
+    const groupDue = (f.outstandingItems || []).filter(o => (o.itemIds || []).some(id => gItemIds.has(id))).reduce((sum, o) => sum + num(o.balance), 0);
+
+    const sentCount = items.filter(i => i.status === 'sent').length;
+    const paidCount = items.filter(i => i.status === 'paid').length;
+    const pendingCount = items.filter(i => !['sent', 'paid'].includes(i.status)).length;
+
+    if (pendingCount === 0 && sentCount > 0 && groupDue > 0) {
+      sentGroups.push({
+        group: g,
+        client: cl,
+        total: items.length,
+        sentCount,
+        due: groupDue
+      });
+    } else if (pendingCount > 0 && pendingCount <= 2 && items.length >= 2 && groupDue > 0) {
+      nearlyDoneGroups.push({
+        group: g,
+        client: cl,
+        total: items.length,
+        doneCount: sentCount + paidCount,
+        pendingCount,
+        due: groupDue
+      });
+    }
+  }
+
+  sentGroups.sort((a,b) => b.due - a.due);
+  nearlyDoneGroups.sort((a,b) => a.pendingCount - b.pendingCount || b.due - a.due);
+
+  const totalClosestDue = closestClients.reduce((sum, x) => sum + x.due, 0);
+  const totalSentGroupsDue = sentGroups.reduce((sum, x) => sum + x.due, 0);
+
   return `<div class="section-top"><div><h2>Your studio at a glance</h2><p>Live progress across ${data.clients.length} clients.</p></div></div>
     <div class="cards"><div class="card blue"><div class="card-label">Completed work</div><div class="card-value">${completion}%</div><div class="card-foot">${c.done} of ${c.total} tasks sent or paid</div></div><div class="card"><div class="card-label">In progress</div><div class="card-value">${c.working}</div><div class="card-foot">${c.pending} waiting to start</div></div><div class="card amber"><div class="card-label">Work sent expected</div><div class="card-value">${money(f.awaiting)}</div><div class="card-foot">Sent or invoiced balances due</div></div><div class="card green"><div class="card-label">Revenue received</div><div class="card-value">${money(f.revenue)}</div><div class="card-foot">Paid work and open-work advances</div></div></div>
+
+    <div class="dashboard-insights-container">
+      <div class="panel highlight-panel">
+        <div class="panel-header-with-badge">
+          <div class="panel-title-wrap">
+            <span class="panel-icon">🎯</span>
+            <div>
+              <h3>Clients Closest to Completion</h3>
+              <p class="panel-sub">Finish the last few rows to collect payment immediately</p>
+            </div>
+          </div>
+          ${totalClosestDue > 0 ? `<span class="badge-pipeline">💰 Total: ${money(totalClosestDue)}</span>` : ''}
+        </div>
+        <div class="insights-list">
+          ${closestClients.length ? closestClients.map(x => `
+            <div class="dashboard-insight-card closest-card">
+              <div class="insight-statement-wrap">
+                <p class="insight-statement-text">${
+                  x.pending === 1
+                    ? `<strong>${esc(x.cl.name)}:</strong> Only <strong>1 work</strong> is left (${x.done}/${x.total} complete) — total amount to receive is <span class="amount-highlight">${money(x.due)}</span>.`
+                    : `<strong>${esc(x.cl.name)}:</strong> Only <strong>${x.pending} works</strong> left (${x.done}/${x.total} complete) — total amount to receive is <span class="amount-highlight">${money(x.due)}</span>.`
+                }</p>
+                <div class="insight-progress-mini"><span style="width:${Math.round(x.done/x.total*100)}%"></span></div>
+              </div>
+              <button type="button" class="small-btn blue" data-client-open="${x.cl.id}">Open sheet →</button>
+            </div>
+          `).join('') : '<p class="muted" style="padding:10px 0">All clients are 100% finished or no pending work!</p>'}
+        </div>
+      </div>
+
+      <div class="panel highlight-panel-amber">
+        <div class="panel-header-with-badge">
+          <div class="panel-title-wrap">
+            <span class="panel-icon">📬</span>
+            <div>
+              <h3>All-Sent Events & Quick Cash</h3>
+              <p class="panel-sub">Work sent, waiting for confirmation or changes before payment</p>
+            </div>
+          </div>
+          ${totalSentGroupsDue > 0 ? `<span class="badge-pipeline-amber">⏳ Total Awaiting: ${money(totalSentGroupsDue)}</span>` : ''}
+        </div>
+        <div class="insights-list">
+          ${sentGroups.length ? sentGroups.map(x => `
+            <div class="dashboard-insight-card sent-card">
+              <div class="insight-statement-wrap">
+                <p class="insight-statement-text"><strong>${esc(x.group.label)}</strong> (${esc(x.client.name)}): All ${x.total} works sent! Waiting for confirmation or changes — <span class="amount-highlight">${money(x.due)}</span> to receive.</p>
+              </div>
+              <button type="button" class="small-btn" data-client-open="${x.client.id}">View in sheet →</button>
+            </div>
+          `).join('') : (nearlyDoneGroups.length ? nearlyDoneGroups.map(x => `
+            <div class="dashboard-insight-card amber-card">
+              <div class="insight-statement-wrap">
+                <p class="insight-statement-text"><strong>${esc(x.group.label)}</strong> (${esc(x.client.name)}): Only <strong>${x.pendingCount} work${x.pendingCount === 1 ? '' : 's'}</strong> left — <span class="amount-highlight">${money(x.due)}</span> to receive!</p>
+                <div class="insight-progress-mini"><span style="width:${Math.round(x.doneCount/x.total*100)}%"></span></div>
+              </div>
+              <button type="button" class="small-btn blue" data-client-open="${x.client.id}">Finish work →</button>
+            </div>
+          `).join('') : '<p class="muted" style="padding:10px 0">No sent groups currently awaiting confirmation.</p>')}
+        </div>
+      </div>
+    </div>
+
     <div class="grid-2"><div class="panel"><h3>Clients with most pending work</h3>${priority.length?priority.map(x=>`<div class="list-row"><div><strong>${esc(x.cl.name)}</strong><small>${x.items.length} unfinished rows</small></div><button class="small-btn" data-client-open="${x.cl.id}">Open sheet</button></div>`).join(''):'<p class="muted">No pending work right now.</p>'}</div>
-    <div class="panel"><h3>Clients closest to completion</h3>${byClient.length?byClient.map(x=>`<div class="metric-row"><div style="width:100%"><div style="display:flex;justify-content:space-between;margin-bottom:8px"><strong>${esc(x.cl.name)}</strong><span class="muted">${x.pending} left · ${x.done}/${x.total}</span></div><div class="bar"><span style="width:${x.done/x.total*100}%"></span></div></div></div>`).join(''):'<p class="muted">No unfinished client work right now.</p>'}</div></div>`;
+    <div class="panel"><h3>Work overview by client</h3>${closestClients.length?closestClients.map(x=>`<div class="metric-row"><div style="width:100%"><div style="display:flex;justify-content:space-between;margin-bottom:8px"><strong>${esc(x.cl.name)}</strong><span class="muted">${x.pending} left · ${x.done}/${x.total}</span></div><div class="bar"><span style="width:${Math.round(x.done/x.total*100)}%"></span></div></div></div>`).join(''):'<p class="muted">No unfinished client work right now.</p>'}</div></div>`;
 }
 function groupTotalValue(kind, group, items) {
   const active = (items || []).filter(i => i.status !== 'discarded');
@@ -423,7 +542,7 @@ function groupHeader(kind,group,items) {
     }
   }
   const status=groupStatus(items);
-  return `<tr class="sheet-group-header ${kind}"><td colspan="11"><div class="group-heading"><button data-group-collapse="${kind}:${group.id}" aria-expanded="${!folded}"><svg class="group-chevron ${folded?'collapsed':''}" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="m3.5 5.75 4.5 4.5 4.5-4.5" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg><strong>${esc(group.label)}</strong><span>${done}/${active.length} complete${detail}</span></button><span class="group-status ${status.toLowerCase().replaceAll(' ','-')}">${status}</span><button class="group-quick" data-group-status="${kind}:${group.id}:sent" ${!active.length?'disabled':''}>Mark sent</button><button class="group-quick" data-group-status="${kind}:${group.id}:paid" ${!active.length?'disabled':''}>Mark paid</button><button class="group-deal-btn" data-group-deal="${kind}:${group.id}" title="Make or edit group deal">Group deal</button><button class="group-date-btn" data-group-paid-date="${kind}:${group.id}" title="Set or modify payment date for this group">Paid date</button>${kind==='project'?`<button class="group-add" data-group-add="${group.id}" title="Add work under this project">＋ Row</button>`:''}<button class="group-rename" data-group-rename="${kind}:${group.id}" title="Rename group">Rename</button><button class="group-ungroup" data-group-ungroup="${kind}:${group.id}" title="Ungroup (keep rows, remove group)">Ungroup</button></div></td></tr>`;
+  return `<tr class="sheet-group-header ${kind}" data-sheet-group="${kind}:${group.id}"><td colspan="11"><div class="group-heading"><button data-group-collapse="${kind}:${group.id}" aria-expanded="${!folded}"><svg class="group-chevron ${folded?'collapsed':''}" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="m3.5 5.75 4.5 4.5 4.5-4.5" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg><strong>${esc(group.label)}</strong><span>${done}/${active.length} complete${detail}</span></button><span class="group-status ${status.toLowerCase().replaceAll(' ','-')}">${status}</span><button class="group-quick" data-group-status="${kind}:${group.id}:sent" ${!active.length?'disabled':''}>Mark sent</button><button class="group-quick" data-group-status="${kind}:${group.id}:paid" ${!active.length?'disabled':''}>Mark paid</button><button class="group-deal-btn" data-group-deal="${kind}:${group.id}" title="Make or edit group deal">Group deal</button><button class="group-date-btn" data-group-paid-date="${kind}:${group.id}" title="Set or modify payment date for this group">Paid date</button>${kind==='project'?`<button class="group-add" data-group-add="${group.id}" title="Add work under this project">＋ Row</button>`:''}<button class="group-rename" data-group-rename="${kind}:${group.id}" title="Rename group">Rename</button><button class="group-ungroup" data-group-ungroup="${kind}:${group.id}" title="Ungroup (keep rows, remove group)">Ungroup</button></div></td></tr>`;
 }
 function groupStatus(items){const active=items.filter(i=>i.status!=='discarded');if(!active.length)return 'Discarded';if(active.every(i=>i.status==='paid'))return 'Paid';if(active.every(i=>['sent','paid'].includes(i.status)))return 'Sent';if(active.some(i=>['working','changes'].includes(i.status)))return 'Working';return 'Pending';}
 function blankRowHtml(order) {
@@ -544,7 +663,7 @@ function renderSheet() {
       ${value('remarks',i.remarks||'')}</tr>`;
   }
   if(filter==='all')rows+=Array.from({length:blankRows},(_,n)=>blankRowHtml(all.length+n)).join('');
-  return `<div class="sheet-shell"><div class="sheet-toolbar"><div class="actions"><button class="small-btn green" data-action="add-multiples" title="Add multiple rows from formatted WhatsApp/text">➕ Add Multiples</button><button class="small-btn purple" data-action="smart-update" title="Find words and bulk update rate or status across rows">⚡ Smart Update</button><button class="small-btn blue" data-action="assign" ${selected.size?'':'disabled'}>● Start work</button><button class="small-btn" data-action="complete" ${selected.size?'':'disabled'}>✓ Mark sent</button><button class="small-btn" data-action="invoice" ${selected.size?'':'disabled'}>▣ Create invoice</button><button class="small-btn" data-action="share-chat" ${selected.size?'':'disabled'} title="Share selected row(s) in Team Chat">💬 Share in chat</button><button class="small-btn danger" data-action="delete" title="Delete selected row(s) (Del)" ${selected.size?'':'disabled'}>🗑 Delete row</button><button class="small-btn" data-action="group" ${selected.size>1?'':'disabled'}>Group deal</button><button class="small-btn" data-action="project-group" ${selected.size?'':'disabled'}>Group project</button><button class="small-btn" data-action="ungroup" ${hasGroupedSelected()?'':'disabled'} title="Ungroup selected row(s)">Ungroup</button><select id="bulkStatus" aria-label="Set selected rows status" ${selected.size?'':'disabled'}><option value="">Set status…</option>${['pending','working','changes','sent','paid','discarded'].map(s=>`<option value="${s}">${s[0].toUpperCase()+s.slice(1)}</option>`).join('')}<option value="paid-date">Paid on date…</option></select><select id="workFilter" aria-label="Filter work">${['all','pending','working','changes','sent','paid','discarded'].map(s=>`<option value="${s}" ${filter===s?'selected':''}>${s==='all'?'All work':s[0].toUpperCase()+s.slice(1)}</option>`).join('')}</select></div><span class="hint" id="selectedCount">${selectionLabelHtml()}</span></div>
+  return `<div class="sheet-shell"><div class="sheet-toolbar"><div class="actions"><button class="small-btn green" data-action="add-multiples" title="Add multiple rows from formatted WhatsApp/text">➕ Add Multiples</button><button class="small-btn purple" data-action="smart-update" title="Find words and bulk update rate or status across rows">⚡ Smart Update</button><button class="small-btn blue" data-action="assign" ${selected.size?'':'disabled'}>● Start work</button><button class="small-btn" data-action="complete" ${selected.size?'':'disabled'}>✓ Mark sent</button><button class="small-btn" data-action="invoice" ${selected.size?'':'disabled'}>▣ Create invoice</button><button class="small-btn" data-action="share-chat" ${selected.size?'':'disabled'} title="Share selected row(s) in Team Chat">💬 Share in chat</button><button class="small-btn danger" data-action="delete" title="Delete selected row(s) (Del)" ${selected.size?'':'disabled'}>🗑 Delete row</button><button class="small-btn" data-action="group" ${selected.size>1?'':'disabled'}>Group deal</button><button class="small-btn" data-action="project-group" ${selected.size?'':'disabled'}>Group project</button><select id="bulkStatus" aria-label="Set selected rows status" ${selected.size?'':'disabled'}><option value="">Set status…</option>${['pending','working','changes','sent','paid','discarded'].map(s=>`<option value="${s}">${s[0].toUpperCase()+s.slice(1)}</option>`).join('')}<option value="paid-date">Paid on date…</option></select><select id="workFilter" aria-label="Filter work">${['all','pending','working','changes','sent','paid','discarded'].map(s=>`<option value="${s}" ${filter===s?'selected':''}>${s==='all'?'All work':s[0].toUpperCase()+s.slice(1)}</option>`).join('')}</select><span class="hint" id="selectedCount">${selectionLabelHtml()}</span></div></div>
     <div class="sheet-viewport"><table class="sheet"><thead><tr><th class="row-selector"><input type="checkbox" id="selectAll" aria-label="Select visible rows"></th><th>SR</th><th>DATE</th><th>SERVICE PROVIDED</th><th>QTY</th><th>RATE</th><th>TOTAL</th><th>STATUS</th><th>ADVANCE</th><th>ASSIGNED</th><th>REMARKS</th></tr></thead><tbody>${rows}</tbody></table></div></div>`;
 }
 
@@ -998,6 +1117,23 @@ function renderBankAccountsList() {
 function renderSettings() { const s=data.settings; return `<div class="section-top"><div><h2>Workspace settings</h2><p>Business details, people and Supabase connection.</p></div></div><div class="grid-2"><div class="panel"><h3>Business on invoices</h3><div class="field"><label>Business name</label><input data-setting="seller.name" value="${esc(s.seller.name)}"></div><div class="field"><label>Address</label><textarea data-setting="seller.address" rows="3">${esc(s.seller.address)}</textarea></div><div class="field-grid"><div class="field"><label>Email</label><input data-setting="seller.email" value="${esc(s.seller.email)}"></div><div class="field"><label>Phone</label><input data-setting="seller.phone" value="${esc(s.seller.phone)}"></div></div><div class="field"><label>Tax / GST ID (optional)</label><input data-setting="seller.taxId" value="${esc(s.seller.taxId)}"></div><label class="invoice-logo-upload"><span class="invoice-logo-preview">${s.seller.logoData?`<img src="${esc(s.seller.logoData)}" alt="Company logo">`:`<img src="assets/gir-icon.png" alt="Default MeowSheet logo">`}</span><span>Choose company logo</span><input id="companyLogoUpload" type="file" accept="image/png,image/jpeg,image/webp" hidden></label>${renderBankAccountsList()}<button class="small-btn blue" data-action="save-settings" style="margin-top:6px;">Save business details</button></div><div class="panel"><h3>Your team</h3><div style="display:flex;align-items:center;gap:12px;margin-bottom:14px"><label class="avatar-upload" style="margin:0;flex:1"><span class="avatar">${avatar(currentUserId(),s.displayName,'',s.avatarData)}</span><span>${s.avatarData?'Change your avatar image':'Choose your avatar image'}</span><input id="avatarUpload" type="file" accept="image/png,image/jpeg,image/webp" hidden></label>${s.avatarData?`<button type="button" class="small-btn quiet" id="removeAvatarBtn" title="Remove custom avatar">Remove</button>`:''}</div><div class="field"><label>Your display name</label><input data-setting="displayName" value="${esc(s.displayName)}"></div><div class="field"><label>Your Cat Spirit (for animated reactions & pings)</label><select data-setting="catType"><option value="orange" ${s.catType!=='black'?'selected':''}>🐱 Orange Cat (Playful & Energetic)</option><option value="black" ${s.catType==='black'?'selected':''}>🐈‍⬛ Midnight Black Cat (Cool & Mysterious)</option></select></div>${!session?`<div class="field" style="margin-top:14px;border-top:1px dashed #e2e8f0;padding-top:12px"><label>Second person (local view)</label><div style="display:flex;align-items:center;gap:12px;margin-bottom:8px"><label class="avatar-upload" style="margin:0;flex:1"><span class="avatar">${avatar('local-partner',s.localPartner,'',s.partnerAvatarData)}</span><span>${s.partnerAvatarData?'Change partner avatar':'Choose partner avatar image'}</span><input id="partnerAvatarUpload" type="file" accept="image/png,image/jpeg,image/webp" hidden></label>${s.partnerAvatarData?`<button type="button" class="small-btn quiet" id="removePartnerAvatarBtn" title="Remove partner avatar">Remove</button>`:''}</div><input data-setting="localPartner" value="${esc(s.localPartner)}" placeholder="Second person name"></div>`:''}<button class="small-btn blue" data-action="save-settings" style="margin-top:8px">Save names</button><div class="notice">When connected, both people sign in with their own Supabase accounts. Assignments, names, and avatar images update automatically on both PCs.</div></div></div>
     <div class="panel"><h3>Supabase connection</h3><div class="field-grid"><div class="field"><label>Project URL</label><input id="supaUrl" placeholder="https://project.supabase.co" value="${esc(s.url)}"></div><div class="field"><label>Publishable / anon key</label><input id="supaKey" type="password" placeholder="Never enter a service-role key" value="${esc(s.key)}"></div></div><div class="actions"><button class="small-btn" data-action="save-connection">Save connection</button>${session?`<span class="pill paid">Signed in as ${esc(session.user.email)}</span><button class="small-btn" data-action="sign-out">Sign out</button>`:`<button class="small-btn blue" data-action="sign-in">Sign in</button><button class="small-btn" data-action="sign-up">Create account</button>`}</div>${session?`<div class="notice">Workspace code: <strong>${esc(s.joinCode||'Create or join a workspace')}</strong> · Share this code with your second team member. Workspace ID: ${esc(s.workspaceId||'none')}</div><div class="actions"><button class="small-btn blue" data-action="sync">Sync now</button></div>`:''}</div><div class="panel"><h3>Desktop app</h3><p class="muted">Changes sync automatically while connected.</p><div class="actions"><button class="small-btn" data-action="sync">Sync now</button><button class="small-btn blue" id="updateBtn">Check for updates</button><span id="appVersion"></span></div><p class="muted" id="updateStatus"></p></div>`; }
 
+function positionContextMenu(menu, clientX, clientY) {
+  $('#contextMenu')?.remove();
+  document.body.appendChild(menu);
+  const menuWidth = menu.offsetWidth || 235;
+  const menuHeight = menu.offsetHeight || 420;
+  const winW = (typeof window !== 'undefined' ? window.innerWidth : 1200) || document.documentElement?.clientWidth || 1200;
+  const winH = (typeof window !== 'undefined' ? window.innerHeight : 800) || document.documentElement?.clientHeight || 800;
+  let x = clientX;
+  let y = clientY;
+  if (x + menuWidth > winW - 10) x = Math.max(10, winW - menuWidth - 10);
+  else x = Math.max(10, x);
+  if (y + menuHeight > winH - 12) y = Math.max(10, winH - menuHeight - 12);
+  else y = Math.max(10, y);
+  menu.style.left = Math.round(x) + 'px';
+  menu.style.top = Math.round(y) + 'px';
+}
+
 function bindMain() {
   $$('[data-action]').forEach(b=>b.onclick=()=>actions(b.dataset.action));
   const backBtn=$('#topBackBtn');if(backBtn)backBtn.onclick=goBack;
@@ -1195,9 +1331,7 @@ function bindMain() {
         `<button id="contextAssign"><span class="context-icon">●</span><span>Start work</span></button>`+
         `<button id="contextSent"><span class="context-icon">✓</span><span>Mark sent</span></button>`+
         `<button id="contextInvoice"><span class="context-icon">▣</span><span>Create invoice</span></button>`;
-      document.body.appendChild(menu);
-      menu.style.left=Math.max(8,Math.min(e.clientX,innerWidth-230))+'px';
-      menu.style.top=Math.max(8,Math.min(e.clientY,innerHeight-450))+'px';
+      positionContextMenu(menu, e.clientX, e.clientY);
       $('#contextCut').onclick=()=>{menu.remove();copySelectedRows(true);};
       $('#contextCopy').onclick=()=>{menu.remove();copySelectedRows(false);};
       if($('#contextPaste'))$('#contextPaste').onclick=()=>{menu.remove();pasteCopiedRows(rowId);};
@@ -1257,9 +1391,7 @@ function bindMain() {
         `<div class="context-divider"></div>`+
         `<button id="contextUndoBlank" ${undoStack.length?'':'disabled'}><span class="context-icon">↶</span><span>Undo</span><kbd>Ctrl+Z</kbd></button>`+
         `<button id="contextRedoBlank" ${redoStack.length?'':'disabled'}><span class="context-icon">↷</span><span>Redo</span><kbd>Ctrl+Y</kbd></button>`;
-      document.body.appendChild(menu);
-      menu.style.left=Math.max(8,Math.min(e.clientX,innerWidth-220))+'px';
-      menu.style.top=Math.max(8,Math.min(e.clientY,innerHeight-140))+'px';
+      positionContextMenu(menu, e.clientX, e.clientY);
       if($('#contextPasteBlank'))$('#contextPasteBlank').onclick=()=>{menu.remove();pasteCopiedRows(null,blankOrder);};
       if($('#contextAddMultiBlank'))$('#contextAddMultiBlank').onclick=()=>{menu.remove();addMultiplesDialog();};
       if($('#contextUndoBlank'))$('#contextUndoBlank').onclick=()=>{menu.remove();undo();};
@@ -1275,6 +1407,66 @@ function bindMain() {
   $$('[data-group-deal-card]').forEach(b=>b.onclick=()=>{const [kind,id]=b.dataset.groupDealCard.split(':');openGroupDealDialog(kind,id);});
   $$('[data-group-ungroup]').forEach(b=>b.onclick=()=>{const [kind,id]=b.dataset.groupUngroup.split(':');ungroupDialog(kind,id);});
   $$('[data-ungroup-card]').forEach(b=>b.onclick=()=>{const [kind,id]=b.dataset.ungroupCard.split(':');ungroupDialog(kind,id);});
+  $$('.sheet-group-header').forEach(headerRow => {
+    headerRow.oncontextmenu = e => {
+      e.preventDefault();
+      const targetGroup = headerRow.dataset.sheetGroup || headerRow.querySelector('[data-group-collapse]')?.dataset?.groupCollapse;
+      if (!targetGroup) return;
+      const [kind, id] = targetGroup.split(':');
+      const table = kind === 'project' ? 'projectGroups' : 'groups';
+      const group = (data[table] || []).find(g => g.id === id);
+      if (!group) return;
+
+      const groupItems = (data.items || []).filter(i => (kind === 'project' ? i.projectGroupId : i.groupId) === id && i.status !== 'discarded');
+      const canMarkSent = groupItems.length > 0 && groupItems.some(i => !['sent', 'paid'].includes(i.status));
+      const canMarkPaid = groupItems.length > 0 && groupItems.some(i => i.status !== 'paid');
+
+      const menu = $('#contextMenu') || document.createElement('div');
+      menu.id = 'contextMenu';
+      menu.className = 'context-menu';
+      menu.innerHTML = `
+        <button id="contextGroupUngroup"><span class="context-icon">⎘</span><span>Ungroup ${kind === 'project' ? 'project' : 'deal'}</span></button>
+        <button id="contextGroupDeal"><span class="context-icon">🏷️</span><span>Group deal…</span></button>
+        <button id="contextGroupRename"><span class="context-icon">✏️</span><span>Rename group</span></button>
+        <div class="context-divider"></div>
+        ${kind === 'project' ? `<button id="contextGroupAddRow"><span class="context-icon">➕</span><span>Add row in project</span></button>` : ''}
+        <button id="contextGroupMarkSent" ${canMarkSent ? '' : 'disabled'}><span class="context-icon">✓</span><span>Mark all sent</span></button>
+        <button id="contextGroupMarkPaid" ${canMarkPaid ? '' : 'disabled'}><span class="context-icon">₹</span><span>Mark all paid</span></button>
+        <button id="contextGroupPaidDate"><span class="context-icon">📅</span><span>Set paid date…</span></button>
+      `;
+      positionContextMenu(menu, e.clientX, e.clientY);
+
+      $('#contextGroupUngroup').onclick = () => { menu.remove(); ungroupDialog(kind, id); };
+      $('#contextGroupDeal').onclick = () => { menu.remove(); openGroupDealDialog(kind, id); };
+      $('#contextGroupRename').onclick = () => { menu.remove(); renameGroup(kind, id); };
+      if ($('#contextGroupAddRow')) {
+        $('#contextGroupAddRow').onclick = () => {
+          menu.remove();
+          const item = newItem(group.clientId, clientItems(group.clientId).length);
+          item.projectGroupId = group.id;
+          mutate('items', item);
+          setTimeout(() => {
+            const row = document.querySelector(`[data-row="${item.id}"]`);
+            row?.scrollIntoView({ block: 'center' });
+            const field = row?.querySelector('[data-cell="service"]');
+            if (field) activateSheetField(field);
+          }, 60);
+        };
+      }
+      $('#contextGroupMarkSent').onclick = () => {
+        menu.remove();
+        const rows = groupItems.filter(i => !['sent', 'paid'].includes(i.status));
+        if (rows.length) bulkSetStatus('sent', rows.map(i => i.id), { kind, id, label: group.label });
+      };
+      $('#contextGroupMarkPaid').onclick = () => {
+        menu.remove();
+        const rows = groupItems.filter(i => i.status !== 'paid');
+        if (rows.length) bulkSetStatus('paid', rows.map(i => i.id), { kind, id, label: group.label });
+      };
+      $('#contextGroupPaidDate').onclick = () => { menu.remove(); setGroupPaidDateDialog(kind, id); };
+      setTimeout(() => document.addEventListener('click', () => menu.remove(), { once: true }), 0);
+    };
+  });
   $$('[data-group-status]').forEach(b=>b.onclick=()=>{const [kind,id,status]=b.dataset.groupStatus.split(':');const group=(kind==='project'?data.projectGroups:data.groups).find(g=>g.id===id);if(!group)return;const rows=data.items.filter(i=>(kind==='project'?i.projectGroupId:i.groupId)===id&&i.status!=='discarded'&&(status==='paid'?i.status!=='paid':!['sent','paid'].includes(i.status)));if(!rows.length){if(status==='paid'){setGroupPaidDateDialog(kind,id);return;}toast('Group is already '+status);return;}bulkSetStatus(status,rows.map(i=>i.id),{kind,id,label:group.label});});
   $$('[data-group-paid-date]').forEach(b=>{b.onclick=()=>{const [kind,id]=b.dataset.groupPaidDate.split(':');setGroupPaidDateDialog(kind,id);};});
   $$('[data-receipt-date]').forEach(b=>b.onclick=()=>modifyReceiptDateDialog(b.dataset.receiptDate));
