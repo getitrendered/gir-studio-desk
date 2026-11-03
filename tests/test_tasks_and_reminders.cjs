@@ -122,27 +122,27 @@ const hasOpenModal = vm.runInContext("typeof openTaskModal === 'function'", sand
 assert.ok(hasOpenModal, 'openTaskModal should be defined');
 console.log('✓ Test 3: defaults and core functions verified in app.js');
 
-// 5. Test Time Category Classification (Upcoming, Active 30m, Overdue)
+// 5. Test Time Category Classification (Upcoming, Trending < 30m, Overdue)
 const now = Date.now();
 
 const taskUpcoming = {
   id: 't_up',
   title: 'Render 3D Logo',
-  remindAt: new Date(now + 60 * 60 * 1000).toISOString(), // +1 hour
+  remindAt: new Date(now + 60 * 60 * 1000).toISOString(), // +1 hour (> 30m)
   completed: false
 };
 
 const taskActive = {
   id: 't_act',
   title: 'Call Client for Approval',
-  remindAt: new Date(now - 10 * 60 * 1000).toISOString(), // -10 minutes (within 30m window)
+  remindAt: new Date(now + 15 * 60 * 1000).toISOString(), // +15 minutes (within 30m trending window)
   completed: false
 };
 
 const taskOverdue = {
   id: 't_ov',
   title: 'Send Invoice #402',
-  remindAt: new Date(now - 45 * 60 * 1000).toISOString(), // -45 minutes (> 30m window)
+  remindAt: new Date(now - 10 * 60 * 1000).toISOString(), // -10 minutes (past deadline, overdue)
   completed: false
 };
 
@@ -155,62 +155,71 @@ const taskDone = {
 
 sandbox.testTasks = { taskUpcoming, taskActive, taskOverdue, taskDone };
 
-assert.equal(vm.runInContext("getTaskCategory(testTasks.taskUpcoming)", sandbox), 'upcoming', 'Future task must be upcoming');
-assert.equal(vm.runInContext("getTaskCategory(testTasks.taskActive)", sandbox), 'active', 'Task within 30 min window must be active (Current Important)');
-assert.equal(vm.runInContext("getTaskCategory(testTasks.taskOverdue)", sandbox), 'overdue', 'Task past 30 min window must be overdue');
+assert.equal(vm.runInContext("getTaskCategory(testTasks.taskUpcoming)", sandbox), 'upcoming', 'Task > 30m away must be upcoming');
+assert.equal(vm.runInContext("getTaskCategory(testTasks.taskActive)", sandbox), 'active', 'Task within 30 min before deadline must be active (trending/focus)');
+assert.equal(vm.runInContext("getTaskCategory(testTasks.taskOverdue)", sandbox), 'overdue', 'Task past deadline must be overdue');
 assert.equal(vm.runInContext("getTaskCategory(testTasks.taskDone)", sandbox), 'completed', 'Completed task must be completed');
-console.log('✓ Test 4: Task categorization thresholds (upcoming, 30m active window, overdue) verified');
+console.log('✓ Test 4: Task categorization thresholds (upcoming, 30m trending, overdue) verified');
 
-// 6. Test Formatters and Countdown
+// 6. Test Formatters and Prominent Countdown
 const upcomingCd = vm.runInContext("formatTaskCountdown(testTasks.taskUpcoming.remindAt)", sandbox);
 assert.ok(upcomingCd.includes('⏳ in'), 'Upcoming countdown must start with "⏳ in"');
 
 const activeCd = vm.runInContext("formatTaskCountdown(testTasks.taskActive.remindAt)", sandbox);
-assert.ok(activeCd.includes('⚡ Active') && activeCd.includes('left'), 'Active countdown must show remaining active window time');
+assert.ok(activeCd.includes('⚡') && activeCd.includes('remaining'), 'Trending countdown must show remaining time');
 
 const overdueCd = vm.runInContext("formatTaskCountdown(testTasks.taskOverdue.remindAt)", sandbox);
-assert.ok(overdueCd.includes('⚠️ Overdue by'), 'Overdue countdown must show "⚠️ Overdue by"');
+assert.ok(overdueCd.includes('⚠️ OVERDUE by'), 'Overdue countdown must show prominent "⚠️ OVERDUE by"');
 
 const dtToday = vm.runInContext("formatTaskDateTime(new Date().toISOString())", sandbox);
 assert.ok(dtToday.startsWith('Today at'), 'formatTaskDateTime for today must start with "Today at"');
 console.log('✓ Test 5: Human-readable date and countdown formatters verified');
 
-// 7. Test renderTasks Output HTML
+// 7. Test renderTasks Notice Board Long List & Pushpin Architecture
 vm.runInContext("data.tasks = [testTasks.taskUpcoming, testTasks.taskActive, testTasks.taskOverdue, testTasks.taskDone]", sandbox);
 const tasksHtml = vm.runInContext("renderTasks()", sandbox);
 
-assert.ok(tasksHtml.includes('Important Upcoming Tasks'), 'Tasks tab must render Hero Deck');
-assert.ok(tasksHtml.includes('Overdue Tasks'), 'Tasks tab must render Overdue Tasks section');
-assert.ok(tasksHtml.includes('Current Important Tasks'), 'Tasks tab must render Current Important Tasks section');
-assert.ok(tasksHtml.includes('Scheduled Reminders'), 'Tasks tab must render Scheduled Reminders section');
-assert.ok(tasksHtml.includes('Completed Tasks'), 'Tasks tab must render Completed Tasks section');
-assert.ok(tasksHtml.includes('Render 3D Logo'), 'Upcoming task title must be in HTML');
-assert.ok(tasksHtml.includes('Call Client for Approval'), 'Active task title must be in HTML');
-assert.ok(tasksHtml.includes('Send Invoice #402'), 'Overdue task title must be in HTML');
+assert.ok(tasksHtml.includes('Notice Board'), 'Tab header must display Notice Board');
+assert.ok(tasksHtml.includes('notice-board-list'), 'Must render single unified long list');
+assert.ok(tasksHtml.includes('notice-pin'), 'Must render creative pushpin visual on cards');
+assert.ok(tasksHtml.includes('notice-timer'), 'Must render prominent bold countdown timer');
+assert.ok(tasksHtml.includes('card-overdue'), 'Must render overdue red card');
+assert.ok(tasksHtml.includes('card-trending'), 'Must render trending green card');
+assert.ok(tasksHtml.includes('card-normal'), 'Must render normal card for > 30m');
 
-// Test empty state: Only top Add Task button should exist, no redundant inner buttons
+// Verify strict priority stacking order: Overdue (Red) on top, then Trending (Green), then Normal
+const overduePos = tasksHtml.indexOf('Send Invoice #402');
+const trendingPos = tasksHtml.indexOf('Call Client for Approval');
+const normalPos = tasksHtml.indexOf('Render 3D Logo');
+assert.ok(overduePos !== -1 && trendingPos !== -1 && normalPos !== -1, 'All active tasks must be rendered in list');
+assert.ok(overduePos < trendingPos, 'Red overdue card must be stacked ABOVE green trending card');
+assert.ok(trendingPos < normalPos, 'Green trending card must be stacked ABOVE normal card');
+
+// Test empty state: Only top Add Reminder button should exist
 vm.runInContext("data.tasks = []", sandbox);
 const emptyTasksHtml = vm.runInContext("renderTasks()", sandbox);
-assert.ok(emptyTasksHtml.includes('id="openAddTaskBtn"'), 'Top Add Task button must be present in header');
-assert.ok(!emptyTasksHtml.includes('id="openAddTaskHeroBtn"'), 'openAddTaskHeroBtn should be removed');
-assert.ok(!emptyTasksHtml.includes('id="openAddTaskEmptyBtn"'), 'openAddTaskEmptyBtn should be removed');
+assert.ok(emptyTasksHtml.includes('id="openAddTaskBtn"'), 'Top Add Reminder button must be present in header');
+assert.ok(emptyTasksHtml.includes('notice-board-empty'), 'Empty Notice Board state must be present');
+assert.ok(!emptyTasksHtml.includes('id="openAddTaskHeroBtn"'), 'openAddTaskHeroBtn should not exist');
+assert.ok(!emptyTasksHtml.includes('id="openAddTaskEmptyBtn"'), 'openAddTaskEmptyBtn should not exist');
 
-console.log('✓ Test 6: renderTasks HTML structure and sections verified');
+console.log('✓ Test 6: Notice Board unified long list, priority ordering (red on top, green next), and pushpin verified');
 
-// 8. Test Background Reminder Checker & Notifications
-const dueTaskToNotify = {
+// 8. Test Background Reminder Checker & Repetitive 10-Minute Notifications
+const trendingTaskToNotify = {
   id: 't_notify',
   title: 'Urgent Print Review',
   description: 'Check color alignment for welcome board',
-  remindAt: new Date(now - 2000).toISOString(),
+  remindAt: new Date(now + 20 * 60 * 1000).toISOString(), // in 20 minutes (trending)
   completed: false,
   notified: false
 };
-sandbox.dueTaskToNotify = dueTaskToNotify;
-vm.runInContext("data.tasks = [dueTaskToNotify]", sandbox);
+sandbox.trendingTaskToNotify = trendingTaskToNotify;
+vm.runInContext("data.tasks = [trendingTaskToNotify]", sandbox);
 
 vm.runInContext("checkTaskReminders()", sandbox);
-assert.equal(dueTaskToNotify.notified, true, 'Task should be marked notified after checkTaskReminders runs');
-console.log('✓ Test 7: Automatic background reminder detection & notification firing verified');
+assert.equal(trendingTaskToNotify.notified, true, 'Trending task within 30m must be notified');
+assert.ok(trendingTaskToNotify.lastTrendingNotifyAt, 'lastTrendingNotifyAt timestamp must be recorded');
+console.log('✓ Test 7: Automatic background reminder detection & 10-min notification window verified');
 
 console.log('\nALL TASKS & REMINDERS MANAGER TESTS PASSED! 🎉✨');

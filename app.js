@@ -970,16 +970,17 @@ function getTaskCategory(task) {
   if (task.completed) return 'completed';
   const now = Date.now();
   const taskTime = new Date(task.remindAt).getTime();
-  const diff = now - taskTime;
+  const diff = taskTime - now;
 
-  if (diff < 0) {
-    return 'upcoming';
+  if (diff <= 0) {
+    // Past scheduled time -> OVERDUE (Red card, stays on top)
+    return 'overdue';
   } else if (diff <= 30 * 60 * 1000) {
-    // Current ongoing important task (0-30m active window)
+    // Within 30 minutes before task -> TRENDING / IN FOCUS (Green card)
     return 'active';
   } else {
-    // Overdue (> 30m past scheduled reminder)
-    return 'overdue';
+    // More than 30 minutes away -> UPCOMING (Normal card)
+    return 'upcoming';
   }
 }
 
@@ -1018,33 +1019,33 @@ function formatTaskCountdown(remindAtStr) {
   const remindTime = new Date(remindAtStr).getTime();
   const diff = remindTime - now;
 
-  if (diff > 0) {
-    // In future (Upcoming)
+  if (diff <= 0) {
+    // Overdue: Large prominent indicator
+    const overdueMs = -diff;
+    const totalSecs = Math.floor(overdueMs / 1000);
+    const hours = Math.floor(totalSecs / 3600);
+    const mins = Math.floor((totalSecs % 3600) / 60);
+    const secs = totalSecs % 60;
+    if (hours > 0) return `⚠️ OVERDUE by ${hours}h ${mins}m ${secs}s`;
+    if (mins > 0) return `⚠️ OVERDUE by ${mins}m ${secs}s`;
+    return `⚠️ OVERDUE by ${secs}s`;
+  } else if (diff <= 30 * 60 * 1000) {
+    // Trending / Focus (< 30 minutes away)
+    const totalSecs = Math.floor(diff / 1000);
+    const mins = Math.floor(totalSecs / 60);
+    const secs = totalSecs % 60;
+    return `⚡ ${mins}m ${secs}s remaining`;
+  } else {
+    // Upcoming (> 30 minutes)
     const totalSecs = Math.floor(diff / 1000);
     const days = Math.floor(totalSecs / 86400);
     const hours = Math.floor((totalSecs % 86400) / 3600);
     const mins = Math.floor((totalSecs % 3600) / 60);
     const secs = totalSecs % 60;
-
     if (days > 0) return `⏳ in ${days}d ${hours}h ${mins}m`;
     if (hours > 0) return `⏳ in ${hours}h ${mins}m ${secs}s`;
     if (mins > 0) return `⏳ in ${mins}m ${secs}s`;
     return `⏳ in ${secs}s`;
-  } else if (diff >= -30 * 60 * 1000) {
-    // Within 30 minute active window
-    const remainingMs = (30 * 60 * 1000) + diff;
-    const remainingMins = Math.floor(remainingMs / 60000);
-    const remainingSecs = Math.floor((remainingMs % 60000) / 1000);
-    return `⚡ Active (${remainingMins}m ${remainingSecs}s left)`;
-  } else {
-    // Overdue (> 30 minutes past reminder)
-    const overdueMs = -diff;
-    const overdueHours = Math.floor(overdueMs / 3600000);
-    const overdueMins = Math.floor((overdueMs % 3600000) / 60000);
-    if (overdueHours > 0) {
-      return `⚠️ Overdue by ${overdueHours}h ${overdueMins}m`;
-    }
-    return `⚠️ Overdue by ${overdueMins}m`;
   }
 }
 
@@ -1053,7 +1054,12 @@ function updateTasksDueBadge(count = null) {
   if (!badge) return;
   if (count === null) {
     const now = Date.now();
-    count = (data.tasks || []).filter(t => !t.completed && new Date(t.remindAt).getTime() <= now).length;
+    // Count overdue and trending (<30m) notices
+    count = (data.tasks || []).filter(t => {
+      if (t.completed) return false;
+      const taskTime = new Date(t.remindAt).getTime();
+      return (taskTime - now) <= 30 * 60 * 1000;
+    }).length;
   }
   if (count > 0) {
     badge.textContent = count > 99 ? '99+' : count;
@@ -1072,14 +1078,35 @@ function checkTaskReminders() {
   for (const t of data.tasks) {
     if (t.completed) continue;
     const taskTime = new Date(t.remindAt).getTime();
-    if (now >= taskTime) {
+    const diff = taskTime - now;
+
+    if (diff <= 0) {
+      // Past reminder time: OVERDUE
       dueCount++;
-      if (!t.notified) {
+      if (!t.overdueNotified) {
+        t.overdueNotified = true;
         t.notified = true;
         changed = true;
         const bodyText = t.description ? `${t.description} • Scheduled for ${formatTaskDateTime(t.remindAt)}` : `Scheduled for ${formatTaskDateTime(t.remindAt)}`;
         smartNotify({
-          title: `⏰ Reminder: ${t.title}`,
+          title: `🚨 OVERDUE: ${t.title}`,
+          body: bodyText,
+          icon: '🚨'
+        });
+      }
+    } else if (diff <= 30 * 60 * 1000) {
+      // Within 30 minutes before task / meeting: TRENDING & IN FOCUS
+      dueCount++;
+      const lastNotified = t.lastTrendingNotifyAt ? new Date(t.lastTrendingNotifyAt).getTime() : 0;
+      // Send reminder notifications every ~10 minutes
+      if (!lastNotified || (now - lastNotified >= 9.5 * 60 * 1000)) {
+        t.lastTrendingNotifyAt = new Date(now).toISOString();
+        t.notified = true;
+        changed = true;
+        const minsLeft = Math.max(1, Math.round(diff / 60000));
+        const bodyText = t.description ? `${t.description} • Starts in ${minsLeft}m (${formatTaskDateTime(t.remindAt)})` : `Starts in ${minsLeft}m (${formatTaskDateTime(t.remindAt)})`;
+        smartNotify({
+          title: `⚡ In Focus (${minsLeft}m left): ${t.title}`,
           body: bodyText,
           icon: '⏰'
         });
@@ -1107,9 +1134,9 @@ function updateLiveTaskCountdowns() {
     const remindAtStr = el.dataset.remindAt;
     if (!remindAtStr) return;
     const remindTime = new Date(remindAtStr).getTime();
-    const diff = now - remindTime;
+    const diff = remindTime - now;
     const prevCat = el.dataset.category;
-    const currentCat = diff < 0 ? 'upcoming' : (diff <= 30 * 60 * 1000 ? 'active' : 'overdue');
+    const currentCat = diff <= 0 ? 'overdue' : (diff <= 30 * 60 * 1000 ? 'active' : 'upcoming');
     if (prevCat && prevCat !== currentCat) {
       needsRerender = true;
     }
@@ -1126,7 +1153,7 @@ function renderTasks() {
   const now = Date.now();
 
   const overdueTasks = [];
-  const activeTasks = [];
+  const trendingTasks = [];
   const upcomingTasks = [];
   const completedTasks = [];
 
@@ -1137,213 +1164,152 @@ function renderTasks() {
     }
     const cat = getTaskCategory(t);
     if (cat === 'overdue') overdueTasks.push(t);
-    else if (cat === 'active') activeTasks.push(t);
+    else if (cat === 'active') trendingTasks.push(t);
     else upcomingTasks.push(t);
   });
 
-  // Graded sorting:
-  // Overdue: longest overdue first
+  // Strict sorting:
+  // 1. Red (Overdue) stays ALWAYS ON TOP: sorted by oldest overdue first
   overdueTasks.sort((a,b) => new Date(a.remindAt).getTime() - new Date(b.remindAt).getTime());
-  // Active: oldest first (closest to becoming overdue)
-  activeTasks.sort((a,b) => new Date(a.remindAt).getTime() - new Date(b.remindAt).getTime());
-  // Upcoming: closest to arrive first
+  // 2. Green (Trending / Focus within 30m): sorted by closest deadline first
+  trendingTasks.sort((a,b) => new Date(a.remindAt).getTime() - new Date(b.remindAt).getTime());
+  // 3. Normal (Upcoming > 30m): sorted by closest deadline first
   upcomingTasks.sort((a,b) => new Date(a.remindAt).getTime() - new Date(b.remindAt).getTime());
-  // Completed: most recently completed first
+  // 4. Completed: most recently completed first
   completedTasks.sort((a,b) => new Date(b.completedAt || b.remindAt).getTime() - new Date(a.completedAt || a.remindAt).getTime());
 
-  // Hero container holds threshold of top 3 most urgent active items
-  const heroCandidates = [...overdueTasks, ...activeTasks, ...upcomingTasks];
-  const heroTasks = heroCandidates.slice(0, 3);
+  // One long unified stack: Red on top, then Green, then Normal cards
+  const activeNotices = [...overdueTasks, ...trendingTasks, ...upcomingTasks];
 
-  const renderHeroCard = (t, index) => {
+  const renderNoticeCard = (t, index) => {
     const cat = getTaskCategory(t);
     const isOverdue = cat === 'overdue';
-    const isActive = cat === 'active';
-    const badgeClass = isOverdue ? 'hero-badge-overdue' : isActive ? 'hero-badge-active' : 'hero-badge-upcoming';
-    const badgeText = isOverdue ? '🚨 OVERDUE' : isActive ? '⚡ DUE NOW' : `⏳ FOCUS #${index + 1}`;
+    const isTrending = cat === 'active';
+    const cardClass = isOverdue ? 'card-overdue' : (isTrending ? 'card-trending' : 'card-normal');
     const cdText = formatTaskCountdown(t.remindAt);
     const dtText = formatTaskDateTime(t.remindAt);
 
+    // Dynamic pushpin colors: ruby pin for overdue/normal, emerald pin for trending
+    const pinHeadFill = isTrending ? '#059669' : '#dc2626';
+    const pinStroke = isTrending ? '#047857' : '#991b1b';
+
     return `
-      <div class="task-hero-card hero-${cat}" data-task-id="${t.id}">
-        <div class="hero-card-header">
-          <span class="hero-pill ${badgeClass}">${badgeText}</span>
-          <span class="task-countdown hero-countdown" data-remind-at="${t.remindAt}" data-category="${cat}">${cdText}</span>
+      <div class="notice-card ${cardClass}" data-task-id="${t.id}" data-category="${cat}">
+        <!-- Authentic Notice Board Pushpin Visual -->
+        <div class="notice-pin" aria-hidden="true" title="Pinned to Notice Board">
+          <svg viewBox="0 0 24 24" width="22" height="22" fill="none" class="pin-svg">
+            <ellipse cx="12" cy="21" rx="4.5" ry="1.8" fill="rgba(0,0,0,0.28)"/>
+            <path d="M12 13v7.5" stroke="#94a3b8" stroke-width="2" stroke-linecap="round"/>
+            <path d="M7 5.5c0-1.657 2.239-3 5-3s5 1.343 5 3c0 .828-.56 1.579-1.464 2.121L16 12.5H8l.464-4.879C7.56 7.079 7 6.328 7 5.5z" fill="${pinHeadFill}" stroke="${pinStroke}" stroke-width="1.2"/>
+            <ellipse cx="10.5" cy="4.8" rx="2" ry="0.8" fill="rgba(255,255,255,0.7)"/>
+          </svg>
         </div>
-        <div class="hero-card-body">
-          <h4 class="hero-card-title">${esc(t.title)}</h4>
-          ${t.description ? `<p class="hero-card-desc">${esc(t.description)}</p>` : ''}
-          <div class="hero-card-date">📅 ${esc(dtText)}</div>
+
+        <div class="notice-card-top">
+          <div class="notice-meta-left">
+            ${isOverdue ? `<span class="notice-pill pill-overdue">🚨 OVERDUE</span>` : ''}
+            ${isTrending ? `<span class="notice-pill pill-trending">⚡ FOCUS #${index} • TRENDING</span>` : ''}
+            ${!isOverdue && !isTrending ? `<span class="notice-pill pill-normal">📌 NOTICE #${index}</span>` : ''}
+            <span class="notice-date-badge">📅 ${esc(dtText)}</span>
+          </div>
+          <!-- Prominent Bold Live Countdown Timer -->
+          <div class="task-countdown notice-timer timer-${cat}" data-remind-at="${t.remindAt}" data-category="${cat}">
+            ${cdText}
+          </div>
         </div>
-        <div class="hero-card-actions">
-          <button type="button" class="small-btn green hero-btn-complete" data-task-action="complete" data-task-id="${t.id}">✓ Complete</button>
-          <button type="button" class="small-btn hero-btn-snooze" data-task-action="snooze" data-task-id="${t.id}" title="Snooze 15 minutes">⏰ +15m</button>
-          <button type="button" class="small-btn hero-btn-edit" data-task-action="edit" data-task-id="${t.id}" title="Edit task">✏️</button>
+
+        <div class="notice-card-body">
+          <h3 class="notice-title">${esc(t.title)}</h3>
+          ${t.description ? `<p class="notice-desc">${esc(t.description)}</p>` : ''}
+        </div>
+
+        <div class="notice-card-footer">
+          <div class="notice-footer-left">
+            <button type="button" class="small-btn ${isOverdue ? 'danger' : 'green'} task-btn-complete" data-task-action="complete" data-task-id="${t.id}">
+              ✓ Complete
+            </button>
+            <button type="button" class="small-btn task-btn-snooze" data-task-action="snooze" data-task-id="${t.id}" title="Snooze 15 minutes">
+              ⏰ +15m Snooze
+            </button>
+          </div>
+          <div class="notice-footer-right">
+            <button type="button" class="small-btn task-btn-edit" data-task-action="edit" data-task-id="${t.id}" title="Edit reminder details">✏️ Edit</button>
+            <button type="button" class="small-btn danger task-btn-delete" data-task-action="delete" data-task-id="${t.id}" title="Delete reminder">🗑️</button>
+          </div>
         </div>
       </div>
     `;
   };
 
-  const renderCard = (t, cat, rank = null) => {
-    const isOverdue = cat === 'overdue';
-    const isActive = cat === 'active';
-    const isUpcoming = cat === 'upcoming';
-    const isCompleted = cat === 'completed';
-    const cdText = formatTaskCountdown(t.remindAt);
-    const dtText = formatTaskDateTime(t.remindAt);
-
+  const renderNoticeCompletedCard = t => {
     return `
-      <div class="task-card task-${cat}" data-task-id="${t.id}">
-        <div class="task-card-inner">
-          <div class="task-card-top-row">
-            <div class="task-pills-wrap">
-              ${rank !== null ? `<span class="task-rank-pill">#${rank}</span>` : ''}
-              ${isOverdue ? `<span class="task-badge-pill badge-overdue">🚨 OVERDUE</span>` : ''}
-              ${isActive ? `<span class="task-badge-pill badge-active">⚡ DUE NOW (30m window)</span>` : ''}
-              ${isCompleted ? `<span class="task-badge-pill badge-completed">✓ COMPLETED</span>` : ''}
-              <span class="task-date-badge">📅 ${esc(dtText)}</span>
-            </div>
-            ${!isCompleted ? `<span class="task-countdown task-cd-tag" data-remind-at="${t.remindAt}" data-category="${cat}">${cdText}</span>` : ''}
-          </div>
-          <div class="task-content">
-            <h3 class="task-title ${isCompleted ? 'is-completed' : ''}">${esc(t.title)}</h3>
-            ${t.description ? `<p class="task-desc">${esc(t.description)}</p>` : ''}
+      <div class="notice-card card-completed" data-task-id="${t.id}">
+        <div class="notice-card-top">
+          <div class="notice-meta-left">
+            <span class="notice-pill pill-completed">✓ COMPLETED</span>
+            <span class="notice-date-badge">${t.completedAt ? 'Finished ' + formatTaskDateTime(t.completedAt) : formatTaskDateTime(t.remindAt)}</span>
           </div>
         </div>
-        <div class="task-card-footer">
-          ${!isCompleted ? `
-            <div class="task-footer-left">
-              <button type="button" class="small-btn ${isOverdue ? 'danger' : 'green'} task-btn-complete" data-task-action="complete" data-task-id="${t.id}">
-                ✓ Mark Complete
-              </button>
-              <button type="button" class="small-btn task-btn-snooze" data-task-action="snooze" data-task-id="${t.id}" title="Snooze for 15 minutes">
-                ⏰ +15m
-              </button>
-            </div>
-            <div class="task-footer-right">
-              <button type="button" class="small-btn task-btn-edit" data-task-action="edit" data-task-id="${t.id}" title="Edit task details">✏️ Edit</button>
-              <button type="button" class="small-btn danger task-btn-delete" data-task-action="delete" data-task-id="${t.id}" title="Delete task">🗑️</button>
-            </div>
-          ` : `
-            <div class="task-footer-left">
-              <span class="completed-note">Completed ${t.completedAt ? formatTaskDateTime(t.completedAt) : ''}</span>
-            </div>
-            <div class="task-footer-right">
-              <button type="button" class="small-btn task-btn-restore" data-task-action="restore" data-task-id="${t.id}">↩ Restore</button>
-              <button type="button" class="small-btn danger task-btn-delete" data-task-action="delete" data-task-id="${t.id}" title="Delete task">🗑️</button>
-            </div>
-          `}
+        <div class="notice-card-body">
+          <h3 class="notice-title is-completed">${esc(t.title)}</h3>
+          ${t.description ? `<p class="notice-desc is-completed">${esc(t.description)}</p>` : ''}
+        </div>
+        <div class="notice-card-footer">
+          <div class="notice-footer-left">
+            <span class="completed-note">Originally scheduled for ${formatTaskDateTime(t.remindAt)}</span>
+          </div>
+          <div class="notice-footer-right">
+            <button type="button" class="small-btn task-btn-restore" data-task-action="restore" data-task-id="${t.id}">↩ Restore</button>
+            <button type="button" class="small-btn danger task-btn-delete" data-task-action="delete" data-task-id="${t.id}" title="Delete reminder">🗑️</button>
+          </div>
         </div>
       </div>
     `;
   };
-
-  const totalActive = overdueTasks.length + activeTasks.length + upcomingTasks.length;
 
   return `
-    <div class="tasks-shell">
+    <div class="tasks-shell notice-board-shell">
       <div class="tasks-header">
         <div class="tasks-title-block">
-          <h2>📋 Tasks & Reminders</h2>
-          <p>Schedule reminders with interactive dials, monitor live countdowns, and stay ahead of deadlines.</p>
+          <h2>📌 Notice Board & Reminders</h2>
+          <p>Unified board of all active reminders • Red stays on top if overdue • Green is trending within 30m • Prominent live timers</p>
         </div>
         <div class="tasks-header-actions">
           <div class="tasks-stats-pills">
-            ${overdueTasks.length ? `<span class="task-stat-badge overdue" title="Overdue tasks (>30m past due)">🚨 ${overdueTasks.length} Overdue</span>` : ''}
-            ${activeTasks.length ? `<span class="task-stat-badge active" title="Ongoing important tasks (0-30m window)">⚡ ${activeTasks.length} Due Now</span>` : ''}
-            <span class="task-stat-badge upcoming" title="Scheduled future reminders">⏳ ${upcomingTasks.length} Upcoming</span>
-            ${completedTasks.length ? `<span class="task-stat-badge completed" title="Finished tasks">✓ ${completedTasks.length} Done</span>` : ''}
+            ${overdueTasks.length ? `<span class="task-stat-badge overdue" title="Overdue reminders (past deadline)">🚨 ${overdueTasks.length} Overdue</span>` : ''}
+            ${trendingTasks.length ? `<span class="task-stat-badge active" title="Trending / In Focus (< 30 minutes away)">⚡ ${trendingTasks.length} Trending</span>` : ''}
+            <span class="task-stat-badge upcoming" title="Scheduled reminders (> 30 minutes away)">⏳ ${upcomingTasks.length} Scheduled</span>
+            ${completedTasks.length ? `<span class="task-stat-badge completed" title="Finished reminders">✓ ${completedTasks.length} Done</span>` : ''}
           </div>
-          <button type="button" class="primary tasks-add-btn" id="openAddTaskBtn">+ Add Task</button>
+          <button type="button" class="primary tasks-add-btn" id="openAddTaskBtn">+ Add Reminder</button>
         </div>
       </div>
 
-      <!-- Hero Deck: Important Upcoming Tasks (Top 3 Focus) -->
-      <div class="tasks-hero-container">
-        <div class="tasks-hero-header">
-          <div class="hero-title-wrap">
-            <span class="hero-sparkle">🎯</span>
-            <strong>Important Upcoming Tasks</strong>
-            <small class="muted">Top 3 priority focus</small>
-          </div>
-          ${overdueTasks.length ? `<span class="hero-alert-tag">⚠️ ${overdueTasks.length} task${overdueTasks.length === 1 ? '' : 's'} require immediate action</span>` : ''}
-        </div>
-        ${heroTasks.length ? `
-          <div class="tasks-hero-deck">
-            ${heroTasks.map((t, idx) => renderHeroCard(t, idx)).join('')}
-          </div>
-        ` : `
-          <div class="tasks-hero-empty">
-            <span class="hero-empty-icon">☕</span>
-            <p><strong>All caught up!</strong> No upcoming tasks or overdue reminders right now.</p>
-          </div>
-        `}
-      </div>
-
-      ${totalActive === 0 && completedTasks.length === 0 ? `
-        <div class="empty tasks-empty-state">
-          <h3>No tasks or reminders yet</h3>
-          <p>Never miss a deadline or follow-up. Add a reminder using our interactive clock & scroll dials.</p>
+      <!-- Single Long List: All active reminders stacked in strict priority order -->
+      ${activeNotices.length === 0 ? `
+        <div class="empty notice-board-empty">
+          <div class="empty-pin-icon">📌</div>
+          <h3>Notice Board is Clear</h3>
+          <p>No pending reminders or deadlines right now. Click <strong>+ Add Reminder</strong> on top to pin a new notice.</p>
         </div>
       ` : `
-        <!-- Section 1: Overdue Tasks (Light Red) -->
-        ${overdueTasks.length ? `
-          <div class="tasks-section section-overdue">
-            <div class="tasks-section-head">
-              <div class="section-head-title">
-                <h3>🚨 Overdue Tasks <span class="badge-count count-overdue">${overdueTasks.length}</span></h3>
-                <small>Past 30-minute grace window • Click "Mark Complete" once finished</small>
-              </div>
-            </div>
-            <div class="tasks-grid">
-              ${overdueTasks.map(t => renderCard(t, 'overdue')).join('')}
-            </div>
-          </div>
-        ` : ''}
-
-        <!-- Section 2: Current Important Tasks (30m Active Window - Green) -->
-        ${activeTasks.length ? `
-          <div class="tasks-section section-active">
-            <div class="tasks-section-head">
-              <div class="section-head-title">
-                <h3>⚡ Current Important Tasks <span class="badge-count count-active">${activeTasks.length}</span></h3>
-                <small>Active window • Ongoing for 30 minutes from reminder before becoming overdue</small>
-              </div>
-            </div>
-            <div class="tasks-grid">
-              ${activeTasks.map(t => renderCard(t, 'active')).join('')}
-            </div>
-          </div>
-        ` : ''}
-
-        <!-- Section 3: Upcoming Scheduled Reminders (Graded Neutral Cards) -->
-        ${upcomingTasks.length ? `
-          <div class="tasks-section section-upcoming">
-            <div class="tasks-section-head">
-              <div class="section-head-title">
-                <h3>⏳ Scheduled Reminders <span class="badge-count count-upcoming">${upcomingTasks.length}</span></h3>
-                <small>Graded in order from closest to farthest deadline</small>
-              </div>
-            </div>
-            <div class="tasks-grid">
-              ${upcomingTasks.map((t, idx) => renderCard(t, 'upcoming', idx + 1)).join('')}
-            </div>
-          </div>
-        ` : ''}
-
-        <!-- Section 4: Completed Tasks Archive -->
-        ${completedTasks.length ? `
-          <details class="tasks-completed-accordion">
-            <summary class="tasks-completed-summary">
-              <span>✓ Completed Tasks (${completedTasks.length})</span>
-              <button type="button" class="clear-completed-link" id="clearAllCompletedTasksBtn" title="Clear all finished tasks">Clear completed</button>
-            </summary>
-            <div class="tasks-grid completed-grid" style="margin-top:12px">
-              ${completedTasks.map(t => renderCard(t, 'completed')).join('')}
-            </div>
-          </details>
-        ` : ''}
+        <div class="notice-board-list">
+          ${activeNotices.map((t, idx) => renderNoticeCard(t, idx + 1)).join('')}
+        </div>
       `}
+
+      <!-- Collapsible Completed Archive -->
+      ${completedTasks.length ? `
+        <details class="tasks-completed-accordion">
+          <summary class="tasks-completed-summary">
+            <span>✓ Completed Reminders (${completedTasks.length})</span>
+            <button type="button" class="clear-completed-link" id="clearAllCompletedTasksBtn" title="Clear all finished reminders">Clear completed</button>
+          </summary>
+          <div class="notice-board-completed-list" style="margin-top:12px">
+            ${completedTasks.map(t => renderNoticeCompletedCard(t)).join('')}
+          </div>
+        </details>
+      ` : ''}
     </div>
   `;
 }
@@ -1380,13 +1346,13 @@ function openTaskModal(editTaskId = null) {
   let selectedMinute = initialMinute;
   let selectedPeriod = initialPeriod;
 
-  const modalTitle = existing ? 'Edit Task Reminder' : 'Program Task & Reminder';
+  const modalTitle = existing ? 'Edit Notice Reminder' : 'Pin Reminder to Notice Board';
 
   const modalHtml = `
     <form id="taskProgramForm" onsubmit="return false;">
       <div class="field">
-        <label for="taskTitleInput">Task Name *</label>
-        <input type="text" id="taskTitleInput" value="${esc(existing?.title || '')}" placeholder="e.g. Follow up on wedding welcome board proof" required autofocus>
+        <label for="taskTitleInput">Reminder Title *</label>
+        <input type="text" id="taskTitleInput" value="${esc(existing?.title || '')}" placeholder="e.g. Meeting with Purple Tree, Send print proof, Follow up on payment" required autofocus>
       </div>
 
       <div class="field">
@@ -1504,7 +1470,7 @@ function openTaskModal(editTaskId = null) {
   const footerHtml = `
     <div class="modal-actions">
       <button type="button" class="small-btn" id="cancelTaskModalBtn">Cancel</button>
-      <button type="button" class="small-btn green" id="saveTaskModalBtn">${existing ? 'Update Task' : 'Program Task'}</button>
+      <button type="button" class="small-btn green" id="saveTaskModalBtn">${existing ? 'Update Reminder' : 'Pin to Notice Board'}</button>
     </div>
   `;
 
@@ -1659,7 +1625,7 @@ function openTaskModal(editTaskId = null) {
       const title = titleInp ? titleInp.value.trim() : '';
       if (!title) {
         if (titleInp) titleInp.focus();
-        toast('Please enter a task name');
+        toast('Please enter a reminder title');
         return;
       }
       const descInp = $('#taskDescInput');
@@ -2030,7 +1996,7 @@ function bindMain() {
         task.completedAt = new Date().toISOString();
         save();
         render();
-        toast('✓ Task marked complete! 🎉');
+        toast('✓ Reminder marked complete! 🎉');
       } else if (action === 'snooze') {
         const snoozeDate = new Date(Date.now() + 15 * 60 * 1000);
         task.remindAt = snoozeDate.toISOString();
@@ -2039,19 +2005,24 @@ function bindMain() {
         const mins = snoozeDate.getMinutes();
         task.dueTime = `${String(h24).padStart(2, '0')}:${String(mins).padStart(2, '0')}`;
         task.notified = false;
+        task.overdueNotified = false;
+        task.lastTrendingNotifyAt = null;
         save();
         render();
-        toast('⏰ Task snoozed for 15 minutes');
+        toast('⏰ Reminder snoozed for 15 minutes');
       } else if (action === 'edit') {
         openTaskModal(tid);
       } else if (action === 'delete') {
         data.tasks = (data.tasks || []).filter(t => t.id !== tid);
         save();
         render();
-        toast('Task deleted');
+        toast('Reminder deleted');
       } else if (action === 'restore') {
         task.completed = false;
         task.completedAt = null;
+        save();
+        render();
+        toast('Reminder restored to Notice Board');
         save();
         render();
         toast('Task restored to active');
