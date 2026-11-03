@@ -7,7 +7,7 @@ const num = v => Number(String(v ?? '').replace(/[^0-9.-]/g, '')) || 0;
 const esc = v => String(v ?? '').replace(/[&<>"']/g, c => ({ '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;' }[c]));
 const cleanSerial = v => { if (v == null || v === '') return ''; const s = String(v).trim(), n = Number(s); if (!isNaN(n) && Number.isInteger(n) && !s.includes('e') && !s.includes('E')) return String(n); return s.replace(/\.0+$/, ''); };
 const fmtDate = d => { if (!d) return '—'; const x = new Date(d + 'T00:00:00'); return Number.isNaN(x.getTime()) ? d : x.toLocaleDateString('en-IN', { day:'numeric', month:'short', year:'numeric' }); };
-const defaults = { clients:[], groups:[], projectGroups:[], items:[], invoices:[], receipts:[], members:[], chatMessages:[], pending:[], settings:{ seller:{ name:'GIR — Get It Rendered', address:'', email:'', phone:'', taxId:'', bankDetails:'', bankAccounts:[], activeBankAccountId:'', logoData:'' }, url:'https://isdxybpeagloikchhsbp.supabase.co', key:'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImlzZHh5YnBlYWdsb2lrY2hoc2JwIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTI1NzkzMjcsImV4cCI6MjEwODE1NTMyN30.ll1YG9uyrTqmLzE90miCk-O1Ab5VkBPfqrCPDDUc5u8', workspaceId:'17f39873-e10f-4bdf-93ee-1f92b3e25251', displayName:'Samuel', localPartner:'Mezrid', avatarData:'', partnerAvatarData:'', catType:'orange', zoom:100, theme:'light' } };
+const defaults = { clients:[], groups:[], projectGroups:[], items:[], invoices:[], receipts:[], members:[], chatMessages:[], tasks:[], pending:[], settings:{ seller:{ name:'GIR — Get It Rendered', address:'', email:'', phone:'', taxId:'', bankDetails:'', bankAccounts:[], activeBankAccountId:'', logoData:'' }, url:'https://isdxybpeagloikchhsbp.supabase.co', key:'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImlzZHh5YnBlYWdsb2lrY2hoc2JwIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTI1NzkzMjcsImV4cCI6MjEwODE1NTMyN30.ll1YG9uyrTqmLzE90miCk-O1Ab5VkBPfqrCPDDUc5u8', workspaceId:'17f39873-e10f-4bdf-93ee-1f92b3e25251', displayName:'Samuel', localPartner:'Mezrid', avatarData:'', partnerAvatarData:'', catType:'orange', zoom:100, theme:'light' } };
 const GIR_WORKSPACE_ID='17f39873-e10f-4bdf-93ee-1f92b3e25251';
 
 function getEffectiveTheme(themeSetting) {
@@ -368,7 +368,7 @@ function render() {
   const live = !!(clientApi && session && data.settings.workspaceId);
   $$('#tabs button').forEach(b => b.classList.toggle('active', b.dataset.tab === tab));
   renderClients();
-  main.innerHTML = ({ dashboard:renderDashboard, sheet:renderSheet, tracker:renderTracker, chat:renderChat, groups:renderGroups, revenue:renderRevenue, payments:renderPayments, invoices:renderInvoices, 'client-details':renderClientDetails, settings:renderSettings, 'import-preview':renderImportPreview }[tab] || renderSheet)();
+  main.innerHTML = ({ dashboard:renderDashboard, sheet:renderSheet, tracker:renderTracker, tasks:renderTasks, chat:renderChat, groups:renderGroups, revenue:renderRevenue, payments:renderPayments, invoices:renderInvoices, 'client-details':renderClientDetails, settings:renderSettings, 'import-preview':renderImportPreview }[tab] || renderSheet)();
   if(sameTab && main) main.scrollTop = preservedMainScroll;
   if(sameSheet && sheetScroll){const grid=main.querySelector('.sheet-viewport');if(grid){grid.scrollTop=sheetScroll.grid;grid.scrollLeft=sheetScroll.across;}}
   const indicator = $('#tabIndicator'), active = $(`#tabs button[data-tab="${tab}"]`);
@@ -376,9 +376,10 @@ function render() {
   if (lastRenderedTab && (lastRenderedTab !== tab || (tab === 'sheet' && lastRenderedClient !== activeClient))) {
     recordNav(lastRenderedTab, lastRenderedClient);
   }
-  if (lastRenderedTab !== tab) { const order = ['sheet','dashboard','tracker','chat','groups','revenue','payments','invoices','client-details','settings']; const direction = order.indexOf(tab) >= order.indexOf(lastRenderedTab) ? 'tab-next' : 'tab-prev'; $('#main').classList.remove('tab-next','tab-prev'); void $('#main').offsetWidth; $('#main').classList.add(direction); lastRenderedTab = tab; }
+  if (lastRenderedTab !== tab) { const order = ['sheet','dashboard','tracker','tasks','chat','groups','revenue','payments','invoices','client-details','settings']; const direction = order.indexOf(tab) >= order.indexOf(lastRenderedTab) ? 'tab-next' : 'tab-prev'; $('#main').classList.remove('tab-next','tab-prev'); void $('#main').offsetWidth; $('#main').classList.add(direction); lastRenderedTab = tab; }
   if(tab==='settings')showUpdateState(desktopUpdate);
   if(tab==='chat'){ unreadChatCount = 0; updateChatUnreadBadge(); initChatInteractions(); }
+  if(tab==='tasks'){ updateTasksDueBadge(); }
   lastRenderedClient=activeClient;bindMain();updateSyncUI();updateBackBtn();
 }
 function $$(s) { return [...document.querySelectorAll(s)]; }
@@ -960,6 +961,758 @@ function renderTracker() {
       </div>`:`<div class="empty"><h3>No clients match</h3><p>Try switching filter tabs or clearing your search query.</p></div>`}
     </div>`;
 }
+
+// -------------------------------------------------------------
+// Tasks & Reminders Manager
+// -------------------------------------------------------------
+
+function getTaskCategory(task) {
+  if (task.completed) return 'completed';
+  const now = Date.now();
+  const taskTime = new Date(task.remindAt).getTime();
+  const diff = now - taskTime;
+
+  if (diff < 0) {
+    return 'upcoming';
+  } else if (diff <= 30 * 60 * 1000) {
+    // Current ongoing important task (0-30m active window)
+    return 'active';
+  } else {
+    // Overdue (> 30m past scheduled reminder)
+    return 'overdue';
+  }
+}
+
+function formatTaskDateTime(remindAtStr) {
+  if (!remindAtStr) return '—';
+  const d = new Date(remindAtStr);
+  if (isNaN(d.getTime())) return remindAtStr;
+
+  const hours = d.getHours();
+  const mins = String(d.getMinutes()).padStart(2, '0');
+  const ampm = hours >= 12 ? 'PM' : 'AM';
+  const h12 = (hours % 12) || 12;
+  const timeStr = `${h12}:${mins} ${ampm}`;
+
+  const now = new Date();
+  const isToday = d.toDateString() === now.toDateString();
+  const tomorrow = new Date(now);
+  tomorrow.setDate(now.getDate() + 1);
+  const isTomorrow = d.toDateString() === tomorrow.toDateString();
+  const dayAfter = new Date(now);
+  dayAfter.setDate(now.getDate() + 2);
+  const isDayAfter = d.toDateString() === dayAfter.toDateString();
+
+  if (isToday) return `Today at ${timeStr}`;
+  if (isTomorrow) return `Tomorrow at ${timeStr}`;
+  if (isDayAfter) return `Day after tomorrow at ${timeStr}`;
+
+  const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+  const days = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+  return `${days[d.getDay()]}, ${d.getDate()} ${months[d.getMonth()]} at ${timeStr}`;
+}
+
+function formatTaskCountdown(remindAtStr) {
+  if (!remindAtStr) return '';
+  const now = Date.now();
+  const remindTime = new Date(remindAtStr).getTime();
+  const diff = remindTime - now;
+
+  if (diff > 0) {
+    // In future (Upcoming)
+    const totalSecs = Math.floor(diff / 1000);
+    const days = Math.floor(totalSecs / 86400);
+    const hours = Math.floor((totalSecs % 86400) / 3600);
+    const mins = Math.floor((totalSecs % 3600) / 60);
+    const secs = totalSecs % 60;
+
+    if (days > 0) return `⏳ in ${days}d ${hours}h ${mins}m`;
+    if (hours > 0) return `⏳ in ${hours}h ${mins}m ${secs}s`;
+    if (mins > 0) return `⏳ in ${mins}m ${secs}s`;
+    return `⏳ in ${secs}s`;
+  } else if (diff >= -30 * 60 * 1000) {
+    // Within 30 minute active window
+    const remainingMs = (30 * 60 * 1000) + diff;
+    const remainingMins = Math.floor(remainingMs / 60000);
+    const remainingSecs = Math.floor((remainingMs % 60000) / 1000);
+    return `⚡ Active (${remainingMins}m ${remainingSecs}s left)`;
+  } else {
+    // Overdue (> 30 minutes past reminder)
+    const overdueMs = -diff;
+    const overdueHours = Math.floor(overdueMs / 3600000);
+    const overdueMins = Math.floor((overdueMs % 3600000) / 60000);
+    if (overdueHours > 0) {
+      return `⚠️ Overdue by ${overdueHours}h ${overdueMins}m`;
+    }
+    return `⚠️ Overdue by ${overdueMins}m`;
+  }
+}
+
+function updateTasksDueBadge(count = null) {
+  const badge = $('#tasksDueCount');
+  if (!badge) return;
+  if (count === null) {
+    const now = Date.now();
+    count = (data.tasks || []).filter(t => !t.completed && new Date(t.remindAt).getTime() <= now).length;
+  }
+  if (count > 0) {
+    badge.textContent = count > 99 ? '99+' : count;
+    badge.style.display = 'inline-flex';
+  } else {
+    badge.style.display = 'none';
+  }
+}
+
+function checkTaskReminders() {
+  if (!data.tasks || !Array.isArray(data.tasks) || !data.tasks.length) return;
+  const now = Date.now();
+  let changed = false;
+  let dueCount = 0;
+
+  for (const t of data.tasks) {
+    if (t.completed) continue;
+    const taskTime = new Date(t.remindAt).getTime();
+    if (now >= taskTime) {
+      dueCount++;
+      if (!t.notified) {
+        t.notified = true;
+        changed = true;
+        const bodyText = t.description ? `${t.description} • Scheduled for ${formatTaskDateTime(t.remindAt)}` : `Scheduled for ${formatTaskDateTime(t.remindAt)}`;
+        smartNotify({
+          title: `⏰ Reminder: ${t.title}`,
+          body: bodyText,
+          icon: '⏰'
+        });
+      }
+    }
+  }
+
+  updateTasksDueBadge(dueCount);
+
+  if (changed) {
+    save();
+    if (tab === 'tasks') {
+      render();
+    }
+  }
+}
+
+function updateLiveTaskCountdowns() {
+  if (tab !== 'tasks') return;
+  const elements = $$('.task-countdown[data-remind-at]');
+  const now = Date.now();
+  let needsRerender = false;
+
+  elements.forEach(el => {
+    const remindAtStr = el.dataset.remindAt;
+    if (!remindAtStr) return;
+    const remindTime = new Date(remindAtStr).getTime();
+    const diff = now - remindTime;
+    const prevCat = el.dataset.category;
+    const currentCat = diff < 0 ? 'upcoming' : (diff <= 30 * 60 * 1000 ? 'active' : 'overdue');
+    if (prevCat && prevCat !== currentCat) {
+      needsRerender = true;
+    }
+    el.textContent = formatTaskCountdown(remindAtStr);
+  });
+
+  if (needsRerender) {
+    render();
+  }
+}
+
+function renderTasks() {
+  const allTasks = Array.isArray(data.tasks) ? data.tasks : [];
+  const now = Date.now();
+
+  const overdueTasks = [];
+  const activeTasks = [];
+  const upcomingTasks = [];
+  const completedTasks = [];
+
+  allTasks.forEach(t => {
+    if (t.completed) {
+      completedTasks.push(t);
+      return;
+    }
+    const cat = getTaskCategory(t);
+    if (cat === 'overdue') overdueTasks.push(t);
+    else if (cat === 'active') activeTasks.push(t);
+    else upcomingTasks.push(t);
+  });
+
+  // Graded sorting:
+  // Overdue: longest overdue first
+  overdueTasks.sort((a,b) => new Date(a.remindAt).getTime() - new Date(b.remindAt).getTime());
+  // Active: oldest first (closest to becoming overdue)
+  activeTasks.sort((a,b) => new Date(a.remindAt).getTime() - new Date(b.remindAt).getTime());
+  // Upcoming: closest to arrive first
+  upcomingTasks.sort((a,b) => new Date(a.remindAt).getTime() - new Date(b.remindAt).getTime());
+  // Completed: most recently completed first
+  completedTasks.sort((a,b) => new Date(b.completedAt || b.remindAt).getTime() - new Date(a.completedAt || a.remindAt).getTime());
+
+  // Hero container holds threshold of top 3 most urgent active items
+  const heroCandidates = [...overdueTasks, ...activeTasks, ...upcomingTasks];
+  const heroTasks = heroCandidates.slice(0, 3);
+
+  const renderHeroCard = (t, index) => {
+    const cat = getTaskCategory(t);
+    const isOverdue = cat === 'overdue';
+    const isActive = cat === 'active';
+    const badgeClass = isOverdue ? 'hero-badge-overdue' : isActive ? 'hero-badge-active' : 'hero-badge-upcoming';
+    const badgeText = isOverdue ? '🚨 OVERDUE' : isActive ? '⚡ DUE NOW' : `⏳ FOCUS #${index + 1}`;
+    const cdText = formatTaskCountdown(t.remindAt);
+    const dtText = formatTaskDateTime(t.remindAt);
+
+    return `
+      <div class="task-hero-card hero-${cat}" data-task-id="${t.id}">
+        <div class="hero-card-header">
+          <span class="hero-pill ${badgeClass}">${badgeText}</span>
+          <span class="task-countdown hero-countdown" data-remind-at="${t.remindAt}" data-category="${cat}">${cdText}</span>
+        </div>
+        <div class="hero-card-body">
+          <h4 class="hero-card-title">${esc(t.title)}</h4>
+          ${t.description ? `<p class="hero-card-desc">${esc(t.description)}</p>` : ''}
+          <div class="hero-card-date">📅 ${esc(dtText)}</div>
+        </div>
+        <div class="hero-card-actions">
+          <button type="button" class="small-btn green hero-btn-complete" data-task-action="complete" data-task-id="${t.id}">✓ Complete</button>
+          <button type="button" class="small-btn hero-btn-snooze" data-task-action="snooze" data-task-id="${t.id}" title="Snooze 15 minutes">⏰ +15m</button>
+          <button type="button" class="small-btn hero-btn-edit" data-task-action="edit" data-task-id="${t.id}" title="Edit task">✏️</button>
+        </div>
+      </div>
+    `;
+  };
+
+  const renderCard = (t, cat, rank = null) => {
+    const isOverdue = cat === 'overdue';
+    const isActive = cat === 'active';
+    const isUpcoming = cat === 'upcoming';
+    const isCompleted = cat === 'completed';
+    const cdText = formatTaskCountdown(t.remindAt);
+    const dtText = formatTaskDateTime(t.remindAt);
+
+    return `
+      <div class="task-card task-${cat}" data-task-id="${t.id}">
+        <div class="task-card-inner">
+          <div class="task-card-top-row">
+            <div class="task-pills-wrap">
+              ${rank !== null ? `<span class="task-rank-pill">#${rank}</span>` : ''}
+              ${isOverdue ? `<span class="task-badge-pill badge-overdue">🚨 OVERDUE</span>` : ''}
+              ${isActive ? `<span class="task-badge-pill badge-active">⚡ DUE NOW (30m window)</span>` : ''}
+              ${isCompleted ? `<span class="task-badge-pill badge-completed">✓ COMPLETED</span>` : ''}
+              <span class="task-date-badge">📅 ${esc(dtText)}</span>
+            </div>
+            ${!isCompleted ? `<span class="task-countdown task-cd-tag" data-remind-at="${t.remindAt}" data-category="${cat}">${cdText}</span>` : ''}
+          </div>
+          <div class="task-content">
+            <h3 class="task-title ${isCompleted ? 'is-completed' : ''}">${esc(t.title)}</h3>
+            ${t.description ? `<p class="task-desc">${esc(t.description)}</p>` : ''}
+          </div>
+        </div>
+        <div class="task-card-footer">
+          ${!isCompleted ? `
+            <div class="task-footer-left">
+              <button type="button" class="small-btn ${isOverdue ? 'danger' : 'green'} task-btn-complete" data-task-action="complete" data-task-id="${t.id}">
+                ✓ Mark Complete
+              </button>
+              <button type="button" class="small-btn task-btn-snooze" data-task-action="snooze" data-task-id="${t.id}" title="Snooze for 15 minutes">
+                ⏰ +15m
+              </button>
+            </div>
+            <div class="task-footer-right">
+              <button type="button" class="small-btn task-btn-edit" data-task-action="edit" data-task-id="${t.id}" title="Edit task details">✏️ Edit</button>
+              <button type="button" class="small-btn danger task-btn-delete" data-task-action="delete" data-task-id="${t.id}" title="Delete task">🗑️</button>
+            </div>
+          ` : `
+            <div class="task-footer-left">
+              <span class="completed-note">Completed ${t.completedAt ? formatTaskDateTime(t.completedAt) : ''}</span>
+            </div>
+            <div class="task-footer-right">
+              <button type="button" class="small-btn task-btn-restore" data-task-action="restore" data-task-id="${t.id}">↩ Restore</button>
+              <button type="button" class="small-btn danger task-btn-delete" data-task-action="delete" data-task-id="${t.id}" title="Delete task">🗑️</button>
+            </div>
+          `}
+        </div>
+      </div>
+    `;
+  };
+
+  const totalActive = overdueTasks.length + activeTasks.length + upcomingTasks.length;
+
+  return `
+    <div class="tasks-shell">
+      <div class="tasks-header">
+        <div class="tasks-title-block">
+          <h2>📋 Tasks & Reminders</h2>
+          <p>Schedule reminders with interactive dials, monitor live countdowns, and stay ahead of deadlines.</p>
+        </div>
+        <div class="tasks-header-actions">
+          <div class="tasks-stats-pills">
+            ${overdueTasks.length ? `<span class="task-stat-badge overdue" title="Overdue tasks (>30m past due)">🚨 ${overdueTasks.length} Overdue</span>` : ''}
+            ${activeTasks.length ? `<span class="task-stat-badge active" title="Ongoing important tasks (0-30m window)">⚡ ${activeTasks.length} Due Now</span>` : ''}
+            <span class="task-stat-badge upcoming" title="Scheduled future reminders">⏳ ${upcomingTasks.length} Upcoming</span>
+            ${completedTasks.length ? `<span class="task-stat-badge completed" title="Finished tasks">✓ ${completedTasks.length} Done</span>` : ''}
+          </div>
+          <button type="button" class="primary tasks-add-btn" id="openAddTaskBtn">+ Add Task</button>
+        </div>
+      </div>
+
+      <!-- Hero Deck: Important Upcoming Tasks (Top 3 Focus) -->
+      <div class="tasks-hero-container">
+        <div class="tasks-hero-header">
+          <div class="hero-title-wrap">
+            <span class="hero-sparkle">🎯</span>
+            <strong>Important Upcoming Tasks</strong>
+            <small class="muted">Top 3 priority focus</small>
+          </div>
+          ${overdueTasks.length ? `<span class="hero-alert-tag">⚠️ ${overdueTasks.length} task${overdueTasks.length === 1 ? '' : 's'} require immediate action</span>` : ''}
+        </div>
+        ${heroTasks.length ? `
+          <div class="tasks-hero-deck">
+            ${heroTasks.map((t, idx) => renderHeroCard(t, idx)).join('')}
+          </div>
+        ` : `
+          <div class="tasks-hero-empty">
+            <span class="hero-empty-icon">☕</span>
+            <p><strong>All caught up!</strong> No upcoming tasks or overdue reminders right now.</p>
+            <button type="button" class="small-btn green" id="openAddTaskHeroBtn">+ Program a Task</button>
+          </div>
+        `}
+      </div>
+
+      ${totalActive === 0 && completedTasks.length === 0 ? `
+        <div class="empty tasks-empty-state">
+          <h3>No tasks or reminders yet</h3>
+          <p>Never miss a deadline or follow-up. Add a reminder using our interactive clock & scroll dials.</p>
+          <button type="button" class="primary" id="openAddTaskEmptyBtn">+ Program Your First Task</button>
+        </div>
+      ` : `
+        <!-- Section 1: Overdue Tasks (Light Red) -->
+        ${overdueTasks.length ? `
+          <div class="tasks-section section-overdue">
+            <div class="tasks-section-head">
+              <div class="section-head-title">
+                <h3>🚨 Overdue Tasks <span class="badge-count count-overdue">${overdueTasks.length}</span></h3>
+                <small>Past 30-minute grace window • Click "Mark Complete" once finished</small>
+              </div>
+            </div>
+            <div class="tasks-grid">
+              ${overdueTasks.map(t => renderCard(t, 'overdue')).join('')}
+            </div>
+          </div>
+        ` : ''}
+
+        <!-- Section 2: Current Important Tasks (30m Active Window - Green) -->
+        ${activeTasks.length ? `
+          <div class="tasks-section section-active">
+            <div class="tasks-section-head">
+              <div class="section-head-title">
+                <h3>⚡ Current Important Tasks <span class="badge-count count-active">${activeTasks.length}</span></h3>
+                <small>Active window • Ongoing for 30 minutes from reminder before becoming overdue</small>
+              </div>
+            </div>
+            <div class="tasks-grid">
+              ${activeTasks.map(t => renderCard(t, 'active')).join('')}
+            </div>
+          </div>
+        ` : ''}
+
+        <!-- Section 3: Upcoming Scheduled Reminders (Graded Neutral Cards) -->
+        ${upcomingTasks.length ? `
+          <div class="tasks-section section-upcoming">
+            <div class="tasks-section-head">
+              <div class="section-head-title">
+                <h3>⏳ Scheduled Reminders <span class="badge-count count-upcoming">${upcomingTasks.length}</span></h3>
+                <small>Graded in order from closest to farthest deadline</small>
+              </div>
+            </div>
+            <div class="tasks-grid">
+              ${upcomingTasks.map((t, idx) => renderCard(t, 'upcoming', idx + 1)).join('')}
+            </div>
+          </div>
+        ` : ''}
+
+        <!-- Section 4: Completed Tasks Archive -->
+        ${completedTasks.length ? `
+          <details class="tasks-completed-accordion">
+            <summary class="tasks-completed-summary">
+              <span>✓ Completed Tasks (${completedTasks.length})</span>
+              <button type="button" class="clear-completed-link" id="clearAllCompletedTasksBtn" title="Clear all finished tasks">Clear completed</button>
+            </summary>
+            <div class="tasks-grid completed-grid" style="margin-top:12px">
+              ${completedTasks.map(t => renderCard(t, 'completed')).join('')}
+            </div>
+          </details>
+        ` : ''}
+      `}
+    </div>
+  `;
+}
+
+function openTaskModal(editTaskId = null) {
+  const existing = editTaskId ? (data.tasks || []).find(t => t.id === editTaskId) : null;
+
+  let initialDate = '';
+  let initialHour12 = 4;
+  let initialMinute = 0;
+  let initialPeriod = 'PM';
+
+  const now = new Date();
+  if (existing) {
+    initialDate = existing.dueDate;
+    if (existing.dueTime) {
+      const [h24, m] = existing.dueTime.split(':').map(Number);
+      initialHour12 = (h24 % 12) || 12;
+      initialMinute = isNaN(m) ? 0 : m;
+      initialPeriod = h24 >= 12 ? 'PM' : 'AM';
+    }
+  } else {
+    const rounded = new Date(now.getTime() + 60 * 60 * 1000);
+    rounded.setMinutes(0, 0, 0);
+    initialDate = rounded.toISOString().slice(0, 10);
+    const h24 = rounded.getHours();
+    initialHour12 = (h24 % 12) || 12;
+    initialMinute = 0;
+    initialPeriod = h24 >= 12 ? 'PM' : 'AM';
+  }
+
+  let selectedDate = initialDate;
+  let selectedHour12 = initialHour12;
+  let selectedMinute = initialMinute;
+  let selectedPeriod = initialPeriod;
+
+  const modalTitle = existing ? 'Edit Task Reminder' : 'Program Task & Reminder';
+
+  const modalHtml = `
+    <form id="taskProgramForm" onsubmit="return false;">
+      <div class="field">
+        <label for="taskTitleInput">Task Name *</label>
+        <input type="text" id="taskTitleInput" value="${esc(existing?.title || '')}" placeholder="e.g. Follow up on wedding welcome board proof" required autofocus>
+      </div>
+
+      <div class="field">
+        <label for="taskDescInput">Description / Notes (Optional)</label>
+        <textarea id="taskDescInput" rows="2" placeholder="Add relevant details, contact notes, or checklist...">${esc(existing?.description || '')}</textarea>
+      </div>
+
+      <div class="field">
+        <label>Reminder Date</label>
+        <div class="task-date-shortcuts" id="taskDateShortcuts">
+          <button type="button" class="date-chip" data-offset="0">📅 Today</button>
+          <button type="button" class="date-chip" data-offset="1">☀️ Tomorrow</button>
+          <button type="button" class="date-chip" data-offset="2">🌅 Day After Tomorrow</button>
+          <button type="button" class="date-chip" data-offset="3">🗓️ In 3 Days</button>
+          <button type="button" class="date-chip" data-offset="7">📆 Next Week</button>
+        </div>
+        <input type="date" id="taskDateInput" value="${selectedDate}" style="margin-top:8px">
+      </div>
+
+      <div class="field">
+        <label>Reminder Time (Artistic Dials & Clock)</label>
+        <div class="artistic-time-picker">
+          <!-- Left: SVG Analog Clock Face -->
+          <div class="clock-display-wrap">
+            <svg id="modalClockSvg" viewBox="0 0 150 150" class="analog-clock-face" title="Click clock face to adjust time">
+              <circle cx="75" cy="75" r="70" class="clock-bezel"/>
+              <circle cx="75" cy="75" r="66" class="clock-inner-dial"/>
+              <!-- Hour tick marks -->
+              ${Array.from({length: 12}).map((_, i) => {
+                const rad = i * 30 * Math.PI / 180;
+                const isMajor = i % 3 === 0;
+                const innerR = isMajor ? 54 : 58;
+                const outerR = 64;
+                const x1 = 75 + innerR * Math.sin(rad);
+                const y1 = 75 - innerR * Math.cos(rad);
+                const x2 = 75 + outerR * Math.sin(rad);
+                const y2 = 75 - outerR * Math.cos(rad);
+                return `<line x1="${x1.toFixed(1)}" y1="${y1.toFixed(1)}" x2="${x2.toFixed(1)}" y2="${y2.toFixed(1)}" class="clock-tick ${isMajor ? 'major' : ''}"/>`;
+              }).join('')}
+              <!-- Numerals for 12, 3, 6, 9 -->
+              <text x="75" y="26" class="clock-num" text-anchor="middle">12</text>
+              <text x="127" y="79" class="clock-num" text-anchor="middle">3</text>
+              <text x="75" y="133" class="clock-num" text-anchor="middle">6</text>
+              <text x="23" y="79" class="clock-num" text-anchor="middle">9</text>
+              <!-- Hands -->
+              <line id="modalClockHour" x1="75" y1="75" x2="75" y2="43" class="clock-hand-hour"/>
+              <line id="modalClockMinute" x1="75" y1="75" x2="75" y2="25" class="clock-hand-minute"/>
+              <circle cx="75" cy="75" r="5" class="clock-jewel-outer"/>
+              <circle cx="75" cy="75" r="2.5" class="clock-jewel-inner"/>
+            </svg>
+            <div class="clock-hint">Click clock face or scroll dials</div>
+          </div>
+
+          <!-- Right: Interactive Scroll Dials -->
+          <div class="dials-control-wrap">
+            <div class="digital-time-display">
+              <span id="digHours">04</span> : <span id="digMinutes">00</span> <span id="digPeriod">PM</span>
+            </div>
+
+            <div class="dials-row">
+              <!-- Hours Dial -->
+              <div class="dial-column" id="hoursDialCol">
+                <button type="button" class="dial-arrow-btn" id="hourUpBtn" title="Hour +1">▲</button>
+                <div class="dial-drum" id="hourDrum" title="Scroll wheel to adjust hour">
+                  <span class="drum-num prev" id="hourPrev">03</span>
+                  <span class="drum-num current" id="hourCurr">04</span>
+                  <span class="drum-num next" id="hourNext">05</span>
+                </div>
+                <button type="button" class="dial-arrow-btn" id="hourDownBtn" title="Hour -1">▼</button>
+                <span class="dial-label">HOURS</span>
+              </div>
+
+              <span class="dial-sep">:</span>
+
+              <!-- Minutes Dial -->
+              <div class="dial-column" id="minutesDialCol">
+                <button type="button" class="dial-arrow-btn" id="minuteUpBtn" title="Minute +1">▲</button>
+                <div class="dial-drum" id="minuteDrum" title="Scroll wheel to adjust minutes">
+                  <span class="drum-num prev" id="minutePrev">59</span>
+                  <span class="drum-num current" id="minuteCurr">00</span>
+                  <span class="drum-num next" id="minuteNext">01</span>
+                </div>
+                <button type="button" class="dial-arrow-btn" id="minuteDownBtn" title="Minute -1">▼</button>
+                <span class="dial-label">MINS</span>
+              </div>
+
+              <!-- Period Switch -->
+              <div class="dial-column period-col">
+                <div class="period-toggle-group">
+                  <button type="button" class="period-btn" id="periodAmBtn">AM</button>
+                  <button type="button" class="period-btn" id="periodPmBtn">PM</button>
+                </div>
+                <span class="dial-label">AM / PM</span>
+              </div>
+            </div>
+
+            <!-- Quick Minute Snaps -->
+            <div class="minute-snaps">
+              <span class="snap-label">Snap:</span>
+              <button type="button" class="snap-btn" data-snap="0">:00</button>
+              <button type="button" class="snap-btn" data-snap="15">:15</button>
+              <button type="button" class="snap-btn" data-snap="30">:30</button>
+              <button type="button" class="snap-btn" data-snap="45">:45</button>
+            </div>
+          </div>
+        </div>
+
+        <div class="reminder-schedule-preview" id="schedulePreviewText">
+          ⏰ Calculating schedule...
+        </div>
+      </div>
+    </form>
+  `;
+
+  const footerHtml = `
+    <div class="modal-actions">
+      <button type="button" class="small-btn" id="cancelTaskModalBtn">Cancel</button>
+      <button type="button" class="small-btn green" id="saveTaskModalBtn">${existing ? 'Update Task' : 'Program Task'}</button>
+    </div>
+  `;
+
+  modal(modalTitle, modalHtml, footerHtml, true);
+
+  const hourHand = $('#modalClockHour');
+  const minuteHand = $('#modalClockMinute');
+  const clockSvg = $('#modalClockSvg');
+  const dateInput = $('#taskDateInput');
+  const previewText = $('#schedulePreviewText');
+
+  const updateVisuals = () => {
+    const h24 = (selectedHour12 % 12) + (selectedPeriod === 'PM' ? 12 : 0);
+    const dueTime = `${String(h24).padStart(2, '0')}:${String(selectedMinute).padStart(2, '0')}`;
+    const dateStr = dateInput ? dateInput.value : selectedDate;
+
+    const digH = $('#digHours');
+    const digM = $('#digMinutes');
+    const digP = $('#digPeriod');
+    if (digH) digH.textContent = String(selectedHour12).padStart(2, '0');
+    if (digM) digM.textContent = String(selectedMinute).padStart(2, '0');
+    if (digP) digP.textContent = selectedPeriod;
+
+    const prevH = selectedHour12 === 1 ? 12 : selectedHour12 - 1;
+    const nextH = selectedHour12 === 12 ? 1 : selectedHour12 + 1;
+    const hPrevEl = $('#hourPrev');
+    const hCurrEl = $('#hourCurr');
+    const hNextEl = $('#hourNext');
+    if (hPrevEl) hPrevEl.textContent = String(prevH).padStart(2, '0');
+    if (hCurrEl) hCurrEl.textContent = String(selectedHour12).padStart(2, '0');
+    if (hNextEl) hNextEl.textContent = String(nextH).padStart(2, '0');
+
+    const prevM = selectedMinute === 0 ? 59 : selectedMinute - 1;
+    const nextM = selectedMinute === 59 ? 0 : selectedMinute + 1;
+    const mPrevEl = $('#minutePrev');
+    const mCurrEl = $('#minuteCurr');
+    const mNextEl = $('#minuteNext');
+    if (mPrevEl) mPrevEl.textContent = String(prevM).padStart(2, '0');
+    if (mCurrEl) mCurrEl.textContent = String(selectedMinute).padStart(2, '0');
+    if (mNextEl) mNextEl.textContent = String(nextM).padStart(2, '0');
+
+    const amBtn = $('#periodAmBtn');
+    const pmBtn = $('#periodPmBtn');
+    if (amBtn) amBtn.classList.toggle('active', selectedPeriod === 'AM');
+    if (pmBtn) pmBtn.classList.toggle('active', selectedPeriod === 'PM');
+
+    const hourAngle = ((selectedHour12 % 12) + selectedMinute / 60) * 30;
+    const minuteAngle = selectedMinute * 6;
+    if (hourHand) hourHand.setAttribute('transform', `rotate(${hourAngle.toFixed(1)} 75 75)`);
+    if (minuteHand) minuteHand.setAttribute('transform', `rotate(${minuteAngle.toFixed(1)} 75 75)`);
+
+    if (dateStr && previewText) {
+      const scheduledIso = `${dateStr}T${dueTime}:00`;
+      const dtFormatted = formatTaskDateTime(scheduledIso);
+      const cdFormatted = formatTaskCountdown(scheduledIso);
+      previewText.innerHTML = `⏰ <strong>Reminder scheduled for:</strong> ${esc(dtFormatted)} <span class="preview-cd">(${esc(cdFormatted)})</span>`;
+    }
+  };
+
+  const incHour = (delta = 1) => {
+    selectedHour12 += delta;
+    if (selectedHour12 > 12) selectedHour12 = 1;
+    if (selectedHour12 < 1) selectedHour12 = 12;
+    updateVisuals();
+  };
+
+  const incMinute = (delta = 1) => {
+    selectedMinute = (selectedMinute + delta + 60) % 60;
+    updateVisuals();
+  };
+
+  const hUp = $('#hourUpBtn'); if (hUp) hUp.onclick = () => incHour(1);
+  const hDown = $('#hourDownBtn'); if (hDown) hDown.onclick = () => incHour(-1);
+  const mUp = $('#minuteUpBtn'); if (mUp) mUp.onclick = () => incMinute(1);
+  const mDown = $('#minuteDownBtn'); if (mDown) mDown.onclick = () => incMinute(-1);
+
+  const hDrum = $('#hourDrum');
+  if (hDrum) {
+    hDrum.onwheel = e => {
+      e.preventDefault();
+      incHour(e.deltaY < 0 ? 1 : -1);
+    };
+  }
+
+  const mDrum = $('#minuteDrum');
+  if (mDrum) {
+    mDrum.onwheel = e => {
+      e.preventDefault();
+      incMinute(e.deltaY < 0 ? 1 : -1);
+    };
+  }
+
+  const amBtn = $('#periodAmBtn'); if (amBtn) amBtn.onclick = () => { selectedPeriod = 'AM'; updateVisuals(); };
+  const pmBtn = $('#periodPmBtn'); if (pmBtn) pmBtn.onclick = () => { selectedPeriod = 'PM'; updateVisuals(); };
+
+  $$('.snap-btn').forEach(b => {
+    b.onclick = () => {
+      selectedMinute = Number(b.dataset.snap);
+      updateVisuals();
+    };
+  });
+
+  $$('.date-chip').forEach(b => {
+    b.onclick = () => {
+      const offset = Number(b.dataset.offset || 0);
+      const targetDate = new Date();
+      targetDate.setDate(targetDate.getDate() + offset);
+      if (dateInput) dateInput.value = targetDate.toISOString().slice(0, 10);
+      $$('.date-chip').forEach(c => c.classList.remove('active'));
+      b.classList.add('active');
+      updateVisuals();
+    };
+  });
+
+  if (dateInput) {
+    dateInput.onchange = () => {
+      $$('.date-chip').forEach(c => c.classList.remove('active'));
+      updateVisuals();
+    };
+  }
+
+  if (clockSvg) {
+    clockSvg.onclick = e => {
+      const rect = clockSvg.getBoundingClientRect();
+      const x = e.clientX - rect.left - 75;
+      const y = e.clientY - rect.top - 75;
+      const dist = Math.sqrt(x * x + y * y);
+      if (dist > 70) return;
+
+      let rad = Math.atan2(y, x) + Math.PI / 2;
+      if (rad < 0) rad += 2 * Math.PI;
+      const fraction = rad / (2 * Math.PI);
+
+      if (dist < 46) {
+        let h = Math.round(fraction * 12);
+        if (h === 0) h = 12;
+        selectedHour12 = h;
+      } else {
+        let m = Math.round(fraction * 60) % 60;
+        selectedMinute = m;
+      }
+      updateVisuals();
+    };
+  }
+
+  const cancelBtn = $('#cancelTaskModalBtn'); if (cancelBtn) cancelBtn.onclick = closeModal;
+
+  const saveBtn = $('#saveTaskModalBtn');
+  if (saveBtn) {
+    saveBtn.onclick = () => {
+      const titleInp = $('#taskTitleInput');
+      const title = titleInp ? titleInp.value.trim() : '';
+      if (!title) {
+        if (titleInp) titleInp.focus();
+        toast('Please enter a task name');
+        return;
+      }
+      const descInp = $('#taskDescInput');
+      const description = descInp ? descInp.value.trim() : '';
+      const dueDate = dateInput ? dateInput.value : selectedDate;
+      if (!dueDate) {
+        toast('Please select a reminder date');
+        return;
+      }
+      const h24 = (selectedHour12 % 12) + (selectedPeriod === 'PM' ? 12 : 0);
+      const dueTime = `${String(h24).padStart(2, '0')}:${String(selectedMinute).padStart(2, '0')}`;
+      const remindAt = new Date(`${dueDate}T${dueTime}:00`).toISOString();
+
+      data.tasks = Array.isArray(data.tasks) ? data.tasks : [];
+
+      if (existing) {
+        existing.title = title;
+        existing.description = description;
+        existing.dueDate = dueDate;
+        existing.dueTime = dueTime;
+        existing.remindAt = remindAt;
+        if (new Date(remindAt).getTime() > Date.now()) {
+          existing.notified = false;
+        }
+        toast(`⏰ Reminder updated for ${formatTaskDateTime(remindAt)}!`);
+      } else {
+        const newTask = {
+          id: 'task_' + uid(),
+          title,
+          description,
+          dueDate,
+          dueTime,
+          remindAt,
+          createdAt: new Date().toISOString(),
+          completed: false,
+          completedAt: null,
+          notified: false,
+          snoozedUntil: null
+        };
+        data.tasks.push(newTask);
+        toast(`⏰ Reminder programmed for ${formatTaskDateTime(remindAt)}!`);
+      }
+
+      save();
+      closeModal();
+      render();
+    };
+  }
+
+  updateVisuals();
+}
 function renderGroups() {
   const groups=[...data.projectGroups.map(g=>({...g,kind:'project'})),...data.groups.map(g=>({...g,kind:'deal'}))];
   const cards=groups.map(g=>{
@@ -1250,6 +2003,69 @@ function bindMain() {
   }
   const addBankBtn=$('#addBankAccBtn');if(addBankBtn)addBankBtn.onclick=()=>bankAccountDialog();
   const addFirstBankBtn=$('#addFirstBankAccBtn');if(addFirstBankBtn)addFirstBankBtn.onclick=()=>bankAccountDialog();
+
+  // Tasks Tab action bindings
+  const openTaskBtn = $('#openAddTaskBtn');
+  if (openTaskBtn) openTaskBtn.onclick = () => openTaskModal();
+
+  const openTaskHeroBtn = $('#openAddTaskHeroBtn');
+  if (openTaskHeroBtn) openTaskHeroBtn.onclick = () => openTaskModal();
+
+  const openTaskEmptyBtn = $('#openAddTaskEmptyBtn');
+  if (openTaskEmptyBtn) openTaskEmptyBtn.onclick = () => openTaskModal();
+
+  const clearCompletedBtn = $('#clearAllCompletedTasksBtn');
+  if (clearCompletedBtn) {
+    clearCompletedBtn.onclick = e => {
+      e.stopPropagation();
+      data.tasks = (data.tasks || []).filter(t => !t.completed);
+      save();
+      render();
+      toast('Completed tasks cleared');
+    };
+  }
+
+  $$('[data-task-action]').forEach(btn => {
+    btn.onclick = e => {
+      e.stopPropagation();
+      const action = btn.dataset.taskAction;
+      const tid = btn.dataset.taskId;
+      const task = (data.tasks || []).find(t => t.id === tid);
+      if (!task) return;
+
+      if (action === 'complete') {
+        task.completed = true;
+        task.completedAt = new Date().toISOString();
+        save();
+        render();
+        toast('✓ Task marked complete! 🎉');
+      } else if (action === 'snooze') {
+        const snoozeDate = new Date(Date.now() + 15 * 60 * 1000);
+        task.remindAt = snoozeDate.toISOString();
+        task.dueDate = snoozeDate.toISOString().slice(0, 10);
+        const h24 = snoozeDate.getHours();
+        const mins = snoozeDate.getMinutes();
+        task.dueTime = `${String(h24).padStart(2, '0')}:${String(mins).padStart(2, '0')}`;
+        task.notified = false;
+        save();
+        render();
+        toast('⏰ Task snoozed for 15 minutes');
+      } else if (action === 'edit') {
+        openTaskModal(tid);
+      } else if (action === 'delete') {
+        data.tasks = (data.tasks || []).filter(t => t.id !== tid);
+        save();
+        render();
+        toast('Task deleted');
+      } else if (action === 'restore') {
+        task.completed = false;
+        task.completedAt = null;
+        save();
+        render();
+        toast('Task restored to active');
+      }
+    };
+  });
   $$('[data-edit-bank]').forEach(b=>b.onclick=e=>{e.stopPropagation();bankAccountDialog(b.dataset.editBank);});
   $$('[data-set-active-bank]').forEach(el=>{
     if(el.tagName==='INPUT')el.onchange=()=>setActiveBankAccount(el.dataset.setActiveBank);
@@ -6444,7 +7260,11 @@ $('#topSyncBtn')?.addEventListener('click',()=>{
   if(!session||!data.settings.workspaceId){tab='settings';render();toast('Connect or sign in to Supabase in Settings');return;}
   syncNow();
 });
-if(typeof setInterval!=='undefined')setInterval(updateSyncUI,15000);
+if(typeof setInterval!=='undefined'){
+  setInterval(updateSyncUI,15000);
+  setInterval(checkTaskReminders,5000);
+  setInterval(updateLiveTaskCountdowns,1000);
+}
 
 $('#newClientBtn').onclick=newClientDialog;
 $('#clientList').addEventListener('wheel',e=>{const strip=e.currentTarget;if(strip.scrollWidth<=strip.clientWidth||Math.abs(e.deltaY)<=Math.abs(e.deltaX))return;strip.scrollLeft+=e.deltaY;e.preventDefault();},{passive:false});
