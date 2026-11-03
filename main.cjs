@@ -1,4 +1,4 @@
-const { app, BrowserWindow, ipcMain, dialog, Notification, Tray, Menu, shell } = require('electron');
+const { app, BrowserWindow, ipcMain, dialog, Notification, Tray, Menu, shell, nativeTheme } = require('electron');
 const fs = require('node:fs');
 const path = require('node:path');
 const { spawn } = require('node:child_process');
@@ -373,6 +373,16 @@ ipcMain.handle('save-invoice-pdf', async (_e, { defaultFileName }) => {
   } catch (err) {
     console.error('Error saving invoice PDF:', err);
     return { success: false, error: err.message };
+  }
+});
+ipcMain.handle('set-theme', async (_e, theme) => {
+  try {
+    if (nativeTheme && ['light', 'dark', 'system'].includes(theme)) {
+      nativeTheme.themeSource = theme;
+    }
+    return nativeTheme ? (nativeTheme.shouldUseDarkColors ? 'dark' : 'light') : theme;
+  } catch {
+    return theme;
   }
 });
 ipcMain.handle('open-path', async (_e, filePath) => {

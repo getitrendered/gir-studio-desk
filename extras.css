@@ -307,10 +307,13 @@ table.sheet input.editing{user-select:text}
 .top-back-btn:hover:not(:disabled){background:#e8f4ec;border-color:#188c51;color:#106b3c}
 .top-back-btn:active:not(:disabled){transform:scale(0.98)}
 .top-back-btn:disabled{opacity:0.35;cursor:not-allowed;background:#f9fbf9;border-color:#e4eee6;color:#95a698}
-.tabs-header .tabs-sync{position:absolute;right:14px;display:flex;align-items:center;z-index:2}
+.tabs-header .tabs-sync{position:absolute;right:14px;display:flex;align-items:center;gap:8px;z-index:2}
 .top-sync-btn{display:inline-flex;align-items:center;gap:6px;padding:5px 11px;border-radius:20px;border:1px solid #cddcd1;background:#f6faf7;color:#244431;font-size:11px;font-weight:700;transition:all .15s ease}
 .top-sync-btn:hover{background:#e8f4ec;border-color:#188c51;color:#106b3c}
 .top-sync-btn:active{transform:scale(0.98)}
+.theme-toggle-btn{display:inline-flex;align-items:center;justify-content:center;width:28px;height:28px;padding:0;border-radius:50%;border:1px solid #cddcd1;background:#f6faf7;color:#244431;font-size:13px;cursor:pointer;transition:all .15s ease;user-select:none}
+.theme-toggle-btn:hover{background:#e8f4ec;border-color:#188c51;color:#106b3c;transform:scale(1.08)}
+.theme-toggle-btn:active{transform:scale(0.95)}
 .top-sync-btn.syncing{opacity:.8;pointer-events:none}
 .top-sync-btn.syncing .sync-icon{animation:spin 1s linear infinite}
 @keyframes spin{from{transform:rotate(0deg)}to{transform:rotate(360deg)}}
@@ -2485,4 +2488,990 @@ tr.row-fill-drag {
   height: 100%;
   background: #10b981;
   border-radius: 3px;
+}
+
+
+/* ==========================================================================
+   Comprehensive Dark Mode Theme (Obsidian & Emerald)
+   ========================================================================== */
+
+/* Variables override */
+[data-theme="dark"], body.dark-theme {
+  --ink: #f1f5f9;
+  --muted: #94a3b8;
+  --line: #223246;
+  --blue: #10b981;
+  --blue-soft: #064e3b;
+  --bg: #0b131b;
+  --white: #141e29;
+  color-scheme: dark;
+}
+
+[data-theme="dark"] body, body.dark-theme,
+[data-theme="dark"] #app, body.dark-theme #app {
+  background: #0b131b !important;
+  color: #f1f5f9 !important;
+}
+
+/* Custom scrollbars */
+[data-theme="dark"] * {
+  scrollbar-color: #2b3d52 #0e1722;
+}
+
+[data-theme="dark"] ::-webkit-scrollbar {
+  width: 7px;
+  height: 7px;
+}
+
+[data-theme="dark"] ::-webkit-scrollbar-track {
+  background: #0e1722;
+}
+
+[data-theme="dark"] ::-webkit-scrollbar-thumb {
+  background: #2b3d52;
+  border-radius: 4px;
+}
+
+[data-theme="dark"] ::-webkit-scrollbar-thumb:hover {
+  background: #3c5470;
+}
+
+/* Top Navigation Header & Tabs */
+[data-theme="dark"] .tabs-header {
+  background: #111a24 !important;
+  border-bottom: 1px solid #1f2e3e !important;
+}
+
+[data-theme="dark"] #app .tabs {
+  background: transparent !important;
+  border-bottom: 0 !important;
+}
+
+[data-theme="dark"] #app .tabs button {
+  background: #141e29 !important;
+  border-color: #202e3e !important;
+  color: #8fa0b5 !important;
+}
+
+[data-theme="dark"] #app .tabs button:hover {
+  background: #192534 !important;
+  color: #f1f5f9 !important;
+}
+
+[data-theme="dark"] #app .tabs button.active {
+  background: #133324 !important;
+  color: #4ade80 !important;
+  border-color: #1e5238 !important;
+  box-shadow: inset 0 -3px #10b981, 0 1px 4px rgba(0,0,0,0.4) !important;
+}
+
+[data-theme="dark"] .tab-indicator {
+  background: #10b981 !important;
+}
+
+[data-theme="dark"] .tab-badge {
+  background: #10b981 !important;
+  color: #ffffff !important;
+}
+
+[data-theme="dark"] .top-back-btn,
+[data-theme="dark"] .top-sync-btn,
+[data-theme="dark"] .theme-toggle-btn {
+  background: #162230 !important;
+  border: 1px solid #283c50 !important;
+  color: #cbd5e1 !important;
+}
+
+[data-theme="dark"] .top-back-btn:hover:not(:disabled),
+[data-theme="dark"] .top-sync-btn:hover,
+[data-theme="dark"] .theme-toggle-btn:hover {
+  background: #1d2e40 !important;
+  border-color: #10b981 !important;
+  color: #4ade80 !important;
+}
+
+[data-theme="dark"] .theme-toggle-btn {
+  color: #fbbf24 !important;
+}
+
+[data-theme="dark"] .theme-toggle-btn:hover {
+  color: #fde047 !important;
+}
+
+[data-theme="dark"] .top-back-btn:disabled {
+  background: #101822 !important;
+  border-color: #1a2736 !important;
+  color: #475569 !important;
+}
+
+/* Bottom Client Tabs */
+[data-theme="dark"] .client-tabs {
+  background: #0e151e !important;
+  border-top: 1px solid #1e2c3c !important;
+}
+
+[data-theme="dark"] .client-tab {
+  border-right: 1px solid #192634 !important;
+  color: #8fa0b5 !important;
+}
+
+[data-theme="dark"] .client-tab:hover {
+  background: #15202b !important;
+  color: #f1f5f9 !important;
+}
+
+[data-theme="dark"] .client-tab.active {
+  background: #162432 !important;
+  color: #4ade80 !important;
+  box-shadow: inset 0 -3px #10b981 !important;
+}
+
+[data-theme="dark"] .client-tab small {
+  color: #64748b !important;
+}
+
+[data-theme="dark"] .new-client-tab {
+  border-left: 1px solid #1e2c3c !important;
+  background: #122b1e !important;
+  color: #4ade80 !important;
+}
+
+[data-theme="dark"] .new-client-tab:hover {
+  background: #183827 !important;
+  color: #6ee7b7 !important;
+}
+
+/* Worksheet Shell & Toolbar */
+[data-theme="dark"] .sheet-shell {
+  background: #0b1118 !important;
+}
+
+[data-theme="dark"] .sheet-toolbar {
+  background: #111a24 !important;
+  border-bottom: 1px solid #1e2c3c !important;
+}
+
+[data-theme="dark"] .sheet-toolbar #workFilter,
+[data-theme="dark"] .sheet-toolbar #bulkStatus {
+  background: #162230 !important;
+  border: 1px solid #283c50 !important;
+  color: #f1f5f9 !important;
+}
+
+[data-theme="dark"] .sheet-toolbar #bulkStatus option,
+[data-theme="dark"] .sheet-toolbar #workFilter option {
+  background: #162230 !important;
+  color: #f1f5f9 !important;
+}
+
+[data-theme="dark"] .sheet-toolbar .small-btn {
+  background: #162230 !important;
+  border: 1px solid #283c50 !important;
+  color: #cbd5e1 !important;
+}
+
+[data-theme="dark"] .sheet-toolbar .small-btn:hover:not(:disabled) {
+  background: #1f3044 !important;
+  border-color: #3b5570 !important;
+  color: #ffffff !important;
+}
+
+[data-theme="dark"] .sheet-toolbar .small-btn:disabled {
+  opacity: 0.35 !important;
+}
+
+[data-theme="dark"] .sheet-toolbar .small-btn.green {
+  background: #123321 !important;
+  border-color: #1d5236 !important;
+  color: #4ade80 !important;
+}
+
+[data-theme="dark"] .sheet-toolbar .small-btn.green:hover:not(:disabled) {
+  background: #17422b !important;
+  border-color: #266b46 !important;
+  color: #86efac !important;
+}
+
+[data-theme="dark"] .sheet-toolbar .small-btn.purple {
+  background: #2a1942 !important;
+  border-color: #4a2b72 !important;
+  color: #c084fc !important;
+}
+
+[data-theme="dark"] .sheet-toolbar .small-btn.purple:hover:not(:disabled) {
+  background: #382159 !important;
+  border-color: #613996 !important;
+  color: #e9d5ff !important;
+}
+
+[data-theme="dark"] .sheet-toolbar .small-btn.blue {
+  background: #10b981 !important;
+  border-color: #10b981 !important;
+  color: #ffffff !important;
+}
+
+[data-theme="dark"] .sheet-toolbar .small-btn.blue:hover:not(:disabled) {
+  background: #059669 !important;
+}
+
+[data-theme="dark"] .sheet-toolbar .small-btn.danger {
+  background: #34181c !important;
+  border-color: #55272e !important;
+  color: #f87171 !important;
+}
+
+[data-theme="dark"] .sheet-toolbar .small-btn.danger:hover:not(:disabled) {
+  background: #441f25 !important;
+  color: #fca5a5 !important;
+}
+
+[data-theme="dark"] .sel-badge-active {
+  background: #123321 !important;
+  border-color: #1e5236 !important;
+  color: #4ade80 !important;
+}
+
+[data-theme="dark"] .sel-total-amount {
+  color: #34d399 !important;
+}
+
+/* Worksheet Grid */
+[data-theme="dark"] table.sheet {
+  background: #0b1118 !important;
+}
+
+[data-theme="dark"] .sheet th {
+  background: #141e2a !important;
+  color: #94a3b8 !important;
+  border-color: #213042 !important;
+}
+
+[data-theme="dark"] .sheet th:first-child,
+[data-theme="dark"] .sheet td:first-child {
+  background: #101822 !important;
+}
+
+[data-theme="dark"] .sheet td {
+  border-right: 1px solid #1c2836 !important;
+  border-bottom: 1px solid #1c2836 !important;
+  color: #e2e8f0 !important;
+}
+
+[data-theme="dark"] .sheet tr.has-entry td:not(.status-cell) {
+  border-bottom-color: #28394c !important;
+  border-right-color: #28394c !important;
+}
+
+[data-theme="dark"] .sheet tr.blank-row td {
+  background: #0d141c !important;
+  color: #526374 !important;
+}
+
+[data-theme="dark"] .sheet tr.blank-row:nth-child(even) td {
+  background: #0b1118 !important;
+}
+
+[data-theme="dark"] .sheet tr:hover td:not(.status-cell) {
+  background: #182432 !important;
+}
+
+[data-theme="dark"] .sheet tr.selected td:not(.status-cell),
+[data-theme="dark"] .sheet tr.selected td.row-selector {
+  background: #133a26 !important;
+  box-shadow: inset 0 1px #10b981, inset 0 -1px #10b981 !important;
+}
+
+[data-theme="dark"] .sheet tr.selected td.status-cell {
+  box-shadow: inset 0 1px #10b981, inset 0 -1px #10b981 !important;
+}
+
+[data-theme="dark"] .sheet input:not([type=checkbox]),
+[data-theme="dark"] .sheet select {
+  color: #f1f5f9 !important;
+  background: transparent !important;
+}
+
+[data-theme="dark"] .sheet input:focus,
+[data-theme="dark"] .sheet select:focus {
+  background: #162434 !important;
+  border-color: #10b981 !important;
+  box-shadow: 0 0 0 2px rgba(16, 185, 129, 0.25) !important;
+}
+
+[data-theme="dark"] .sheet input[type=checkbox] {
+  accent-color: #10b981 !important;
+}
+
+[data-theme="dark"] .sheet .assignee-button {
+  border-color: #2b3d50 !important;
+  background: #162230 !important;
+  color: #4ade80 !important;
+}
+
+[data-theme="dark"] .sheet .assignee-button:hover {
+  border-color: #10b981 !important;
+  background: #1d2e40 !important;
+}
+
+/* Status Cells */
+[data-theme="dark"] .sheet .status-cell.pending {
+  background: #17222e !important;
+  color: #94a3b8 !important;
+}
+
+[data-theme="dark"] .sheet .status-cell.working {
+  background: #102944 !important;
+  color: #60a5fa !important;
+}
+
+[data-theme="dark"] .sheet .status-cell.changes {
+  background: #281a3d !important;
+  color: #c084fc !important;
+}
+
+[data-theme="dark"] .sheet .status-cell.sent {
+  background: #33240d !important;
+  color: #fbbf24 !important;
+}
+
+[data-theme="dark"] .sheet .status-cell.paid {
+  background: #113421 !important;
+  color: #34d399 !important;
+}
+
+[data-theme="dark"] .sheet .status-cell.discarded {
+  background: #161c22 !important;
+  color: #64748b !important;
+}
+
+/* Group Headers */
+[data-theme="dark"] .sheet-group-header td {
+  background: #122c1e !important;
+  border-bottom: 1px solid #1c4b31 !important;
+}
+
+[data-theme="dark"] .sheet-group-header.deal td {
+  background: #2f220b !important;
+  border-bottom: 1px solid #523b13 !important;
+}
+
+[data-theme="dark"] .sheet-group-header button {
+  color: #4ade80 !important;
+}
+
+[data-theme="dark"] .sheet-group-header.deal button {
+  color: #fbbf24 !important;
+}
+
+[data-theme="dark"] .sheet-group-header .group-quick,
+[data-theme="dark"] .sheet-group-header .group-deal-btn,
+[data-theme="dark"] .sheet-group-header .group-date-btn,
+[data-theme="dark"] .sheet-group-header .group-add,
+[data-theme="dark"] .sheet-group-header .group-rename,
+[data-theme="dark"] .sheet-group-header .group-ungroup {
+  background: #173826 !important;
+  border: 1px solid #235438 !important;
+  color: #86efac !important;
+}
+
+[data-theme="dark"] .sheet-group-header.deal .group-quick,
+[data-theme="dark"] .sheet-group-header.deal .group-deal-btn,
+[data-theme="dark"] .sheet-group-header.deal .group-date-btn,
+[data-theme="dark"] .sheet-group-header.deal .group-rename,
+[data-theme="dark"] .sheet-group-header.deal .group-ungroup {
+  background: #3d2d0f !important;
+  border: 1px solid #5e4618 !important;
+  color: #fde047 !important;
+}
+
+[data-theme="dark"] .sheet-group-header button:hover {
+  background: rgba(255, 255, 255, 0.05) !important;
+}
+
+/* Cell Fill & Cut Pending */
+[data-theme="dark"] .cell-fill-handle {
+  background: #10b981 !important;
+  border-color: #0b1118 !important;
+}
+
+[data-theme="dark"] tr.row-fill-drag td {
+  background: #123321 !important;
+  outline-color: #10b981 !important;
+}
+
+[data-theme="dark"] .row-cut-pending {
+  background: #2b1f10 !important;
+  outline-color: #f59e0b !important;
+}
+
+[data-theme="dark"] .sheet tr.working-own td:not(.status-cell) {
+  background: #33240d !important;
+}
+
+[data-theme="dark"] .sheet tr.working-other td:not(.status-cell) {
+  background: #251838 !important;
+}
+
+/* Context Menus */
+[data-theme="dark"] .context-menu {
+  background: #16222f !important;
+  border: 1px solid #283d52 !important;
+  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.6) !important;
+}
+
+[data-theme="dark"] .context-menu button {
+  color: #e2e8f0 !important;
+}
+
+[data-theme="dark"] .context-menu button:hover:not(:disabled) {
+  background: #1f3246 !important;
+  color: #4ade80 !important;
+}
+
+[data-theme="dark"] .context-menu button:disabled {
+  opacity: 0.35 !important;
+}
+
+[data-theme="dark"] .context-menu button kbd {
+  background: #0f1720 !important;
+  border: 1px solid #243547 !important;
+  color: #94a3b8 !important;
+}
+
+[data-theme="dark"] .context-menu button .context-icon {
+  color: #94a3b8 !important;
+}
+
+[data-theme="dark"] .context-menu button:hover:not(:disabled) .context-icon {
+  color: #4ade80 !important;
+}
+
+[data-theme="dark"] .context-menu button.context-danger {
+  color: #f87171 !important;
+}
+
+[data-theme="dark"] .context-menu button.context-danger:hover:not(:disabled) {
+  background: #38191d !important;
+  color: #fca5a5 !important;
+}
+
+[data-theme="dark"] .context-divider {
+  background: #243547 !important;
+}
+
+/* Status Menu */
+[data-theme="dark"] .status-menu {
+  background: #16222f !important;
+  border: 1px solid #283d52 !important;
+  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.6) !important;
+}
+
+[data-theme="dark"] .status-option {
+  color: #e2e8f0 !important;
+}
+
+[data-theme="dark"] .status-option:hover {
+  background: #1f3246 !important;
+}
+
+/* Dashboard Cards & Panels */
+[data-theme="dark"] .card {
+  background: #131c26 !important;
+  border: 1px solid #202e3e !important;
+}
+
+[data-theme="dark"] .card-label {
+  color: #94a3b8 !important;
+}
+
+[data-theme="dark"] .card-value {
+  color: #f1f5f9 !important;
+}
+
+[data-theme="dark"] .card-foot {
+  color: #64748b !important;
+}
+
+[data-theme="dark"] .card.blue .card-value {
+  color: #38bdf8 !important;
+}
+
+[data-theme="dark"] .card.green .card-value {
+  color: #34d399 !important;
+}
+
+[data-theme="dark"] .card.amber .card-value {
+  color: #fbbf24 !important;
+}
+
+[data-theme="dark"] .panel {
+  background: #131c26 !important;
+  border: 1px solid #202e3e !important;
+  color: #e2e8f0 !important;
+}
+
+[data-theme="dark"] .panel h3 {
+  color: #f1f5f9 !important;
+}
+
+[data-theme="dark"] .panel.highlight-panel {
+  background: #131c26 !important;
+  border-color: #202e3e !important;
+  border-top: 3.5px solid #10b981 !important;
+}
+
+[data-theme="dark"] .panel.highlight-panel-amber {
+  background: #131c26 !important;
+  border-color: #202e3e !important;
+  border-top: 3.5px solid #f59e0b !important;
+}
+
+[data-theme="dark"] .panel-title-wrap h3 {
+  color: #f1f5f9 !important;
+}
+
+[data-theme="dark"] .panel-sub {
+  color: #94a3b8 !important;
+}
+
+[data-theme="dark"] .dashboard-insight-card {
+  background: #0f1620 !important;
+  border: 1px solid #1e2c3c !important;
+}
+
+[data-theme="dark"] .dashboard-insight-card:hover {
+  background: #162330 !important;
+  border-color: #293d52 !important;
+}
+
+[data-theme="dark"] .insight-statement-text {
+  color: #e2e8f0 !important;
+}
+
+[data-theme="dark"] .insight-statement-text strong {
+  color: #f8fafc !important;
+}
+
+[data-theme="dark"] .insight-statement-text .amount-highlight {
+  color: #34d399 !important;
+}
+
+[data-theme="dark"] .insight-progress-mini {
+  background: #1c2a38 !important;
+}
+
+[data-theme="dark"] .badge-pipeline {
+  background: #123422 !important;
+  border-color: #1f5538 !important;
+  color: #4ade80 !important;
+}
+
+[data-theme="dark"] .badge-pipeline-amber {
+  background: #36260e !important;
+  border-color: #553c16 !important;
+  color: #fbbf24 !important;
+}
+
+[data-theme="dark"] .metric-row,
+[data-theme="dark"] .list-row {
+  border-top: 1px solid #1d2a3a !important;
+}
+
+[data-theme="dark"] .list-row strong {
+  color: #f1f5f9 !important;
+}
+
+[data-theme="dark"] .list-row small {
+  color: #64748b !important;
+}
+
+[data-theme="dark"] .muted {
+  color: #8fa0b5 !important;
+}
+
+[data-theme="dark"] .pill {
+  background: #192534 !important;
+  color: #cbd5e1 !important;
+}
+
+[data-theme="dark"] .pill.pending {
+  background: #1c2734 !important;
+  color: #94a3b8 !important;
+}
+
+[data-theme="dark"] .pill.working {
+  background: #102a46 !important;
+  color: #60a5fa !important;
+}
+
+[data-theme="dark"] .pill.changes {
+  background: #291a3e !important;
+  color: #c084fc !important;
+}
+
+[data-theme="dark"] .pill.sent {
+  background: #33240e !important;
+  color: #fbbf24 !important;
+}
+
+[data-theme="dark"] .pill.paid {
+  background: #113421 !important;
+  color: #34d399 !important;
+}
+
+/* Work Tracker */
+[data-theme="dark"] .tracker-card {
+  background: #131c26 !important;
+  border: 1px solid #202e3e !important;
+}
+
+[data-theme="dark"] .tracker-card:hover {
+  border-color: #2d4258 !important;
+  background: #17222f !important;
+}
+
+[data-theme="dark"] .tracker-card.working {
+  background: #10202f !important;
+  border-left: 4px solid #38bdf8 !important;
+}
+
+[data-theme="dark"] .tracker-card.changes {
+  background: #1e1628 !important;
+  border-left: 4px solid #c084fc !important;
+}
+
+[data-theme="dark"] .tracker-card.pending {
+  background: #131c26 !important;
+  border-left: 4px solid #64748b !important;
+}
+
+[data-theme="dark"] .tracker-card.sent {
+  background: #261c0e !important;
+  border-left: 4px solid #fbbf24 !important;
+}
+
+[data-theme="dark"] .tracker-card-title strong {
+  color: #f1f5f9 !important;
+}
+
+[data-theme="dark"] .tracker-card-client {
+  color: #8fa0b5 !important;
+}
+
+[data-theme="dark"] .tracker-card-price strong {
+  color: #34d399 !important;
+}
+
+[data-theme="dark"] .tracker-card-price small {
+  color: #64748b !important;
+}
+
+[data-theme="dark"] .tracker-card-actions {
+  border-top: 1px solid #1e2c3c !important;
+}
+
+[data-theme="dark"] .tracker-status-select,
+[data-theme="dark"] .tracker-status-trigger {
+  background: #162230 !important;
+  border: 1px solid #283c50 !important;
+  color: #e2e8f0 !important;
+}
+
+[data-theme="dark"] .tracker-status-trigger.pending {
+  background: #1c2633 !important;
+  color: #94a3b8 !important;
+  border-color: #2c3c4e !important;
+}
+
+[data-theme="dark"] .tracker-status-trigger.working {
+  background: #102944 !important;
+  color: #60a5fa !important;
+  border-color: #1e4572 !important;
+}
+
+[data-theme="dark"] .tracker-status-trigger.changes {
+  background: #281a3d !important;
+  color: #c084fc !important;
+  border-color: #492a70 !important;
+}
+
+[data-theme="dark"] .tracker-status-trigger.sent {
+  background: #33240d !important;
+  color: #fbbf24 !important;
+  border-color: #553b16 !important;
+}
+
+[data-theme="dark"] .tracker-status-trigger.paid {
+  background: #113421 !important;
+  color: #34d399 !important;
+  border-color: #1f5436 !important;
+}
+
+[data-theme="dark"] .tracker-status-select option {
+  background: #162230 !important;
+  color: #f1f5f9 !important;
+}
+
+[data-theme="dark"] .tracker-accordion-header {
+  background: #131c26 !important;
+  border: 1px solid #202e3e !important;
+  color: #f1f5f9 !important;
+}
+
+[data-theme="dark"] .tracker-accordion-header:hover {
+  background: #17222f !important;
+}
+
+/* Groups Tab */
+[data-theme="dark"] .group-card {
+  background: #131c26 !important;
+  border-color: #202e3e !important;
+  color: #e2e8f0 !important;
+}
+
+[data-theme="dark"] .group-card:hover {
+  background: #17222f !important;
+  border-color: #2d4258 !important;
+}
+
+[data-theme="dark"] .group-card small {
+  color: #64748b !important;
+}
+
+[data-theme="dark"] .group-card-rename {
+  background: #162230 !important;
+  border-color: #283c50 !important;
+  color: #4ade80 !important;
+}
+
+[data-theme="dark"] .group-card-editor input {
+  background: #0c1219 !important;
+  border-color: #233446 !important;
+  color: #f1f5f9 !important;
+}
+
+/* Revenue & Payments */
+[data-theme="dark"] .revenue-month-accordion {
+  background: #131c26 !important;
+  border-color: #202e3e !important;
+}
+
+[data-theme="dark"] .revenue-month-accordion[open] {
+  border-color: #10b981 !important;
+}
+
+[data-theme="dark"] .revenue-month-summary {
+  background: #17222e !important;
+  color: #f1f5f9 !important;
+}
+
+[data-theme="dark"] .revenue-month-summary:hover {
+  background: #1c2b3a !important;
+}
+
+[data-theme="dark"] table.table-list,
+[data-theme="dark"] .preview-list {
+  background: #0d141c !important;
+  border-color: #1e2c3c !important;
+}
+
+[data-theme="dark"] .table-list th {
+  background: #141e2a !important;
+  color: #8fa0b5 !important;
+  border-color: #1e2c3c !important;
+}
+
+[data-theme="dark"] .table-list td {
+  border-color: #1a2634 !important;
+  color: #e2e8f0 !important;
+}
+
+[data-theme="dark"] .table-list tr:hover td {
+  background: #162330 !important;
+}
+
+/* Settings & Bank Accounts */
+[data-theme="dark"] .bank-account-card {
+  background: #131c26 !important;
+  border-color: #202e3e !important;
+  color: #e2e8f0 !important;
+}
+
+[data-theme="dark"] .bank-account-card.is-active {
+  background: #112d1f !important;
+  border-color: #10b981 !important;
+  box-shadow: 0 3px 12px rgba(16, 185, 129, 0.2) !important;
+}
+
+[data-theme="dark"] .bank-manager-title,
+[data-theme="dark"] .bank-account-label {
+  color: #f1f5f9 !important;
+}
+
+[data-theme="dark"] .bank-institution-name {
+  background: #1b2836 !important;
+  color: #8fa0b5 !important;
+}
+
+[data-theme="dark"] .bank-chip {
+  background: #0f1721 !important;
+  border-color: #223246 !important;
+}
+
+[data-theme="dark"] .bank-chip .chip-label {
+  color: #8fa0b5 !important;
+}
+
+[data-theme="dark"] .bank-chip .chip-val {
+  color: #f1f5f9 !important;
+}
+
+[data-theme="dark"] .bank-active-pill {
+  background: #143825 !important;
+  border-color: #1f593b !important;
+  color: #4ade80 !important;
+}
+
+[data-theme="dark"] .avatar-upload {
+  border-color: #233446 !important;
+  color: #8fa0b5 !important;
+}
+
+/* Modals & Forms */
+[data-theme="dark"] .modal-backdrop {
+  background: rgba(4, 8, 13, 0.78) !important;
+}
+
+[data-theme="dark"] .modal {
+  background: #141e29 !important;
+  border: 1px solid #253648 !important;
+  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.75) !important;
+  color: #e2e8f0 !important;
+}
+
+[data-theme="dark"] .modal h2,
+[data-theme="dark"] .modal h3 {
+  color: #f1f5f9 !important;
+}
+
+[data-theme="dark"] .modal p {
+  color: #94a3b8 !important;
+}
+
+[data-theme="dark"] .modal .close {
+  background: #1c2836 !important;
+  color: #94a3b8 !important;
+}
+
+[data-theme="dark"] .modal .close:hover {
+  background: #253648 !important;
+  color: #f1f5f9 !important;
+}
+
+[data-theme="dark"] .field label {
+  color: #94a3b8 !important;
+}
+
+[data-theme="dark"] .field input,
+[data-theme="dark"] .field textarea,
+[data-theme="dark"] .field select {
+  background: #0c1219 !important;
+  border: 1px solid #233446 !important;
+  color: #f1f5f9 !important;
+}
+
+[data-theme="dark"] .field select option {
+  background: #141e29 !important;
+  color: #f1f5f9 !important;
+}
+
+[data-theme="dark"] .field input:focus,
+[data-theme="dark"] .field textarea:focus,
+[data-theme="dark"] .field select:focus {
+  border-color: #10b981 !important;
+  box-shadow: 0 0 0 3px rgba(16, 185, 129, 0.2) !important;
+}
+
+[data-theme="dark"] .notice {
+  background: #10291c !important;
+  border: 1px solid #1a4d33 !important;
+  color: #86efac !important;
+}
+
+[data-theme="dark"] #rawMultiplesText {
+  background: #0c1219 !important;
+  color: #f1f5f9 !important;
+  border-color: #233446 !important;
+}
+
+[data-theme="dark"] .smart-update-preset-btn {
+  background: #162230 !important;
+  border: 1px solid #283c50 !important;
+  color: #e2e8f0 !important;
+}
+
+[data-theme="dark"] .smart-update-preset-btn.active {
+  background: #123321 !important;
+  border-color: #1e5236 !important;
+  color: #4ade80 !important;
+}
+
+/* Empty States */
+[data-theme="dark"] .empty {
+  border-color: #223246 !important;
+  background: #111a24 !important;
+  color: #8fa0b5 !important;
+}
+
+[data-theme="dark"] .empty h3 {
+  color: #f1f5f9 !important;
+}
+
+[data-theme="dark"] .empty p {
+  color: #94a3b8 !important;
+}
+
+/* Toast Notification */
+[data-theme="dark"] #toast {
+  background: #1c2b3a !important;
+  border: 1px solid #2d4359 !important;
+  color: #f1f5f9 !important;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.55) !important;
+}
+
+/* Access / Auth Screen */
+[data-theme="dark"] .access-wrap {
+  background: #0b131b !important;
+}
+
+[data-theme="dark"] .access-card {
+  background: #141e29 !important;
+  border: 1px solid #233446 !important;
+  color: #f1f5f9 !important;
+}
+
+[data-theme="dark"] .access-card h1 {
+  color: #f1f5f9 !important;
+}
+
+[data-theme="dark"] .access-card p {
+  color: #94a3b8 !important;
+}
+
+[data-theme="dark"] .access-card input {
+  background: #0c1219 !important;
+  border-color: #233446 !important;
+  color: #f1f5f9 !important;
+}
+
+[data-theme="dark"] .access-card input:focus {
+  border-color: #10b981 !important;
+}
+
+[data-theme="dark"] .access-primary {
+  background: #10b981 !important;
+}
+
+[data-theme="dark"] .access-primary:hover {
+  background: #059669 !important;
 }

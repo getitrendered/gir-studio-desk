@@ -21,6 +21,7 @@ contextBridge.exposeInMainWorld('desk', {
   },
   isFocused: () => ipcRenderer.invoke('is-window-focused'),
   getWindowState: () => ipcRenderer.invoke('get-window-state'),
+  setTheme: theme => ipcRenderer.invoke('set-theme', theme),
   quit: () => ipcRenderer.invoke('app-quit'),
   updates: {
     state: () => ipcRenderer.invoke('updates-state'),

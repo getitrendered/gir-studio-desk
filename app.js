@@ -7,8 +7,72 @@ const num = v => Number(String(v ?? '').replace(/[^0-9.-]/g, '')) || 0;
 const esc = v => String(v ?? '').replace(/[&<>"']/g, c => ({ '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;' }[c]));
 const cleanSerial = v => { if (v == null || v === '') return ''; const s = String(v).trim(), n = Number(s); if (!isNaN(n) && Number.isInteger(n) && !s.includes('e') && !s.includes('E')) return String(n); return s.replace(/\.0+$/, ''); };
 const fmtDate = d => { if (!d) return '—'; const x = new Date(d + 'T00:00:00'); return Number.isNaN(x.getTime()) ? d : x.toLocaleDateString('en-IN', { day:'numeric', month:'short', year:'numeric' }); };
-const defaults = { clients:[], groups:[], projectGroups:[], items:[], invoices:[], receipts:[], members:[], chatMessages:[], pending:[], settings:{ seller:{ name:'GIR — Get It Rendered', address:'', email:'', phone:'', taxId:'', bankDetails:'', bankAccounts:[], activeBankAccountId:'', logoData:'' }, url:'https://isdxybpeagloikchhsbp.supabase.co', key:'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImlzZHh5YnBlYWdsb2lrY2hoc2JwIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTI1NzkzMjcsImV4cCI6MjEwODE1NTMyN30.ll1YG9uyrTqmLzE90miCk-O1Ab5VkBPfqrCPDDUc5u8', workspaceId:'17f39873-e10f-4bdf-93ee-1f92b3e25251', displayName:'Samuel', localPartner:'Mezrid', avatarData:'', partnerAvatarData:'', catType:'orange', zoom:100 } };
+const defaults = { clients:[], groups:[], projectGroups:[], items:[], invoices:[], receipts:[], members:[], chatMessages:[], pending:[], settings:{ seller:{ name:'GIR — Get It Rendered', address:'', email:'', phone:'', taxId:'', bankDetails:'', bankAccounts:[], activeBankAccountId:'', logoData:'' }, url:'https://isdxybpeagloikchhsbp.supabase.co', key:'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImlzZHh5YnBlYWdsb2lrY2hoc2JwIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTI1NzkzMjcsImV4cCI6MjEwODE1NTMyN30.ll1YG9uyrTqmLzE90miCk-O1Ab5VkBPfqrCPDDUc5u8', workspaceId:'17f39873-e10f-4bdf-93ee-1f92b3e25251', displayName:'Samuel', localPartner:'Mezrid', avatarData:'', partnerAvatarData:'', catType:'orange', zoom:100, theme:'light' } };
 const GIR_WORKSPACE_ID='17f39873-e10f-4bdf-93ee-1f92b3e25251';
+
+function getEffectiveTheme(themeSetting) {
+  const pref = themeSetting || data?.settings?.theme || 'light';
+  if (pref === 'system') {
+    if (typeof window !== 'undefined' && window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) {
+      return 'dark';
+    }
+    return 'light';
+  }
+  return pref;
+}
+
+function applyTheme(theme) {
+  if (theme) {
+    if (!data.settings) data.settings = {};
+    data.settings.theme = theme;
+  }
+  const effective = getEffectiveTheme(data?.settings?.theme);
+  const isDark = effective === 'dark';
+  if (typeof document !== 'undefined') {
+    if (document.documentElement && typeof document.documentElement.setAttribute === 'function') {
+      document.documentElement.setAttribute('data-theme', effective);
+    }
+    if (document.body && document.body.classList && typeof document.body.classList.toggle === 'function') {
+      document.body.classList.toggle('dark-theme', isDark);
+    }
+    const toggleBtn = $('#themeToggleBtn');
+    if (toggleBtn) {
+      toggleBtn.innerHTML = isDark
+        ? '<span class="theme-icon">☀️</span>'
+        : '<span class="theme-icon">🌙</span>';
+      toggleBtn.title = isDark ? 'Switch to Light Mode' : 'Switch to Dark Mode';
+      if (typeof toggleBtn.setAttribute === 'function') {
+        toggleBtn.setAttribute('aria-label', toggleBtn.title);
+      }
+    }
+    const themeSelect = $('#settingsThemeSelect');
+    if (themeSelect && themeSelect.value !== (data.settings.theme || 'light')) {
+      themeSelect.value = data.settings.theme || 'light';
+    }
+  }
+  if (typeof window !== 'undefined' && window.desk?.setTheme) {
+    window.desk.setTheme(data?.settings?.theme || 'light').catch(() => {});
+  }
+  return effective;
+}
+
+function toggleTheme() {
+  const current = getEffectiveTheme(data?.settings?.theme);
+  const next = current === 'dark' ? 'light' : 'dark';
+  applyTheme(next);
+  save();
+  toast(next === 'dark' ? 'Dark mode enabled 🌙' : 'Light mode enabled ☀️');
+}
+
+if (typeof window !== 'undefined' && window.matchMedia) {
+  try {
+    window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => {
+      if (data?.settings?.theme === 'system') {
+        applyTheme('system');
+      }
+    });
+  } catch {}
+}
 let data = structuredClone(defaults), tab = 'sheet', lastRenderedTab = null, lastRenderedClient = null, activeClient = null, selected = new Set(), selectionAnchor = null, selectionCell = null, collapsedGroups = new Set(), blankRows = 60, highlightUser = null, filter = 'all', clientApi = null, session = null, channel = null, syncing = false, toastTimer, syncTimer, lastSyncTime = Date.now(), importPreview = null, previewClientIndex = 0, migrating = false;
 let isRowDragSelecting = false, hasRowDragged = false, justDraggedSelection = false, dragStartRowId = null, dragTargetRowId = null, dragStartCellKey = null, dragStartShift = false, dragStartWithCtrl = false, dragInitialSelected = null;
 let pendingChatAttachment = null, chatDraftText = '', activeStickerTab = 'stickers', stickerSearchQuery = '', lastPartnerOnlineTime = 0, unreadChatCount = 0, chatSyncTimer = null;
@@ -280,6 +344,7 @@ function financials() {
 function counts() { const all = data.items.filter(i=>i.status!=='discarded'), todayValue = today(); return { total:all.length, discarded:data.items.length-all.length, done:all.filter(i => ['sent','paid'].includes(i.status)).length, working:all.filter(i => ['working','changes'].includes(i.status)).length, pending:all.filter(i => i.status === 'pending').length, overdue:all.filter(i => i.dueDate && i.dueDate < todayValue && !['sent','paid'].includes(i.status)).length }; }
 function render() {
   closeStatusMenu();
+  applyTheme();
   const main=$('#main'), sameTab = lastRenderedTab === tab;
   const sameSheet = tab==='sheet' && sameTab && lastRenderedClient===activeClient;
   const preservedMainScroll = (sameTab && main) ? main.scrollTop : 0;
@@ -1115,7 +1180,7 @@ function renderBankAccountsList() {
 }
 
 function renderSettings() { const s=data.settings; return `<div class="section-top"><div><h2>Workspace settings</h2><p>Business details, people and Supabase connection.</p></div></div><div class="grid-2"><div class="panel"><h3>Business on invoices</h3><div class="field"><label>Business name</label><input data-setting="seller.name" value="${esc(s.seller.name)}"></div><div class="field"><label>Address</label><textarea data-setting="seller.address" rows="3">${esc(s.seller.address)}</textarea></div><div class="field-grid"><div class="field"><label>Email</label><input data-setting="seller.email" value="${esc(s.seller.email)}"></div><div class="field"><label>Phone</label><input data-setting="seller.phone" value="${esc(s.seller.phone)}"></div></div><div class="field"><label>Tax / GST ID (optional)</label><input data-setting="seller.taxId" value="${esc(s.seller.taxId)}"></div><label class="invoice-logo-upload"><span class="invoice-logo-preview">${s.seller.logoData?`<img src="${esc(s.seller.logoData)}" alt="Company logo">`:`<img src="assets/gir-icon.png" alt="Default MeowSheet logo">`}</span><span>Choose company logo</span><input id="companyLogoUpload" type="file" accept="image/png,image/jpeg,image/webp" hidden></label>${renderBankAccountsList()}<button class="small-btn blue" data-action="save-settings" style="margin-top:6px;">Save business details</button></div><div class="panel"><h3>Your team</h3><div style="display:flex;align-items:center;gap:12px;margin-bottom:14px"><label class="avatar-upload" style="margin:0;flex:1"><span class="avatar">${avatar(currentUserId(),s.displayName,'',s.avatarData)}</span><span>${s.avatarData?'Change your avatar image':'Choose your avatar image'}</span><input id="avatarUpload" type="file" accept="image/png,image/jpeg,image/webp" hidden></label>${s.avatarData?`<button type="button" class="small-btn quiet" id="removeAvatarBtn" title="Remove custom avatar">Remove</button>`:''}</div><div class="field"><label>Your display name</label><input data-setting="displayName" value="${esc(s.displayName)}"></div><div class="field"><label>Your Cat Spirit (for animated reactions & pings)</label><select data-setting="catType"><option value="orange" ${s.catType!=='black'?'selected':''}>🐱 Orange Cat (Playful & Energetic)</option><option value="black" ${s.catType==='black'?'selected':''}>🐈‍⬛ Midnight Black Cat (Cool & Mysterious)</option></select></div>${!session?`<div class="field" style="margin-top:14px;border-top:1px dashed #e2e8f0;padding-top:12px"><label>Second person (local view)</label><div style="display:flex;align-items:center;gap:12px;margin-bottom:8px"><label class="avatar-upload" style="margin:0;flex:1"><span class="avatar">${avatar('local-partner',s.localPartner,'',s.partnerAvatarData)}</span><span>${s.partnerAvatarData?'Change partner avatar':'Choose partner avatar image'}</span><input id="partnerAvatarUpload" type="file" accept="image/png,image/jpeg,image/webp" hidden></label>${s.partnerAvatarData?`<button type="button" class="small-btn quiet" id="removePartnerAvatarBtn" title="Remove partner avatar">Remove</button>`:''}</div><input data-setting="localPartner" value="${esc(s.localPartner)}" placeholder="Second person name"></div>`:''}<button class="small-btn blue" data-action="save-settings" style="margin-top:8px">Save names</button><div class="notice">When connected, both people sign in with their own Supabase accounts. Assignments, names, and avatar images update automatically on both PCs.</div></div></div>
-    <div class="panel"><h3>Supabase connection</h3><div class="field-grid"><div class="field"><label>Project URL</label><input id="supaUrl" placeholder="https://project.supabase.co" value="${esc(s.url)}"></div><div class="field"><label>Publishable / anon key</label><input id="supaKey" type="password" placeholder="Never enter a service-role key" value="${esc(s.key)}"></div></div><div class="actions"><button class="small-btn" data-action="save-connection">Save connection</button>${session?`<span class="pill paid">Signed in as ${esc(session.user.email)}</span><button class="small-btn" data-action="sign-out">Sign out</button>`:`<button class="small-btn blue" data-action="sign-in">Sign in</button><button class="small-btn" data-action="sign-up">Create account</button>`}</div>${session?`<div class="notice">Workspace code: <strong>${esc(s.joinCode||'Create or join a workspace')}</strong> · Share this code with your second team member. Workspace ID: ${esc(s.workspaceId||'none')}</div><div class="actions"><button class="small-btn blue" data-action="sync">Sync now</button></div>`:''}</div><div class="panel"><h3>Desktop app</h3><p class="muted">Changes sync automatically while connected.</p><div class="actions"><button class="small-btn" data-action="sync">Sync now</button><button class="small-btn blue" id="updateBtn">Check for updates</button><span id="appVersion"></span></div><p class="muted" id="updateStatus"></p></div>`; }
+    <div class="panel"><h3>Supabase connection</h3><div class="field-grid"><div class="field"><label>Project URL</label><input id="supaUrl" placeholder="https://project.supabase.co" value="${esc(s.url)}"></div><div class="field"><label>Publishable / anon key</label><input id="supaKey" type="password" placeholder="Never enter a service-role key" value="${esc(s.key)}"></div></div><div class="actions"><button class="small-btn" data-action="save-connection">Save connection</button>${session?`<span class="pill paid">Signed in as ${esc(session.user.email)}</span><button class="small-btn" data-action="sign-out">Sign out</button>`:`<button class="small-btn blue" data-action="sign-in">Sign in</button><button class="small-btn" data-action="sign-up">Create account</button>`}</div>${session?`<div class="notice">Workspace code: <strong>${esc(s.joinCode||'Create or join a workspace')}</strong> · Share this code with your second team member. Workspace ID: ${esc(s.workspaceId||'none')}</div><div class="actions"><button class="small-btn blue" data-action="sync">Sync now</button></div>`:''}</div><div class="panel"><h3>Desktop app</h3><div class="field" style="margin-bottom:12px"><label>Appearance / Theme</label><select data-setting="theme" id="settingsThemeSelect"><option value="light" ${(s.theme||'light')==='light'?'selected':''}>☀️ Light Mode</option><option value="dark" ${(s.theme||'light')==='dark'?'selected':''}>🌙 Dark Mode</option><option value="system" ${(s.theme||'light')==='system'?'selected':''}>💻 System Default (Match OS)</option></select></div><p class="muted">Changes sync automatically while connected.</p><div class="actions"><button class="small-btn" data-action="sync">Sync now</button><button class="small-btn blue" id="updateBtn">Check for updates</button><span id="appVersion"></span></div><p class="muted" id="updateStatus"></p></div>`; }
 
 function positionContextMenu(menu, clientX, clientY) {
   $('#contextMenu')?.remove();
@@ -1137,6 +1202,8 @@ function positionContextMenu(menu, clientX, clientY) {
 function bindMain() {
   $$('[data-action]').forEach(b=>b.onclick=()=>actions(b.dataset.action));
   const backBtn=$('#topBackBtn');if(backBtn)backBtn.onclick=goBack;
+  const themeToggle=$('#themeToggleBtn');if(themeToggle)themeToggle.onclick=toggleTheme;
+  const themeSelect=$('#settingsThemeSelect');if(themeSelect)themeSelect.onchange=e=>{applyTheme(e.target.value);save();};
   $$('[data-toggle-tracker-client]').forEach(el=>{
     el.onclick=e=>{
       e.stopPropagation();
@@ -6405,6 +6472,11 @@ document.addEventListener('keydown',e=>{
     e.preventDefault();
     data.settings.zoom=Math.max(70,Math.min(150,data.settings.zoom+(e.key==='-'?-10:10)));
     save();render();return;
+  }
+  if((e.ctrlKey||e.metaKey)&&e.shiftKey&&(e.key==='D'||e.key==='d')){
+    e.preventDefault();
+    toggleTheme();
+    return;
   }
   if(e.key==='Escape'){
     closeStatusMenu();closeModal();
