@@ -12,8 +12,8 @@ const renderSheetMatch = appCode.match(/function renderSheet\(\)[\s\S]*?\n\}/);
 assert(renderSheetMatch, 'renderSheet function must exist');
 const sheetHtml = renderSheetMatch[0];
 
-assert(!sheetHtml.includes('data-action="undo"'), 'Undo button should be removed from toolbar to prevent overflow');
-assert(!sheetHtml.includes('data-action="redo"'), 'Redo button should be removed from toolbar to prevent overflow');
+assert(!sheetHtml.includes('>Undo</'), 'Undo button must not have text label "Undo"');
+assert(!sheetHtml.includes('>Redo</'), 'Redo button must not have text label "Redo"');
 assert(sheetHtml.includes('data-action="smart-update"'), 'Toolbar must include Smart Update button');
 assert(appCode.includes("if(action==='smart-update')return smartUpdateDialog();"), 'actions() must route smart-update');
 assert(appCode.includes('contextSmartUpdate'), 'Context menu must include Smart Update option');

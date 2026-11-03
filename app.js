@@ -3094,12 +3094,14 @@ function materializeBlankRow(field) {
   if(key==='quotedTotal')item.manualTotal=true;
   if(key==='rate'||key==='quantity')item.quotedTotal=num(item.quantity)*num(item.rate);
   mutate('items',item);
-  const client = data.clients.find(c => c.id === activeClient);
-  logActivity('add', `Added row: "${item.service || 'Row'}" in ${client?.name || 'client'}`, {
-    item: JSON.parse(JSON.stringify(item)),
-    clientId: activeClient,
-    clientName: client?.name || ''
-  });
+  const client = data.clients?.find(c => c.id === activeClient);
+  if (typeof logActivity === 'function') {
+    logActivity('add', `Added row: "${item.service || 'Row'}" in ${client?.name || 'client'}`, {
+      item: JSON.parse(JSON.stringify(item)),
+      clientId: activeClient,
+      clientName: client?.name || ''
+    });
+  }
 }
 function pasteBlankGrid(event,field) {
   const raw=event.clipboardData.getData('text/plain');if(!raw)return;event.preventDefault();
@@ -3113,8 +3115,8 @@ function pasteBlankGrid(event,field) {
     if(!line.split('\t').some((_,index)=>columns[start+index]==='quotedTotal'))item.quotedTotal=num(item.quantity)*num(item.rate);
     data.items.push(item);added.push(item);if(item.status==='paid'){recordPaidItems([{...item,status:'pending'}]);item.paidAt=today();item.paidAtTs=new Date().toISOString();}if(num(item.advanceAmount)>0&&item.status!=='paid'){createReceipt(item.clientId,num(item.advanceAmount),`Advance · ${item.service}`,'advance',item.id);item.advanceReceivedAt=today();}enqueue('items',item.id);
   }
-  const client = data.clients.find(c => c.id === activeClient);
-  if (added.length) {
+  const client = data.clients?.find(c => c.id === activeClient);
+  if (added.length && typeof logActivity === 'function') {
     logActivity('paste', `Pasted ${added.length} row${added.length === 1 ? '' : 's'} via grid into ${client?.name || 'client'}`, {
       items: added.map(i => JSON.parse(JSON.stringify(i))),
       clientId: activeClient,
@@ -3135,17 +3137,19 @@ function editCell(id, key, value, skipRender = false) {
     i[key]=value;
     if(key==='quantity'||key==='rate') { i.manualTotal=false; i.quotedTotal=num(i.quantity)*num(i.rate); }
     if(key==='quotedTotal')i.manualTotal=true;
-    const client = data.clients.find(c => c.id === i.clientId);
-    logActivity('update', `Updated ${key} on "${i.service || 'Row'}" (${prevVal ?? 'empty'} → ${value}) in ${client?.name || 'client'}`, {
-      itemId: id,
-      field: key,
-      previousValue: prevVal,
-      newValue: value,
-      previousItem: prevItem,
-      item: JSON.parse(JSON.stringify(i)),
-      clientId: i.clientId,
-      clientName: client?.name || ''
-    });
+    const client = data.clients?.find(c => c.id === i.clientId);
+    if (typeof logActivity === 'function') {
+      logActivity('update', `Updated ${key} on "${i.service || 'Row'}" (${prevVal ?? 'empty'} → ${value}) in ${client?.name || 'client'}`, {
+        itemId: id,
+        field: key,
+        previousValue: prevVal,
+        newValue: value,
+        previousItem: prevItem,
+        item: JSON.parse(JSON.stringify(i)),
+        clientId: i.clientId,
+        clientName: client?.name || ''
+      });
+    }
   }
   if(skipRender) {
     i.updatedAt = new Date().toISOString();
@@ -3359,12 +3363,14 @@ function deleteSelectedRows(idsToDelete = null) {
     if (!rowClipboard.sourceRowIds.length) rowClipboard.mode = 'copy';
   }
 
-  const client = data.clients.find(c => c.id === activeClient);
-  logActivity('delete', count === 1 ? `Deleted row: "${deletedItems[0]?.service || 'Row'}" in ${client?.name || 'client'}` : `Deleted ${count} rows in ${client?.name || 'client'}`, {
-    items: deletedItems,
-    clientId: activeClient,
-    clientName: client?.name || ''
-  });
+  const client = data.clients?.find(c => c.id === activeClient);
+  if (typeof logActivity === 'function') {
+    logActivity('delete', count === 1 ? `Deleted row: "${deletedItems[0]?.service || 'Row'}" in ${client?.name || 'client'}` : `Deleted ${count} rows in ${client?.name || 'client'}`, {
+      items: deletedItems,
+      clientId: activeClient,
+      clientName: client?.name || ''
+    });
+  }
 
   consolidateAllReceipts();
   save();
@@ -3455,20 +3461,22 @@ function pasteCopiedRows(targetId=null,targetBlankOrder=null) {
     toast(copiedItems.length===1?'Row pasted (Ctrl+V)':`${copiedItems.length} rows pasted`);
   }
 
-  const client = data.clients.find(c => c.id === activeClient);
-  if (addedItems.length) {
-    logActivity('paste', `Pasted ${addedItems.length} new row${addedItems.length === 1 ? '' : 's'} (${addedItems.map(i => i.service || 'Row').join(', ')}) in ${client?.name || 'client'}`, {
-      items: addedItems.map(i => JSON.parse(JSON.stringify(i))),
-      clientId: activeClient,
-      clientName: client?.name || ''
-    });
-  } else if (modifiedItems.length) {
-    logActivity('paste', `Pasted over ${modifiedItems.length} row${modifiedItems.length === 1 ? '' : 's'} in ${client?.name || 'client'}`, {
-      items: modifiedItems.map(i => JSON.parse(JSON.stringify(i))),
-      previousItems,
-      clientId: activeClient,
-      clientName: client?.name || ''
-    });
+  const client = data.clients?.find(c => c.id === activeClient);
+  if (typeof logActivity === 'function') {
+    if (addedItems.length) {
+      logActivity('paste', `Pasted ${addedItems.length} new row${addedItems.length === 1 ? '' : 's'} (${addedItems.map(i => i.service || 'Row').join(', ')}) in ${client?.name || 'client'}`, {
+        items: addedItems.map(i => JSON.parse(JSON.stringify(i))),
+        clientId: activeClient,
+        clientName: client?.name || ''
+      });
+    } else if (modifiedItems.length) {
+      logActivity('paste', `Pasted over ${modifiedItems.length} row${modifiedItems.length === 1 ? '' : 's'} in ${client?.name || 'client'}`, {
+        items: modifiedItems.map(i => JSON.parse(JSON.stringify(i))),
+        previousItems,
+        clientId: activeClient,
+        clientName: client?.name || ''
+      });
+    }
   }
 
   consolidateAllReceipts();
@@ -3979,12 +3987,14 @@ Passage Decor (night render)"></textarea>
         addedItems.push(item);
       });
 
-      const client = data.clients.find(c => c.id === activeClient);
-      logActivity('add', `Added ${addedItems.length} row${addedItems.length === 1 ? '' : 's'} via Add Multiples in ${client?.name || 'client'}`, {
-        items: addedItems.map(i => JSON.parse(JSON.stringify(i))),
-        clientId: activeClient,
-        clientName: client?.name || ''
-      });
+      const client = data.clients?.find(c => c.id === activeClient);
+      if (typeof logActivity === 'function') {
+        logActivity('add', `Added ${addedItems.length} row${addedItems.length === 1 ? '' : 's'} via Add Multiples in ${client?.name || 'client'}`, {
+          items: addedItems.map(i => JSON.parse(JSON.stringify(i))),
+          clientId: activeClient,
+          clientName: client?.name || ''
+        });
+      }
 
       save();
       scheduleSync();
@@ -4357,13 +4367,15 @@ function smartUpdateDialog() {
         enqueue('items', i.id);
       });
 
-      const client = data.clients.find(c => c.id === activeClient);
-      logActivity('smart-update', `Smart updated ${currentMatchedItems.length} row${currentMatchedItems.length === 1 ? '' : 's'} in ${client?.name || 'client'} (keyword: "${currentKeyword || 'all'}")`, {
-        items: currentMatchedItems.map(i => JSON.parse(JSON.stringify(i))),
-        previousItems,
-        clientId: activeClient,
-        clientName: client?.name || ''
-      });
+      const client = data.clients?.find(c => c.id === activeClient);
+      if (typeof logActivity === 'function') {
+        logActivity('smart-update', `Smart updated ${currentMatchedItems.length} row${currentMatchedItems.length === 1 ? '' : 's'} in ${client?.name || 'client'} (keyword: "${currentKeyword || 'all'}")`, {
+          items: currentMatchedItems.map(i => JSON.parse(JSON.stringify(i))),
+          previousItems,
+          clientId: activeClient,
+          clientName: client?.name || ''
+        });
+      }
 
       save();
       scheduleSync();
@@ -4676,13 +4688,15 @@ function bulkSetStatus(next,idsOverride=null,context=null,customPaidDate=null) {
     for(const gid of affectedDealIds) syncDealReceipt(gid, stamp);
     for(const pid of affectedProjectIds) syncProjectReceipt(pid, stamp);
   }
-  const client = data.clients.find(c => c.id === (items[0]?.clientId || activeClient));
-  logActivity('status', `Changed status to "${next}" on ${items.length} row${items.length===1?'':'s'} in ${client?.name || 'client'}`, {
-    items: items.map(i => JSON.parse(JSON.stringify(i))),
-    previousItems,
-    clientId: items[0]?.clientId,
-    clientName: client?.name || ''
-  });
+  const client = data.clients?.find(c => c.id === (items[0]?.clientId || activeClient));
+  if (typeof logActivity === 'function') {
+    logActivity('status', `Changed status to "${next}" on ${items.length} row${items.length===1?'':'s'} in ${client?.name || 'client'}`, {
+      items: items.map(i => JSON.parse(JSON.stringify(i))),
+      previousItems,
+      clientId: items[0]?.clientId,
+      clientName: client?.name || ''
+    });
+  }
   selected.clear();save();scheduleSync();render();toast(`${items.length} row${items.length===1?'':'s'} updated`);
 }
 
