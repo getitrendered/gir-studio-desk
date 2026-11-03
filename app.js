@@ -7,7 +7,7 @@ const num = v => Number(String(v ?? '').replace(/[^0-9.-]/g, '')) || 0;
 const esc = v => String(v ?? '').replace(/[&<>"']/g, c => ({ '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;' }[c]));
 const cleanSerial = v => { if (v == null || v === '') return ''; const s = String(v).trim(), n = Number(s); if (!isNaN(n) && Number.isInteger(n) && !s.includes('e') && !s.includes('E')) return String(n); return s.replace(/\.0+$/, ''); };
 const fmtDate = d => { if (!d) return '—'; const x = new Date(d + 'T00:00:00'); return Number.isNaN(x.getTime()) ? d : x.toLocaleDateString('en-IN', { day:'numeric', month:'short', year:'numeric' }); };
-const defaults = { clients:[], groups:[], projectGroups:[], items:[], invoices:[], receipts:[], members:[], chatMessages:[], tasks:[], deletedTaskIds:[], pending:[], settings:{ seller:{ name:'GIR — Get It Rendered', address:'', email:'', phone:'', taxId:'', bankDetails:'', bankAccounts:[], activeBankAccountId:'', logoData:'' }, url:'https://isdxybpeagloikchhsbp.supabase.co', key:'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImlzZHh5YnBlYWdsb2lrY2hoc2JwIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTI1NzkzMjcsImV4cCI6MjEwODE1NTMyN30.ll1YG9uyrTqmLzE90miCk-O1Ab5VkBPfqrCPDDUc5u8', workspaceId:'17f39873-e10f-4bdf-93ee-1f92b3e25251', displayName:'Samuel', localPartner:'Mezrid', avatarData:'', partnerAvatarData:'', catType:'orange', zoom:100, theme:'light' } };
+const defaults = { clients:[], groups:[], projectGroups:[], items:[], invoices:[], receipts:[], members:[], chatMessages:[], tasks:[], deletedTaskIds:[], activityLog:[], pending:[], settings:{ seller:{ name:'GIR — Get It Rendered', address:'', email:'', phone:'', taxId:'', bankDetails:'', bankAccounts:[], activeBankAccountId:'', logoData:'' }, url:'https://isdxybpeagloikchhsbp.supabase.co', key:'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImlzZHh5YnBlYWdsb2lrY2hoc2JwIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTI1NzkzMjcsImV4cCI6MjEwODE1NTMyN30.ll1YG9uyrTqmLzE90miCk-O1Ab5VkBPfqrCPDDUc5u8', workspaceId:'17f39873-e10f-4bdf-93ee-1f92b3e25251', displayName:'Samuel', localPartner:'Mezrid', avatarData:'', partnerAvatarData:'', catType:'orange', zoom:100, theme:'light' } };
 const GIR_WORKSPACE_ID='17f39873-e10f-4bdf-93ee-1f92b3e25251';
 
 function getEffectiveTheme(themeSetting) {
@@ -729,7 +729,7 @@ function renderSheet() {
       ${value('remarks',i.remarks||'')}</tr>`;
   }
   if(filter==='all')rows+=Array.from({length:blankRows},(_,n)=>blankRowHtml(all.length+n)).join('');
-  return `<div class="sheet-shell"><div class="sheet-toolbar"><div class="actions"><button class="small-btn green" data-action="add-multiples" title="Add multiple rows from formatted WhatsApp/text">➕ Add Multiples</button><button class="small-btn purple" data-action="smart-update" title="Find words and bulk update rate or status across rows">⚡ Smart Update</button><button class="small-btn blue" data-action="assign" ${selected.size?'':'disabled'}>● Start work</button><button class="small-btn" data-action="complete" ${selected.size?'':'disabled'}>✓ Mark sent</button><button class="small-btn" data-action="invoice" ${selected.size?'':'disabled'}>▣ Create invoice</button><button class="small-btn" data-action="share-chat" ${selected.size?'':'disabled'} title="Share selected row(s) in Team Chat">💬 Share in chat</button><button class="small-btn danger" data-action="delete" title="Delete selected row(s) (Del)" ${selected.size?'':'disabled'}>🗑 Delete row</button><button class="small-btn" data-action="group" ${selected.size>1?'':'disabled'}>Group deal</button><button class="small-btn" data-action="project-group" ${selected.size?'':'disabled'}>Group project</button><select id="bulkStatus" aria-label="Set selected rows status" ${selected.size?'':'disabled'}><option value="">Set status…</option>${['pending','working','changes','sent','paid','discarded'].map(s=>`<option value="${s}">${s[0].toUpperCase()+s.slice(1)}</option>`).join('')}<option value="paid-date">Paid on date…</option></select><select id="workFilter" aria-label="Filter work">${['all','pending','working','changes','sent','paid','discarded'].map(s=>`<option value="${s}" ${filter===s?'selected':''}>${s==='all'?'All work':s[0].toUpperCase()+s.slice(1)}</option>`).join('')}</select><span class="hint" id="selectedCount">${selectionLabelHtml()}</span></div></div>
+  return `<div class="sheet-shell"><div class="sheet-toolbar"><div class="actions"><button type="button" class="small-btn icon-btn" data-action="undo" title="Undo (Ctrl+Z)" ${undoStack.length?'':'disabled'} aria-label="Undo"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7v6h6"/><path d="M21 17a9 9 0 0 0-9-9 9 9 0 0 0-6 2.3L3 13"/></svg></button><button type="button" class="small-btn icon-btn" data-action="redo" title="Redo (Ctrl+Y)" ${redoStack.length?'':'disabled'} aria-label="Redo"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round"><path d="M21 7v6h-6"/><path d="M3 17a9 9 0 0 1 9-9 9 9 0 0 1 6 2.3L21 13"/></svg></button><button class="small-btn green" data-action="add-multiples" title="Add multiple rows from formatted WhatsApp/text">➕ Add Multiples</button><button class="small-btn purple" data-action="smart-update" title="Find words and bulk update rate or status across rows">⚡ Smart Update</button><button class="small-btn blue" data-action="assign" ${selected.size?'':'disabled'}>● Start work</button><button class="small-btn" data-action="complete" ${selected.size?'':'disabled'}>✓ Mark sent</button><button class="small-btn" data-action="invoice" ${selected.size?'':'disabled'}>▣ Create invoice</button><button class="small-btn" data-action="share-chat" ${selected.size?'':'disabled'} title="Share selected row(s) in Team Chat">💬 Share in chat</button><button class="small-btn danger" data-action="delete" title="Delete selected row(s) (Del)" ${selected.size?'':'disabled'}>🗑 Delete row</button><button class="small-btn" data-action="group" ${selected.size>1?'':'disabled'}>Group deal</button><button class="small-btn" data-action="project-group" ${selected.size?'':'disabled'}>Group project</button><select id="bulkStatus" aria-label="Set selected rows status" ${selected.size?'':'disabled'}><option value="">Set status…</option>${['pending','working','changes','sent','paid','discarded'].map(s=>`<option value="${s}">${s[0].toUpperCase()+s.slice(1)}</option>`).join('')}<option value="paid-date">Paid on date…</option></select><select id="workFilter" aria-label="Filter work">${['all','pending','working','changes','sent','paid','discarded'].map(s=>`<option value="${s}" ${filter===s?'selected':''}>${s==='all'?'All work':s[0].toUpperCase()+s.slice(1)}</option>`).join('')}</select><span class="hint" id="selectedCount">${selectionLabelHtml()}</span></div></div>
     <div class="sheet-viewport"><table class="sheet"><thead><tr><th class="row-selector"><input type="checkbox" id="selectAll" aria-label="Select visible rows"></th><th>SR</th><th>DATE</th><th>SERVICE PROVIDED</th><th>QTY</th><th>RATE</th><th>TOTAL</th><th>STATUS</th><th>ADVANCE</th><th>ASSIGNED</th><th>REMARKS</th></tr></thead><tbody>${rows}</tbody></table></div></div>`;
 }
 
@@ -2067,7 +2067,233 @@ function renderBankAccountsList() {
   </div>`;
 }
 
-function renderSettings() { const s=data.settings; return `<div class="section-top"><div><h2>Workspace settings</h2><p>Business details, people and Supabase connection.</p></div></div><div class="grid-2"><div class="panel"><h3>Business on invoices</h3><div class="field"><label>Business name</label><input data-setting="seller.name" value="${esc(s.seller.name)}"></div><div class="field"><label>Address</label><textarea data-setting="seller.address" rows="3">${esc(s.seller.address)}</textarea></div><div class="field-grid"><div class="field"><label>Email</label><input data-setting="seller.email" value="${esc(s.seller.email)}"></div><div class="field"><label>Phone</label><input data-setting="seller.phone" value="${esc(s.seller.phone)}"></div></div><div class="field"><label>Tax / GST ID (optional)</label><input data-setting="seller.taxId" value="${esc(s.seller.taxId)}"></div><label class="invoice-logo-upload"><span class="invoice-logo-preview">${s.seller.logoData?`<img src="${esc(s.seller.logoData)}" alt="Company logo">`:`<img src="assets/gir-icon.png" alt="Default MeowSheet logo">`}</span><span>Choose company logo</span><input id="companyLogoUpload" type="file" accept="image/png,image/jpeg,image/webp" hidden></label>${renderBankAccountsList()}<button class="small-btn blue" data-action="save-settings" style="margin-top:6px;">Save business details</button></div><div class="panel"><h3>Your team</h3><div style="display:flex;align-items:center;gap:12px;margin-bottom:14px"><label class="avatar-upload" style="margin:0;flex:1"><span class="avatar">${avatar(currentUserId(),s.displayName,'',s.avatarData)}</span><span>${s.avatarData?'Change your avatar image':'Choose your avatar image'}</span><input id="avatarUpload" type="file" accept="image/png,image/jpeg,image/webp" hidden></label>${s.avatarData?`<button type="button" class="small-btn quiet" id="removeAvatarBtn" title="Remove custom avatar">Remove</button>`:''}</div><div class="field"><label>Your display name</label><input data-setting="displayName" value="${esc(s.displayName)}"></div><div class="field"><label>Your Cat Spirit (for animated reactions & pings)</label><select data-setting="catType"><option value="orange" ${s.catType!=='black'?'selected':''}>🐱 Orange Cat (Playful & Energetic)</option><option value="black" ${s.catType==='black'?'selected':''}>🐈‍⬛ Midnight Black Cat (Cool & Mysterious)</option></select></div>${!session?`<div class="field" style="margin-top:14px;border-top:1px dashed #e2e8f0;padding-top:12px"><label>Second person (local view)</label><div style="display:flex;align-items:center;gap:12px;margin-bottom:8px"><label class="avatar-upload" style="margin:0;flex:1"><span class="avatar">${avatar('local-partner',s.localPartner,'',s.partnerAvatarData)}</span><span>${s.partnerAvatarData?'Change partner avatar':'Choose partner avatar image'}</span><input id="partnerAvatarUpload" type="file" accept="image/png,image/jpeg,image/webp" hidden></label>${s.partnerAvatarData?`<button type="button" class="small-btn quiet" id="removePartnerAvatarBtn" title="Remove partner avatar">Remove</button>`:''}</div><input data-setting="localPartner" value="${esc(s.localPartner)}" placeholder="Second person name"></div>`:''}<button class="small-btn blue" data-action="save-settings" style="margin-top:8px">Save names</button><div class="notice">When connected, both people sign in with their own Supabase accounts. Assignments, names, and avatar images update automatically on both PCs.</div></div></div>
+function fmtTimeAgo(isoString) {
+  if (!isoString) return '—';
+  try {
+    const diffSec = Math.floor((Date.now() - new Date(isoString).getTime()) / 1000);
+    if (isNaN(diffSec) || diffSec < 45) return 'Just now';
+    const diffMin = Math.floor(diffSec / 60);
+    if (diffMin < 60) return `${diffMin}m ago`;
+    const diffHours = Math.floor(diffMin / 60);
+    if (diffHours < 24) return `${diffHours}h ago`;
+    const diffDays = Math.floor(diffHours / 24);
+    if (diffDays < 7) return `${diffDays}d ago`;
+    return isoString.slice(0, 10);
+  } catch {
+    return '—';
+  }
+}
+
+function logActivity(type, description, details = {}) {
+  try {
+    data.activityLog = data.activityLog || [];
+    const entry = {
+      id: uid(),
+      timestamp: new Date().toISOString(),
+      userName: (data.settings && data.settings.displayName) || 'Team Member',
+      userId: typeof currentUserId === 'function' ? currentUserId() : 'local-me',
+      type, // 'add' | 'update' | 'delete' | 'paste' | 'smart-update' | 'status'
+      description: description || 'Workspace activity',
+      clientId: details.clientId || (typeof activeClient !== 'undefined' ? activeClient : null),
+      clientName: details.clientName || (data.clients && data.clients.find(c => c.id === (details.clientId || activeClient))?.name) || '',
+      items: details.items ? JSON.parse(JSON.stringify(details.items)) : undefined,
+      item: details.item ? JSON.parse(JSON.stringify(details.item)) : undefined,
+      previousItem: details.previousItem ? JSON.parse(JSON.stringify(details.previousItem)) : undefined,
+      previousItems: details.previousItems ? JSON.parse(JSON.stringify(details.previousItems)) : undefined,
+      itemId: details.itemId || undefined,
+      field: details.field || undefined,
+      previousValue: details.previousValue !== undefined ? details.previousValue : undefined,
+      newValue: details.newValue !== undefined ? details.newValue : undefined,
+      rolledBack: false
+    };
+    data.activityLog.unshift(entry);
+    if (data.activityLog.length > 200) data.activityLog.length = 200;
+    save();
+  } catch (err) {
+    console.error('logActivity error:', err);
+  }
+}
+
+function rollbackActivity(activityId) {
+  data.activityLog = data.activityLog || [];
+  const act = data.activityLog.find(a => a.id === activityId);
+  if (!act) {
+    toast('Activity not found');
+    return false;
+  }
+  if (act.rolledBack) {
+    toast('This activity has already been rolled back');
+    return false;
+  }
+
+  pushUndo(`Rollback: ${act.description}`);
+
+  let restoredDesc = '';
+  if (act.type === 'delete') {
+    const itemsToRestore = act.items || (act.item ? [act.item] : []);
+    if (!itemsToRestore.length) {
+      toast('No row data found to restore');
+      return false;
+    }
+    const restoreIds = new Set(itemsToRestore.map(r => r.id));
+    data.pendingDeletes = (data.pendingDeletes || []).filter(d => !restoreIds.has(d.id));
+    itemsToRestore.forEach(restored => {
+      restored.updatedAt = new Date().toISOString();
+      const existingIdx = data.items.findIndex(i => i.id === restored.id);
+      if (existingIdx >= 0) {
+        data.items[existingIdx] = restored;
+      } else {
+        data.items.push(restored);
+      }
+      enqueue('items', restored.id);
+    });
+    restoredDesc = `Restored ${itemsToRestore.length} deleted row${itemsToRestore.length === 1 ? '' : 's'}`;
+  } else if (act.type === 'add' || act.type === 'paste') {
+    const itemsToRemove = act.items || (act.item ? [act.item] : []);
+    if (!itemsToRemove.length) {
+      toast('No row data to remove');
+      return false;
+    }
+    data.pendingDeletes = data.pendingDeletes || [];
+    const removeIds = new Set(itemsToRemove.map(r => r.id));
+    itemsToRemove.forEach(rem => {
+      if (!data.pendingDeletes.some(d => d.table === 'items' && d.id === rem.id)) {
+        data.pendingDeletes.push({ table: 'items', id: rem.id });
+      }
+      enqueue('items', rem.id);
+    });
+    data.items = data.items.filter(i => !removeIds.has(i.id));
+    restoredDesc = `Removed ${itemsToRemove.length} added row${itemsToRemove.length === 1 ? '' : 's'}`;
+  } else if (act.type === 'update') {
+    if (act.previousItem) {
+      const prev = act.previousItem;
+      const curr = data.items.find(i => i.id === prev.id);
+      if (curr) {
+        Object.assign(curr, prev);
+        curr.updatedAt = new Date().toISOString();
+        enqueue('items', curr.id);
+        restoredDesc = `Reverted changes on "${curr.service || 'Row'}"`;
+      } else {
+        toast('Row not found');
+        return false;
+      }
+    } else if (act.itemId && act.field && act.previousValue !== undefined) {
+      const item = data.items.find(i => i.id === act.itemId);
+      if (item) {
+        item[act.field] = act.previousValue;
+        item.updatedAt = new Date().toISOString();
+        enqueue('items', item.id);
+        restoredDesc = `Reverted ${act.field} to ${act.previousValue}`;
+      } else {
+        toast('Row not found');
+        return false;
+      }
+    }
+  } else if (act.type === 'status' || act.type === 'smart-update') {
+    if (act.previousItems && act.previousItems.length) {
+      act.previousItems.forEach(prev => {
+        const curr = data.items.find(i => i.id === prev.id);
+        if (curr) {
+          Object.assign(curr, prev);
+          curr.updatedAt = new Date().toISOString();
+          enqueue('items', curr.id);
+        }
+      });
+      restoredDesc = `Reverted updates on ${act.previousItems.length} row${act.previousItems.length === 1 ? '' : 's'}`;
+    }
+  }
+
+  act.rolledBack = true;
+  save();
+  render();
+  scheduleSync();
+  toast(`✓ ${restoredDesc || 'Activity rolled back'}`);
+  return true;
+}
+
+function clearActivityLog() {
+  if (!data.activityLog || !data.activityLog.length) return;
+  if (confirm('Clear all recorded activity history? This cannot be undone.')) {
+    data.activityLog = [];
+    save();
+    render();
+    toast('Activity log cleared');
+  }
+}
+
+function renderActivityHistoryPanel() {
+  const log = data.activityLog || [];
+  const typeIcons = {
+    add: '➕',
+    delete: '🗑️',
+    update: '✏️',
+    paste: '📋',
+    'smart-update': '⚡',
+    status: '🏷️'
+  };
+  const typeBadges = {
+    add: 'pill-success',
+    delete: 'pill-danger',
+    update: 'pill-info',
+    paste: 'pill-purple',
+    'smart-update': 'pill-warning',
+    status: 'pill-info'
+  };
+
+  let rowsHtml = '';
+  if (!log.length) {
+    rowsHtml = `<div class="empty" style="padding:28px 16px;"><p class="muted" style="margin:0;font-size:13px;">No activity recorded yet. Edits, deletions, additions, and copy-pastes will be tracked here in real time with instant rollback capability.</p></div>`;
+  } else {
+    rowsHtml = `<div class="activity-log-table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th style="width:110px;">ACTION</th>
+            <th>DETAILS</th>
+            <th style="width:130px;">CLIENT</th>
+            <th style="width:110px;">BY</th>
+            <th style="width:100px;">TIME</th>
+            <th style="width:110px;text-align:right;">ROLLBACK</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${log.slice(0, 100).map(act => {
+            const icon = typeIcons[act.type] || '📝';
+            const badgeClass = typeBadges[act.type] || 'pill';
+            const timeAgo = fmtTimeAgo(act.timestamp);
+            const isRolledBack = !!act.rolledBack;
+            return `<tr>
+              <td><span class="pill ${badgeClass}" style="display:inline-flex;align-items:center;gap:4px;font-size:11px;font-weight:700;">${icon} ${act.type.toUpperCase()}</span></td>
+              <td><strong>${esc(act.description)}</strong></td>
+              <td><span class="muted" style="font-size:12px;">${esc(act.clientName || '—')}</span></td>
+              <td><span style="font-size:12px;">👤 ${esc(act.userName || 'Member')}</span></td>
+              <td><span class="muted" style="font-size:12px;" title="${esc(act.timestamp)}">${timeAgo}</span></td>
+              <td style="text-align:right;">
+                ${isRolledBack 
+                  ? `<span class="pill" style="opacity:0.6;font-size:11px;">✓ Rolled back</span>`
+                  : `<button type="button" class="small-btn danger" data-rollback-id="${act.id}" style="padding:3px 8px;font-size:11px;font-weight:600;" title="Revert this action">↶ Rollback</button>`
+                }
+              </td>
+            </tr>`;
+          }).join('')}
+        </tbody>
+      </table>
+    </div>`;
+  }
+
+  return `<div class="panel" style="margin-top:16px;grid-column:1/-1;">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;flex-wrap:wrap;gap:8px;">
+      <div>
+        <h3 style="margin:0;display:flex;align-items:center;gap:8px;"><span>📜 Activity Tracker & Rollback</span> <span class="pill" style="font-size:11px;padding:2px 8px;">${log.length} actions logged</span></h3>
+        <p class="muted" style="margin:4px 0 0 0;font-size:13px;">Tracks all edits, additions, deletions, and copy-pastes across all clients. Accidentally deleted or overwritten rows can be restored instantly with one click.</p>
+      </div>
+      ${log.length ? `<button type="button" class="small-btn quiet" id="clearActivityLogBtn" style="font-size:11px;">Clear Log</button>` : ''}
+    </div>
+    ${rowsHtml}
+  </div>`;
+}
+
+function renderSettings() { const s=data.settings; return `<div class="section-top"><div><h2>Workspace settings</h2><p>Business details, team members, activity history and Supabase connection.</p></div></div><div class="grid-2"><div class="panel"><h3>Business on invoices</h3><div class="field"><label>Business name</label><input data-setting="seller.name" value="${esc(s.seller.name)}"></div><div class="field"><label>Address</label><textarea data-setting="seller.address" rows="3">${esc(s.seller.address)}</textarea></div><div class="field-grid"><div class="field"><label>Email</label><input data-setting="seller.email" value="${esc(s.seller.email)}"></div><div class="field"><label>Phone</label><input data-setting="seller.phone" value="${esc(s.seller.phone)}"></div></div><div class="field"><label>Tax / GST ID (optional)</label><input data-setting="seller.taxId" value="${esc(s.seller.taxId)}"></div><label class="invoice-logo-upload"><span class="invoice-logo-preview">${s.seller.logoData?`<img src="${esc(s.seller.logoData)}" alt="Company logo">`:`<img src="assets/gir-icon.png" alt="Default MeowSheet logo">`}</span><span>Choose company logo</span><input id="companyLogoUpload" type="file" accept="image/png,image/jpeg,image/webp" hidden></label>${renderBankAccountsList()}<button class="small-btn blue" data-action="save-settings" style="margin-top:6px;">Save business details</button></div><div class="panel"><h3>Your team</h3><div style="display:flex;align-items:center;gap:12px;margin-bottom:14px"><label class="avatar-upload" style="margin:0;flex:1"><span class="avatar">${avatar(currentUserId(),s.displayName,'',s.avatarData)}</span><span>${s.avatarData?'Change your avatar image':'Choose your avatar image'}</span><input id="avatarUpload" type="file" accept="image/png,image/jpeg,image/webp" hidden></label>${s.avatarData?`<button type="button" class="small-btn quiet" id="removeAvatarBtn" title="Remove custom avatar">Remove</button>`:''}</div><div class="field"><label>Your display name</label><input data-setting="displayName" value="${esc(s.displayName)}"></div><div class="field"><label>Your Cat Spirit (for animated reactions & pings)</label><select data-setting="catType"><option value="orange" ${s.catType!=='black'?'selected':''}>🐱 Orange Cat (Playful & Energetic)</option><option value="black" ${s.catType==='black'?'selected':''}>🐈‍⬛ Midnight Black Cat (Cool & Mysterious)</option></select></div>${!session?`<div class="field" style="margin-top:14px;border-top:1px dashed #e2e8f0;padding-top:12px"><label>Second person (local view)</label><div style="display:flex;align-items:center;gap:12px;margin-bottom:8px"><label class="avatar-upload" style="margin:0;flex:1"><span class="avatar">${avatar('local-partner',s.localPartner,'',s.partnerAvatarData)}</span><span>${s.partnerAvatarData?'Change partner avatar':'Choose partner avatar image'}</span><input id="partnerAvatarUpload" type="file" accept="image/png,image/jpeg,image/webp" hidden></label>${s.partnerAvatarData?`<button type="button" class="small-btn quiet" id="removePartnerAvatarBtn" title="Remove partner avatar">Remove</button>`:''}</div><input data-setting="localPartner" value="${esc(s.localPartner)}" placeholder="Second person name"></div>`:''}<button class="small-btn blue" data-action="save-settings" style="margin-top:8px">Save names</button><div class="notice">When connected, both people sign in with their own Supabase accounts. Assignments, names, and avatar images update automatically on both PCs.</div></div></div>${renderActivityHistoryPanel()}
     <div class="panel"><h3>Supabase connection</h3><div class="field-grid"><div class="field"><label>Project URL</label><input id="supaUrl" placeholder="https://project.supabase.co" value="${esc(s.url)}"></div><div class="field"><label>Publishable / anon key</label><input id="supaKey" type="password" placeholder="Never enter a service-role key" value="${esc(s.key)}"></div></div><div class="actions"><button class="small-btn" data-action="save-connection">Save connection</button>${session?`<span class="pill paid">Signed in as ${esc(session.user.email)}</span><button class="small-btn" data-action="sign-out">Sign out</button>`:`<button class="small-btn blue" data-action="sign-in">Sign in</button><button class="small-btn" data-action="sign-up">Create account</button>`}</div>${session?`<div class="notice">Workspace code: <strong>${esc(s.joinCode||'Create or join a workspace')}</strong> · Share this code with your second team member. Workspace ID: ${esc(s.workspaceId||'none')}</div><div class="actions"><button class="small-btn blue" data-action="sync">Sync now</button></div>`:''}</div><div class="panel"><h3>Desktop app</h3><div class="field" style="margin-bottom:12px"><label>Appearance / Theme</label><select data-setting="theme" id="settingsThemeSelect"><option value="light" ${(s.theme||'light')==='light'?'selected':''}>☀️ Light Mode</option><option value="dark" ${(s.theme||'light')==='dark'?'selected':''}>🌙 Dark Mode</option><option value="system" ${(s.theme||'light')==='system'?'selected':''}>💻 System Default (Match OS)</option></select></div><p class="muted">Changes sync automatically while connected.</p><div class="actions"><button class="small-btn" data-action="sync">Sync now</button><button class="small-btn blue" id="updateBtn">Check for updates</button><span id="appVersion"></span></div><p class="muted" id="updateStatus"></p></div>`; }
 
 function positionContextMenu(menu, clientX, clientY) {
@@ -2092,6 +2318,8 @@ function bindMain() {
   const backBtn=$('#topBackBtn');if(backBtn)backBtn.onclick=goBack;
   const themeToggle=$('#themeToggleBtn');if(themeToggle)themeToggle.onclick=toggleTheme;
   const themeSelect=$('#settingsThemeSelect');if(themeSelect)themeSelect.onchange=e=>{applyTheme(e.target.value);save();};
+  $$('[data-rollback-id]').forEach(b=>{b.onclick=e=>{e.stopPropagation();rollbackActivity(b.dataset.rollbackId);};});
+  const clearActBtn=$('#clearActivityLogBtn');if(clearActBtn)clearActBtn.onclick=()=>clearActivityLog();
   $$('[data-toggle-tracker-client]').forEach(el=>{
     el.onclick=e=>{
       e.stopPropagation();
@@ -2393,12 +2621,18 @@ function bindMain() {
   $$('[data-blank-row]').forEach(row=>{
     row.onmousedown=e=>{
       if (e.button !== 0) return;
+      selected.clear();
+      $$('.sheet tr.selected').forEach(r=>r.classList.remove('selected'));
+      updateBulkActions();
       const activeEditing = document.querySelector('input.editing, select.editing, [data-cell].editing, [data-blank-cell].editing');
       if (activeEditing && !activeEditing.contains(e.target)) {
         deactivateAllEditingFields();
       }
     };
     row.onclick=e=>{
+      selected.clear();
+      $$('.sheet tr.selected').forEach(r=>r.classList.remove('selected'));
+      updateBulkActions();
       const field=e.target.closest('td')?.querySelector('[data-blank-cell]');
       selectionCell=field?{blankOrder:Number(row.dataset.blankRow),key:field.dataset.blankCell}:null;
       const now = Date.now();
@@ -2414,6 +2648,9 @@ function bindMain() {
       lastCellClick = { rowId: null, blankOrder: Number(row.dataset.blankRow), cellKey: field?.dataset?.blankCell || null, time: now };
     };
     row.ondblclick=e=>{
+      selected.clear();
+      $$('.sheet tr.selected').forEach(r=>r.classList.remove('selected'));
+      updateBulkActions();
       const field=e.target.closest('td')?.querySelector('[data-blank-cell]');
       if(field) {
         activateSheetField(field);
@@ -2422,6 +2659,9 @@ function bindMain() {
     };
     row.oncontextmenu=e=>{
       e.preventDefault();
+      selected.clear();
+      $$('.sheet tr.selected').forEach(r=>r.classList.remove('selected'));
+      updateBulkActions();
       const blankOrder=Number(row.dataset.blankRow);
       const menu=$('#contextMenu')||document.createElement('div');
       menu.id='contextMenu';menu.className='context-menu';
@@ -2854,17 +3094,32 @@ function materializeBlankRow(field) {
   if(key==='quotedTotal')item.manualTotal=true;
   if(key==='rate'||key==='quantity')item.quotedTotal=num(item.quantity)*num(item.rate);
   mutate('items',item);
+  const client = data.clients.find(c => c.id === activeClient);
+  logActivity('add', `Added row: "${item.service || 'Row'}" in ${client?.name || 'client'}`, {
+    item: JSON.parse(JSON.stringify(item)),
+    clientId: activeClient,
+    clientName: client?.name || ''
+  });
 }
 function pasteBlankGrid(event,field) {
   const raw=event.clipboardData.getData('text/plain');if(!raw)return;event.preventDefault();
   const columns=['serial','workDate','service','quantity','rate','quotedTotal','status','advanceAmount','assigneeId','remarks'];
   const start=columns.indexOf(field.dataset.blankCell),startOrder=Number(field.dataset.blankOrder);
+  const added = [];
   for(const [offset,line] of raw.trimEnd().split(/\r?\n/).entries()){
     if(!line.trim())continue;
     const item=newItem(activeClient,startOrder+offset);
     line.split('\t').forEach((value,index)=>{const key=columns[start+index];if(!key)return;item[key]=['quantity','rate','quotedTotal','advanceAmount'].includes(key)?Math.max(0,num(value)):key==='status'?(value.trim()==='-'?'discarded':value.trim().toLowerCase()||'pending'):value;});
     if(!line.split('\t').some((_,index)=>columns[start+index]==='quotedTotal'))item.quotedTotal=num(item.quantity)*num(item.rate);
-    data.items.push(item);if(item.status==='paid'){recordPaidItems([{...item,status:'pending'}]);item.paidAt=today();item.paidAtTs=new Date().toISOString();}if(num(item.advanceAmount)>0&&item.status!=='paid'){createReceipt(item.clientId,num(item.advanceAmount),`Advance · ${item.service}`,'advance',item.id);item.advanceReceivedAt=today();}enqueue('items',item.id);
+    data.items.push(item);added.push(item);if(item.status==='paid'){recordPaidItems([{...item,status:'pending'}]);item.paidAt=today();item.paidAtTs=new Date().toISOString();}if(num(item.advanceAmount)>0&&item.status!=='paid'){createReceipt(item.clientId,num(item.advanceAmount),`Advance · ${item.service}`,'advance',item.id);item.advanceReceivedAt=today();}enqueue('items',item.id);
+  }
+  const client = data.clients.find(c => c.id === activeClient);
+  if (added.length) {
+    logActivity('paste', `Pasted ${added.length} row${added.length === 1 ? '' : 's'} via grid into ${client?.name || 'client'}`, {
+      items: added.map(i => JSON.parse(JSON.stringify(i))),
+      clientId: activeClient,
+      clientName: client?.name || ''
+    });
   }
   save();scheduleSync();render();
 }
@@ -2874,9 +3129,24 @@ function editCell(id, key, value, skipRender = false) {
   if(['quantity','rate','quotedTotal','advanceAmount'].includes(key)) value=Math.max(0,num(value));
   if(key==='advanceAmount'&&value>num(i.advanceAmount))createReceipt(i.clientId,value-num(i.advanceAmount),`Advance · ${i.service}`,'advance',i.id);
   if(key==='advanceAmount'&&value>0&&!i.advanceReceivedAt)i.advanceReceivedAt=today();
-  i[key]=value;
-  if(key==='quantity'||key==='rate') { i.manualTotal=false; i.quotedTotal=num(i.quantity)*num(i.rate); }
-  if(key==='quotedTotal')i.manualTotal=true;
+  if(i[key] !== value) {
+    const prevItem = JSON.parse(JSON.stringify(i));
+    const prevVal = i[key];
+    i[key]=value;
+    if(key==='quantity'||key==='rate') { i.manualTotal=false; i.quotedTotal=num(i.quantity)*num(i.rate); }
+    if(key==='quotedTotal')i.manualTotal=true;
+    const client = data.clients.find(c => c.id === i.clientId);
+    logActivity('update', `Updated ${key} on "${i.service || 'Row'}" (${prevVal ?? 'empty'} → ${value}) in ${client?.name || 'client'}`, {
+      itemId: id,
+      field: key,
+      previousValue: prevVal,
+      newValue: value,
+      previousItem: prevItem,
+      item: JSON.parse(JSON.stringify(i)),
+      clientId: i.clientId,
+      clientName: client?.name || ''
+    });
+  }
   if(skipRender) {
     i.updatedAt = new Date().toISOString();
     queue('items', i.id);
@@ -3061,6 +3331,9 @@ function deleteSelectedRows(idsToDelete = null) {
   const count = targetIds.length;
   pushUndo(count === 1 ? 'Delete row' : `Delete ${count} rows`);
 
+  const deleteSet = new Set(targetIds);
+  const deletedItems = data.items.filter(i => deleteSet.has(i.id)).map(i => JSON.parse(JSON.stringify(i)));
+
   data.pendingDeletes ||= [];
   targetIds.forEach(id => {
     if (!data.pendingDeletes.some(d => d.table === 'items' && d.id === id)) {
@@ -3069,7 +3342,6 @@ function deleteSelectedRows(idsToDelete = null) {
     data.pending = data.pending.filter(p => !(p.table === 'items' && p.id === id));
   });
 
-  const deleteSet = new Set(targetIds);
   data.items = data.items.filter(i => !deleteSet.has(i.id));
 
   const remaining = clientItems(activeClient);
@@ -3086,6 +3358,13 @@ function deleteSelectedRows(idsToDelete = null) {
     rowClipboard.sourceRowIds = rowClipboard.sourceRowIds.filter(id => !targetIds.includes(id));
     if (!rowClipboard.sourceRowIds.length) rowClipboard.mode = 'copy';
   }
+
+  const client = data.clients.find(c => c.id === activeClient);
+  logActivity('delete', count === 1 ? `Deleted row: "${deletedItems[0]?.service || 'Row'}" in ${client?.name || 'client'}` : `Deleted ${count} rows in ${client?.name || 'client'}`, {
+    items: deletedItems,
+    clientId: activeClient,
+    clientName: client?.name || ''
+  });
 
   consolidateAllReceipts();
   save();
@@ -3105,27 +3384,36 @@ function pasteCopiedRows(targetId=null,targetBlankOrder=null) {
   pushUndo(isCut ? 'Move row (pasted from cut)' : 'Paste rows');
 
   const items=groupedSheetItems(clientItems());
+  const isBlankTarget = targetBlankOrder != null || (targetId == null && !selected.size);
+
   let targetIndex=-1;
-  if (targetId) {
+  if (!isBlankTarget && targetId) {
     targetIndex=items.findIndex(i=>i.id===targetId);
-  } else if (selected.size) {
+  } else if (!isBlankTarget && selected.size) {
     const firstSelected=[...selected][0];
     targetIndex=items.findIndex(i=>i.id===firstSelected);
   }
 
-  if (targetIndex<0) {
+  if (targetIndex<0 || isBlankTarget) {
     targetIndex=items.length;
   }
 
   const copiedItems=rowClipboard.items;
+  const addedItems = [];
+  const modifiedItems = [];
+  const previousItems = [];
 
   copiedItems.forEach((copied,offset)=>{
     const destIndex=targetIndex+offset;
-    let target=items[destIndex];
+    let target = isBlankTarget ? null : items[destIndex];
     if (!target) {
       target=newItem(activeClient,items.length);
       items.push(target);
       data.items.push(target);
+      addedItems.push(target);
+    } else {
+      previousItems.push({ ...target });
+      modifiedItems.push(target);
     }
     target.service=copied.service||'';
     target.quantity=copied.quantity!=null?copied.quantity:1;
@@ -3165,6 +3453,22 @@ function pasteCopiedRows(targetId=null,targetBlankOrder=null) {
     toast('Row moved (pasted from cut)');
   } else {
     toast(copiedItems.length===1?'Row pasted (Ctrl+V)':`${copiedItems.length} rows pasted`);
+  }
+
+  const client = data.clients.find(c => c.id === activeClient);
+  if (addedItems.length) {
+    logActivity('paste', `Pasted ${addedItems.length} new row${addedItems.length === 1 ? '' : 's'} (${addedItems.map(i => i.service || 'Row').join(', ')}) in ${client?.name || 'client'}`, {
+      items: addedItems.map(i => JSON.parse(JSON.stringify(i))),
+      clientId: activeClient,
+      clientName: client?.name || ''
+    });
+  } else if (modifiedItems.length) {
+    logActivity('paste', `Pasted over ${modifiedItems.length} row${modifiedItems.length === 1 ? '' : 's'} in ${client?.name || 'client'}`, {
+      items: modifiedItems.map(i => JSON.parse(JSON.stringify(i))),
+      previousItems,
+      clientId: activeClient,
+      clientName: client?.name || ''
+    });
   }
 
   consolidateAllReceipts();
@@ -3675,6 +3979,13 @@ Passage Decor (night render)"></textarea>
         addedItems.push(item);
       });
 
+      const client = data.clients.find(c => c.id === activeClient);
+      logActivity('add', `Added ${addedItems.length} row${addedItems.length === 1 ? '' : 's'} via Add Multiples in ${client?.name || 'client'}`, {
+        items: addedItems.map(i => JSON.parse(JSON.stringify(i))),
+        clientId: activeClient,
+        clientName: client?.name || ''
+      });
+
       save();
       scheduleSync();
       closeModal();
@@ -4027,6 +4338,7 @@ function smartUpdateDialog() {
 
       pushUndo(`Smart update "${currentKeyword}" (${currentMatchedItems.length} rows)`);
 
+      const previousItems = currentMatchedItems.map(i => JSON.parse(JSON.stringify(i)));
       currentMatchedItems.forEach(i => {
         if (updateRateEnabled && newRateVal !== '') {
           i.rate = num(newRateVal);
@@ -4043,6 +4355,14 @@ function smartUpdateDialog() {
         }
         i.updatedAt = new Date().toISOString();
         enqueue('items', i.id);
+      });
+
+      const client = data.clients.find(c => c.id === activeClient);
+      logActivity('smart-update', `Smart updated ${currentMatchedItems.length} row${currentMatchedItems.length === 1 ? '' : 's'} in ${client?.name || 'client'} (keyword: "${currentKeyword || 'all'}")`, {
+        items: currentMatchedItems.map(i => JSON.parse(JSON.stringify(i))),
+        previousItems,
+        clientId: activeClient,
+        clientName: client?.name || ''
       });
 
       save();
@@ -4297,6 +4617,7 @@ function assign(ids) { ids.forEach(id=>{const i=data.items.find(x=>x.id===id);if
 function markSent(ids) { bulkSetStatus('sent',ids); }
 function bulkSetStatus(next,idsOverride=null,context=null,customPaidDate=null) {
   const ids=new Set(idsOverride||selected),items=data.items.filter(i=>ids.has(i.id));if(!items.length)return;
+  const previousItems = items.map(i => JSON.parse(JSON.stringify(i)));
   const invoices=data.invoices.filter(inv=>(inv.itemIds||[]).some(id=>ids.has(id)));
   if(invoices.some(inv=>next!=='paid'||(inv.status==='issued'&&!(inv.itemIds||[]).every(id=>ids.has(id))))){toast('Select every row on an invoice to mark it Paid; use invoice payment tracking for other changes');return;}
   const paidDay=(next==='paid'&&customPaidDate&&/^\d{4}-\d{2}-\d{2}/.test(customPaidDate))?customPaidDate.slice(0,10):today();
@@ -4355,6 +4676,13 @@ function bulkSetStatus(next,idsOverride=null,context=null,customPaidDate=null) {
     for(const gid of affectedDealIds) syncDealReceipt(gid, stamp);
     for(const pid of affectedProjectIds) syncProjectReceipt(pid, stamp);
   }
+  const client = data.clients.find(c => c.id === (items[0]?.clientId || activeClient));
+  logActivity('status', `Changed status to "${next}" on ${items.length} row${items.length===1?'':'s'} in ${client?.name || 'client'}`, {
+    items: items.map(i => JSON.parse(JSON.stringify(i))),
+    previousItems,
+    clientId: items[0]?.clientId,
+    clientName: client?.name || ''
+  });
   selected.clear();save();scheduleSync();render();toast(`${items.length} row${items.length===1?'':'s'} updated`);
 }
 
@@ -7508,8 +7836,9 @@ document.addEventListener('keydown',e=>{
       }
       if(isCtrl&&key==='v'&&rowClipboard.items.length){
         e.preventDefault();
-        const targetId=selected.size?[...selected][0]:null;
-        pasteCopiedRows(targetId,selectionCell?.blankOrder);
+        const isBlank = selectionCell?.blankOrder != null;
+        const targetId = (!isBlank && selected.size) ? [...selected][0] : null;
+        pasteCopiedRows(targetId, selectionCell?.blankOrder);
         return;
       }
       if(isCtrl&&key==='d'&&selected.size){
@@ -7532,10 +7861,14 @@ document.addEventListener('paste',e=>{
   if(e.target?.matches?.('[data-cell],[data-blank-cell]'))return;
   const focused=document.activeElement;
   if(focused?.matches('input:not([readonly]),textarea,select')||focused?.isContentEditable)return;
-  if(rowClipboard.items.length&&selected.size){
-    e.preventDefault();
-    pasteCopiedRows([...selected][0],selectionCell?.blankOrder);
-    return;
+  if(rowClipboard.items.length){
+    const isBlank = selectionCell?.blankOrder != null;
+    const targetId = (!isBlank && selected.size) ? [...selected][0] : null;
+    if (isBlank || targetId) {
+      e.preventDefault();
+      pasteCopiedRows(targetId, selectionCell?.blankOrder);
+      return;
+    }
   }
   if(!selectionCell)return;
   const value=e.clipboardData?.getData('text/plain');if(!value)return;

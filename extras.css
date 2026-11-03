@@ -4631,3 +4631,150 @@ tr.row-fill-drag {
   color: #6ee7b7 !important;
   border-color: #1d5939 !important;
 }
+
+/* ==========================================================================
+   Undo / Redo Toolbar Arrow Buttons (No text)
+   ========================================================================== */
+.sheet-toolbar .small-btn.icon-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 5px 8px;
+  min-width: 32px;
+  height: 28px;
+  border-radius: 5px;
+  background: #ffffff;
+  border: 1px solid #cbd5e1;
+  color: #475569;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+.sheet-toolbar .small-btn.icon-btn svg {
+  display: block;
+  stroke: currentColor;
+}
+.sheet-toolbar .small-btn.icon-btn:hover:not(:disabled) {
+  background: #f1f5f9;
+  color: #0f172a;
+  border-color: #94a3b8;
+}
+.sheet-toolbar .small-btn.icon-btn:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+  background: #f8fafc;
+  border-color: #e2e8f0;
+  color: #94a3b8;
+}
+
+[data-theme="dark"] .sheet-toolbar .small-btn.icon-btn {
+  background: #1e293b;
+  border-color: #334155;
+  color: #94a3b8;
+}
+[data-theme="dark"] .sheet-toolbar .small-btn.icon-btn:hover:not(:disabled) {
+  background: #334155;
+  color: #f1f5f9;
+  border-color: #475569;
+}
+[data-theme="dark"] .sheet-toolbar .small-btn.icon-btn:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+  background: #0f172a;
+  border-color: #1e293b;
+  color: #475569;
+}
+
+/* ==========================================================================
+   Activity Tracker & Rollback Panel (Settings)
+   ========================================================================== */
+.activity-log-table-wrap {
+  background: var(--card-bg, #ffffff);
+  border: 1px solid var(--border, #e2e8f0);
+  border-radius: 8px;
+  max-height: 420px;
+  overflow-y: auto;
+}
+[data-theme="dark"] .activity-log-table-wrap {
+  background: #0f172a;
+  border-color: #334155;
+}
+.activity-log-table-wrap table {
+  width: 100%;
+  border-collapse: collapse;
+}
+.activity-log-table-wrap th {
+  background: var(--table-head, #f8fafc);
+  color: var(--muted, #64748b);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--border, #e2e8f0);
+}
+[data-theme="dark"] .activity-log-table-wrap th {
+  background: #1e293b;
+  color: #94a3b8;
+  border-bottom-color: #334155;
+}
+.activity-log-table-wrap td {
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--border, #f1f5f9);
+  font-size: 13px;
+  vertical-align: middle;
+}
+[data-theme="dark"] .activity-log-table-wrap td {
+  border-bottom-color: #1e293b;
+  color: #cbd5e1;
+}
+.activity-log-table-wrap tr:hover td {
+  background: rgba(0, 0, 0, 0.02);
+}
+[data-theme="dark"] .activity-log-table-wrap tr:hover td {
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.pill-success {
+  background: #e6f4ea;
+  color: #137333;
+}
+[data-theme="dark"] .pill-success {
+  background: rgba(22, 101, 52, 0.35);
+  color: #4ade80;
+  border: 1px solid rgba(74, 222, 128, 0.25);
+}
+.pill-danger {
+  background: #fce8e6;
+  color: #c5221f;
+}
+[data-theme="dark"] .pill-danger {
+  background: rgba(153, 27, 27, 0.35);
+  color: #f87171;
+  border: 1px solid rgba(248, 113, 113, 0.25);
+}
+.pill-info {
+  background: #e8f0fe;
+  color: #1a73e8;
+}
+[data-theme="dark"] .pill-info {
+  background: rgba(30, 58, 138, 0.35);
+  color: #60a5fa;
+  border: 1px solid rgba(96, 165, 250, 0.25);
+}
+.pill-purple {
+  background: #f3e8ff;
+  color: #7e22ce;
+}
+[data-theme="dark"] .pill-purple {
+  background: rgba(88, 28, 135, 0.35);
+  color: #c084fc;
+  border: 1px solid rgba(192, 132, 252, 0.25);
+}
+.pill-warning {
+  background: #fef3c7;
+  color: #b45309;
+}
+[data-theme="dark"] .pill-warning {
+  background: rgba(120, 53, 15, 0.35);
+  color: #fbbf24;
+  border: 1px solid rgba(251, 191, 36, 0.25);
+}
