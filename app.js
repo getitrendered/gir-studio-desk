@@ -7,7 +7,7 @@ const num = v => Number(String(v ?? '').replace(/[^0-9.-]/g, '')) || 0;
 const esc = v => String(v ?? '').replace(/[&<>"']/g, c => ({ '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;' }[c]));
 const cleanSerial = v => { if (v == null || v === '') return ''; const s = String(v).trim(), n = Number(s); if (!isNaN(n) && Number.isInteger(n) && !s.includes('e') && !s.includes('E')) return String(n); return s.replace(/\.0+$/, ''); };
 const fmtDate = d => { if (!d) return '—'; const x = new Date(d + 'T00:00:00'); return Number.isNaN(x.getTime()) ? d : x.toLocaleDateString('en-IN', { day:'numeric', month:'short', year:'numeric' }); };
-const defaults = { clients:[], groups:[], projectGroups:[], items:[], invoices:[], receipts:[], members:[], chatMessages:[], tasks:[], pending:[], settings:{ seller:{ name:'GIR — Get It Rendered', address:'', email:'', phone:'', taxId:'', bankDetails:'', bankAccounts:[], activeBankAccountId:'', logoData:'' }, url:'https://isdxybpeagloikchhsbp.supabase.co', key:'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImlzZHh5YnBlYWdsb2lrY2hoc2JwIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTI1NzkzMjcsImV4cCI6MjEwODE1NTMyN30.ll1YG9uyrTqmLzE90miCk-O1Ab5VkBPfqrCPDDUc5u8', workspaceId:'17f39873-e10f-4bdf-93ee-1f92b3e25251', displayName:'Samuel', localPartner:'Mezrid', avatarData:'', partnerAvatarData:'', catType:'orange', zoom:100, theme:'light' } };
+const defaults = { clients:[], groups:[], projectGroups:[], items:[], invoices:[], receipts:[], members:[], chatMessages:[], tasks:[], deletedTaskIds:[], pending:[], settings:{ seller:{ name:'GIR — Get It Rendered', address:'', email:'', phone:'', taxId:'', bankDetails:'', bankAccounts:[], activeBankAccountId:'', logoData:'' }, url:'https://isdxybpeagloikchhsbp.supabase.co', key:'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImlzZHh5YnBlYWdsb2lrY2hoc2JwIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTI1NzkzMjcsImV4cCI6MjEwODE1NTMyN30.ll1YG9uyrTqmLzE90miCk-O1Ab5VkBPfqrCPDDUc5u8', workspaceId:'17f39873-e10f-4bdf-93ee-1f92b3e25251', displayName:'Samuel', localPartner:'Mezrid', avatarData:'', partnerAvatarData:'', catType:'orange', zoom:100, theme:'light' } };
 const GIR_WORKSPACE_ID='17f39873-e10f-4bdf-93ee-1f92b3e25251';
 
 function getEffectiveTheme(themeSetting) {
@@ -75,7 +75,7 @@ if (typeof window !== 'undefined' && window.matchMedia) {
 }
 let data = structuredClone(defaults), tab = 'sheet', lastRenderedTab = null, lastRenderedClient = null, activeClient = null, selected = new Set(), selectionAnchor = null, selectionCell = null, collapsedGroups = new Set(), blankRows = 60, highlightUser = null, filter = 'all', clientApi = null, session = null, channel = null, syncing = false, toastTimer, syncTimer, lastSyncTime = Date.now(), importPreview = null, previewClientIndex = 0, migrating = false;
 let isRowDragSelecting = false, hasRowDragged = false, justDraggedSelection = false, dragStartRowId = null, dragTargetRowId = null, dragStartCellKey = null, dragStartShift = false, dragStartWithCtrl = false, dragInitialSelected = null;
-let pendingChatAttachment = null, chatDraftText = '', activeStickerTab = 'stickers', stickerSearchQuery = '', lastPartnerOnlineTime = 0, unreadChatCount = 0, chatSyncTimer = null;
+let pendingChatAttachment = null, chatDraftText = '', activeStickerTab = 'stickers', stickerSearchQuery = '', lastPartnerOnlineTime = 0, unreadChatCount = 0, chatSyncTimer = null, noticeBoardSyncTimer = null;
 let lastCellClick = { rowId: null, cellKey: null, blankOrder: null, time: 0 };
 let authLoading=true,workspaceReady=false,workspaceResolving=false,accessMode='signin',accessError='',activeStatusMenu=null;
 let desktopUpdate = { status: 'unavailable', message: 'Checking update support…' };
@@ -1049,6 +1049,157 @@ function formatTaskCountdown(remindAtStr) {
   }
 }
 
+function recordDeletedTaskIds(ids) {
+  if (!Array.isArray(ids) || !ids.length) return;
+  data.deletedTaskIds = Array.isArray(data.deletedTaskIds) ? data.deletedTaskIds : [];
+  const set = new Set(data.deletedTaskIds);
+  for (const id of ids) {
+    if (id) set.add(id);
+  }
+  data.deletedTaskIds = Array.from(set).slice(-250);
+}
+
+function broadcastNoticeBoard(action, payload = {}) {
+  if (typeof channel !== 'undefined' && channel) {
+    try {
+      channel.send({
+        type: 'broadcast',
+        event: 'notice_board_update',
+        payload: {
+          action,
+          ...payload,
+          senderId: currentUserId(),
+          senderName: data.settings.displayName || session?.user?.user_metadata?.display_name || 'Teammate',
+          timestamp: Date.now()
+        }
+      });
+    } catch (e) {
+      console.warn('Notice board broadcast warning:', e);
+    }
+  }
+}
+
+function scheduleNoticeBoardCloudSync() {
+  data.tasksPendingSync = true;
+  if (typeof clientApi === 'undefined' || !clientApi || !session || !data?.settings?.workspaceId) return;
+  clearTimeout(noticeBoardSyncTimer);
+  noticeBoardSyncTimer = setTimeout(async () => {
+    try {
+      data.settings.seller = data.settings.seller || {};
+      data.settings.seller.notice_board = (data.tasks || []).slice(0, 300);
+      data.settings.seller.deleted_task_ids = (data.deletedTaskIds || []).slice(-250);
+      await clientApi.from('workspaces').update({ business: data.settings.seller }).eq('id', data.settings.workspaceId);
+      data.tasksPendingSync = false;
+    } catch (err) {
+      console.warn('Notice board cloud sync warning:', err);
+    }
+  }, 600);
+}
+
+function handleIncomingNoticeBoardUpdate(payload) {
+  if (!payload || !payload.action) return;
+  data.tasks = Array.isArray(data.tasks) ? data.tasks : [];
+  const sender = payload.senderName || 'Teammate';
+  let notifyTitle = '';
+  let notifyBody = '';
+
+  if (payload.action === 'upsert' && payload.task) {
+    const remote = payload.task;
+    if (data.deletedTaskIds && data.deletedTaskIds.includes(remote.id)) return;
+    const idx = data.tasks.findIndex(t => t.id === remote.id);
+    if (idx < 0) {
+      data.tasks.push(remote);
+      notifyTitle = `📌 ${sender} pinned a notice`;
+      notifyBody = `"${remote.title}" scheduled for ${formatTaskDateTime(remote.remindAt)}`;
+    } else {
+      const local = data.tasks[idx];
+      const remoteTime = new Date(remote.updatedAt || remote.createdAt || 0).getTime();
+      const localTime = new Date(local.updatedAt || local.createdAt || 0).getTime();
+      if (remoteTime >= localTime) {
+        const wasNotified = local.notified;
+        const wasOverdue = local.overdueNotified;
+        const lastTrending = local.lastTrendingNotifyAt;
+        data.tasks[idx] = { ...remote };
+        if (local.remindAt === remote.remindAt) {
+          data.tasks[idx].notified = wasNotified;
+          data.tasks[idx].overdueNotified = wasOverdue;
+          data.tasks[idx].lastTrendingNotifyAt = lastTrending;
+        }
+        if (remote.completed && !local.completed) {
+          notifyTitle = `✓ Notice completed by ${sender}`;
+          notifyBody = `"${remote.title}" marked as complete! 🎉`;
+        }
+      }
+    }
+  } else if (payload.action === 'delete' && payload.taskId) {
+    data.tasks = data.tasks.filter(t => t.id !== payload.taskId);
+    recordDeletedTaskIds([payload.taskId]);
+  } else if (payload.action === 'clear_completed' && Array.isArray(payload.taskIds)) {
+    const idSet = new Set(payload.taskIds);
+    data.tasks = data.tasks.filter(t => !idSet.has(t.id));
+    recordDeletedTaskIds(payload.taskIds);
+  }
+
+  save();
+  updateTasksDueBadge();
+  if (tab === 'tasks') {
+    render();
+  }
+  if (notifyTitle && notifyBody) {
+    desktopNotify(notifyTitle, notifyBody, '📌');
+  }
+}
+
+function mergeRemoteNoticeBoard(remoteTasks) {
+  if (!Array.isArray(remoteTasks)) return;
+  data.tasks = Array.isArray(data.tasks) ? data.tasks : [];
+  const deletedSet = new Set(data.deletedTaskIds || []);
+  const taskMap = new Map();
+
+  for (const t of data.tasks) {
+    if (!deletedSet.has(t.id)) {
+      taskMap.set(t.id, t);
+    }
+  }
+
+  let hasLocalAdditions = false;
+  for (const r of remoteTasks) {
+    if (!r || !r.id || deletedSet.has(r.id)) continue;
+    if (!taskMap.has(r.id)) {
+      taskMap.set(r.id, r);
+    } else {
+      const l = taskMap.get(r.id);
+      const rTime = new Date(r.updatedAt || r.createdAt || 0).getTime();
+      const lTime = new Date(l.updatedAt || l.createdAt || 0).getTime();
+      if (rTime > lTime) {
+        const wasNotified = l.notified;
+        const wasOverdue = l.overdueNotified;
+        const lastTrending = l.lastTrendingNotifyAt;
+        const merged = { ...r };
+        if (l.remindAt === r.remindAt) {
+          merged.notified = wasNotified;
+          merged.overdueNotified = wasOverdue;
+          merged.lastTrendingNotifyAt = lastTrending;
+        }
+        taskMap.set(r.id, merged);
+      } else if (lTime > rTime) {
+        hasLocalAdditions = true;
+      }
+    }
+  }
+
+  for (const [id] of taskMap) {
+    if (!remoteTasks.some(r => r.id === id)) {
+      hasLocalAdditions = true;
+    }
+  }
+
+  data.tasks = Array.from(taskMap.values());
+  if (hasLocalAdditions) {
+    scheduleNoticeBoardCloudSync();
+  }
+}
+
 function updateTasksDueBadge(count = null) {
   const badge = $('#tasksDueCount');
   if (!badge) return;
@@ -1211,6 +1362,7 @@ function renderTasks() {
             ${isTrending ? `<span class="notice-pill pill-trending">⚡ FOCUS #${index} • TRENDING</span>` : ''}
             ${!isOverdue && !isTrending ? `<span class="notice-pill pill-normal">📌 NOTICE #${index}</span>` : ''}
             <span class="notice-date-badge">📅 ${esc(dtText)}</span>
+            ${t.createdBy ? `<span class="notice-author-badge" title="Pinned by ${esc(t.createdBy)}">👤 ${esc(t.createdBy)}</span>` : ''}
           </div>
           <!-- Prominent Bold Live Countdown Timer -->
           <div class="task-countdown notice-timer timer-${cat}" data-remind-at="${t.remindAt}" data-category="${cat}">
@@ -1248,6 +1400,7 @@ function renderTasks() {
           <div class="notice-meta-left">
             <span class="notice-pill pill-completed">✓ COMPLETED</span>
             <span class="notice-date-badge">${t.completedAt ? 'Finished ' + formatTaskDateTime(t.completedAt) : formatTaskDateTime(t.remindAt)}</span>
+            ${t.completedBy ? `<span class="notice-author-badge" title="Finished by ${esc(t.completedBy)}">✓ ${esc(t.completedBy)}</span>` : (t.createdBy ? `<span class="notice-author-badge" title="Pinned by ${esc(t.createdBy)}">👤 ${esc(t.createdBy)}</span>` : '')}
           </div>
         </div>
         <div class="notice-card-body">
@@ -1641,15 +1794,23 @@ function openTaskModal(editTaskId = null) {
 
       data.tasks = Array.isArray(data.tasks) ? data.tasks : [];
 
+      const authorName = data.settings.displayName || session?.user?.user_metadata?.display_name || 'Team member';
       if (existing) {
         existing.title = title;
         existing.description = description;
         existing.dueDate = dueDate;
         existing.dueTime = dueTime;
         existing.remindAt = remindAt;
+        existing.updatedAt = new Date().toISOString();
+        existing.updatedBy = authorName;
+        existing.updatedById = currentUserId();
         if (new Date(remindAt).getTime() > Date.now()) {
           existing.notified = false;
+          existing.overdueNotified = false;
+          existing.lastTrendingNotifyAt = null;
         }
+        broadcastNoticeBoard('upsert', { task: existing });
+        scheduleNoticeBoardCloudSync();
         toast(`⏰ Reminder updated for ${formatTaskDateTime(remindAt)}!`);
       } else {
         const newTask = {
@@ -1660,12 +1821,22 @@ function openTaskModal(editTaskId = null) {
           dueTime,
           remindAt,
           createdAt: new Date().toISOString(),
+          createdBy: authorName,
+          createdById: currentUserId(),
+          updatedAt: new Date().toISOString(),
+          updatedBy: authorName,
+          updatedById: currentUserId(),
           completed: false,
           completedAt: null,
+          completedBy: null,
           notified: false,
+          overdueNotified: false,
+          lastTrendingNotifyAt: null,
           snoozedUntil: null
         };
         data.tasks.push(newTask);
+        broadcastNoticeBoard('upsert', { task: newTask });
+        scheduleNoticeBoardCloudSync();
         toast(`⏰ Reminder programmed for ${formatTaskDateTime(remindAt)}!`);
       }
 
@@ -1976,7 +2147,11 @@ function bindMain() {
   if (clearCompletedBtn) {
     clearCompletedBtn.onclick = e => {
       e.stopPropagation();
+      const clearedIds = (data.tasks || []).filter(t => t.completed).map(t => t.id);
       data.tasks = (data.tasks || []).filter(t => !t.completed);
+      recordDeletedTaskIds(clearedIds);
+      broadcastNoticeBoard('clear_completed', { taskIds: clearedIds });
+      scheduleNoticeBoardCloudSync();
       save();
       render();
       toast('Completed tasks cleared');
@@ -1990,10 +2165,17 @@ function bindMain() {
       const tid = btn.dataset.taskId;
       const task = (data.tasks || []).find(t => t.id === tid);
       if (!task) return;
+      const authorName = data.settings.displayName || session?.user?.user_metadata?.display_name || 'Team member';
 
       if (action === 'complete') {
         task.completed = true;
         task.completedAt = new Date().toISOString();
+        task.completedBy = authorName;
+        task.updatedAt = new Date().toISOString();
+        task.updatedBy = authorName;
+        task.updatedById = currentUserId();
+        broadcastNoticeBoard('upsert', { task });
+        scheduleNoticeBoardCloudSync();
         save();
         render();
         toast('✓ Reminder marked complete! 🎉');
@@ -2007,6 +2189,11 @@ function bindMain() {
         task.notified = false;
         task.overdueNotified = false;
         task.lastTrendingNotifyAt = null;
+        task.updatedAt = new Date().toISOString();
+        task.updatedBy = authorName;
+        task.updatedById = currentUserId();
+        broadcastNoticeBoard('upsert', { task });
+        scheduleNoticeBoardCloudSync();
         save();
         render();
         toast('⏰ Reminder snoozed for 15 minutes');
@@ -2014,18 +2201,24 @@ function bindMain() {
         openTaskModal(tid);
       } else if (action === 'delete') {
         data.tasks = (data.tasks || []).filter(t => t.id !== tid);
+        recordDeletedTaskIds([tid]);
+        broadcastNoticeBoard('delete', { taskId: tid });
+        scheduleNoticeBoardCloudSync();
         save();
         render();
         toast('Reminder deleted');
       } else if (action === 'restore') {
         task.completed = false;
         task.completedAt = null;
+        task.completedBy = null;
+        task.updatedAt = new Date().toISOString();
+        task.updatedBy = authorName;
+        task.updatedById = currentUserId();
+        broadcastNoticeBoard('upsert', { task });
+        scheduleNoticeBoardCloudSync();
         save();
         render();
         toast('Reminder restored to Notice Board');
-        save();
-        render();
-        toast('Task restored to active');
       }
     };
   });
@@ -6954,6 +7147,17 @@ async function flushPending() {
         save();
       }
     }
+    if (data.tasksPendingSync && data.settings.workspaceId && clientApi) {
+      try {
+        data.settings.seller = data.settings.seller || {};
+        data.settings.seller.notice_board = (data.tasks || []).slice(0, 300);
+        data.settings.seller.deleted_task_ids = (data.deletedTaskIds || []).slice(-250);
+        await clientApi.from('workspaces').update({ business: data.settings.seller }).eq('id', data.settings.workspaceId);
+        data.tasksPendingSync = false;
+      } catch (err) {
+        console.warn('Notice board flush sync warning:', err);
+      }
+    }
     successful=true;
   } finally { syncing=false; if(successful&&data.pending.length)scheduleSync(); }
 }
@@ -6998,6 +7202,13 @@ async function pullRemote(){
     if (added) {
       data.chatMessages.sort((a, b) => (a.timestamp || 0) - (b.timestamp || 0));
     }
+  }
+  if (Array.isArray(w.data?.business?.deleted_task_ids)) {
+    recordDeletedTaskIds(w.data.business.deleted_task_ids);
+  }
+  if (Array.isArray(w.data?.business?.notice_board) || Array.isArray(w.data?.business?.tasks)) {
+    const remoteTasks = w.data.business.notice_board || w.data.business.tasks || [];
+    mergeRemoteNoticeBoard(remoteTasks);
   }
   ['clients','groups','projectGroups','items','invoices','receipts'].forEach((table,k)=>{
     const pending=new Set(data.pending.filter(p=>p.table===table).map(p=>p.id));
@@ -7083,6 +7294,11 @@ function subscribe(){
   channel.on('broadcast', { event: 'chat_message' }, async ({ payload }) => {
     if (!payload || payload.senderId === currentUserId()) return;
     handleIncomingChatMessage(payload);
+  });
+
+  channel.on('broadcast', { event: 'notice_board_update' }, async ({ payload }) => {
+    if (!payload || payload.senderId === currentUserId()) return;
+    handleIncomingNoticeBoardUpdate(payload);
   });
 
   channel.on('presence', { event: 'join' }, async ({ newPresences }) => {

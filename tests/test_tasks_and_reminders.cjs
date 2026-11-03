@@ -222,4 +222,122 @@ assert.equal(trendingTaskToNotify.notified, true, 'Trending task within 30m must
 assert.ok(trendingTaskToNotify.lastTrendingNotifyAt, 'lastTrendingNotifyAt timestamp must be recorded');
 console.log('✓ Test 7: Automatic background reminder detection & 10-min notification window verified');
 
+// 9. Test Real-time Broadcast and Multi-Device Synchronization
+let sentBroadcasts = [];
+sandbox.sentBroadcasts = sentBroadcasts;
+vm.runInContext(`
+  channel = {
+    send(msg) {
+      sentBroadcasts.push(msg);
+      return Promise.resolve();
+    }
+  };
+`, sandbox);
+
+// Test broadcasting when adding a notice
+const teammateTask = {
+  id: 'task_sync_1',
+  title: 'Client Review Meeting',
+  description: 'Discuss wedding welcome board revision',
+  dueDate: '2026-11-04',
+  dueTime: '15:00',
+  remindAt: new Date(now + 2 * 60 * 60 * 1000).toISOString(),
+  createdAt: new Date().toISOString(),
+  createdBy: 'Samuel',
+  createdById: 'user_samuel',
+  updatedAt: new Date().toISOString(),
+  completed: false,
+  completedAt: null
+};
+
+sandbox.teammateTask = teammateTask;
+vm.runInContext("broadcastNoticeBoard('upsert', { task: teammateTask })", sandbox);
+assert.equal(sentBroadcasts.length, 1, 'Broadcast should be dispatched over channel');
+assert.equal(sentBroadcasts[0].event, 'notice_board_update');
+assert.equal(sentBroadcasts[0].payload.action, 'upsert');
+assert.equal(sentBroadcasts[0].payload.task.id, 'task_sync_1');
+console.log('✓ Test 8: Real-time broadcast dispatch verified');
+
+// Test handling incoming broadcast from another logged-in teammate (e.g. Mezrid)
+const mezridNotice = {
+  id: 'task_sync_2',
+  title: 'Foam Board Cutting Complete',
+  description: 'Ready for sticker lamination',
+  dueDate: '2026-11-04',
+  dueTime: '16:00',
+  remindAt: new Date(now + 3 * 60 * 60 * 1000).toISOString(),
+  createdAt: new Date().toISOString(),
+  createdBy: 'Mezrid',
+  createdById: 'user_mezrid',
+  updatedAt: new Date().toISOString(),
+  completed: false,
+  completedAt: null
+};
+
+sandbox.mezridNotice = mezridNotice;
+vm.runInContext(`
+  handleIncomingNoticeBoardUpdate({
+    action: 'upsert',
+    task: mezridNotice,
+    senderId: 'user_mezrid',
+    senderName: 'Mezrid'
+  })
+`, sandbox);
+
+const hasMezridTask = vm.runInContext("data.tasks.some(t => t.id === 'task_sync_2')", sandbox);
+assert.ok(hasMezridTask, 'Notice added by teammate must sync into local data.tasks');
+
+const renderedNoticeHtml = vm.runInContext("renderTasks()", sandbox);
+assert.ok(renderedNoticeHtml.includes('Foam Board Cutting Complete'), 'Teammate notice rendered on Notice Board');
+assert.ok(renderedNoticeHtml.includes('👤 Mezrid'), 'Author attribution badge for teammate rendered on card');
+console.log('✓ Test 9: Incoming teammate broadcast handling and author attribution badge verified');
+
+// Test deleting and preventing deleted notice resurrection
+vm.runInContext(`
+  handleIncomingNoticeBoardUpdate({
+    action: 'delete',
+    taskId: 'task_sync_2',
+    senderId: 'user_mezrid',
+    senderName: 'Mezrid'
+  })
+`, sandbox);
+
+const stillHasMezridTask = vm.runInContext("data.tasks.some(t => t.id === 'task_sync_2')", sandbox);
+assert.equal(stillHasMezridTask, false, 'Deleted task should be removed from data.tasks');
+const isDeletedRecorded = vm.runInContext("data.deletedTaskIds.includes('task_sync_2')", sandbox);
+assert.ok(isDeletedRecorded, 'Deleted task ID should be stored in data.deletedTaskIds');
+
+// 10. Test Two-Way Remote Pull and Merge with Supabase Business Payload
+const remoteTasksList = [
+  {
+    id: 'task_remote_3',
+    title: 'Ashwa Events Stage Flex',
+    remindAt: new Date(now + 5 * 60 * 60 * 1000).toISOString(),
+    createdAt: new Date().toISOString(),
+    createdBy: 'Mezrid',
+    updatedAt: new Date().toISOString(),
+    completed: false
+  },
+  {
+    id: 'task_sync_2', // Should NOT be resurrected because it is in deletedTaskIds
+    title: 'Foam Board Cutting Complete',
+    remindAt: new Date(now + 3 * 60 * 60 * 1000).toISOString(),
+    createdAt: new Date().toISOString(),
+    createdBy: 'Mezrid',
+    updatedAt: new Date().toISOString(),
+    completed: false
+  }
+];
+
+sandbox.remoteTasksList = remoteTasksList;
+vm.runInContext("mergeRemoteNoticeBoard(remoteTasksList)", sandbox);
+
+const hasRemote3 = vm.runInContext("data.tasks.some(t => t.id === 'task_remote_3')", sandbox);
+assert.ok(hasRemote3, 'New remote task must be merged into data.tasks');
+
+const resurrected = vm.runInContext("data.tasks.some(t => t.id === 'task_sync_2')", sandbox);
+assert.equal(resurrected, false, 'Deleted task must not be resurrected during merge');
+console.log('✓ Test 10: Two-way cloud pull and merge with deletion guard verified');
+
 console.log('\nALL TASKS & REMINDERS MANAGER TESTS PASSED! 🎉✨');
+process.exit(0);
