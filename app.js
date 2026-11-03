@@ -88,6 +88,72 @@ let trackerClientsInitialized = false;
 let trackerClientFilter = 'active';
 let trackerClientSearch = '';
 let rowClipboard = { mode: null, items: [], sourceRowIds: [] };
+let activityFilter = 'all';
+let activitySearchQuery = '';
+let activityDisplayLimit = 50;
+
+function updateBulkActions() {
+  refreshSelection();
+}
+
+function insertRowAt(targetRowId, position = 'above') {
+  if (tab !== 'sheet' || !activeClient) return false;
+  const all = clientItems(activeClient);
+  const targetIdx = all.findIndex(i => i.id === targetRowId);
+  if (targetIdx < 0) return false;
+  const targetItem = all[targetIdx];
+
+  const insertIndex = position === 'above' ? targetIdx : targetIdx + 1;
+  const inserted = newItem(activeClient, insertIndex);
+
+  if (targetItem.groupId) inserted.groupId = targetItem.groupId;
+  if (targetItem.projectGroupId) inserted.projectGroupId = targetItem.projectGroupId;
+  if (targetItem.workDate) inserted.workDate = targetItem.workDate;
+
+  const dataTargetIdx = data.items.findIndex(i => i.id === targetRowId);
+  if (dataTargetIdx >= 0) {
+    const dataInsertIdx = position === 'above' ? dataTargetIdx : dataTargetIdx + 1;
+    data.items.splice(dataInsertIdx, 0, inserted);
+  } else {
+    data.items.push(inserted);
+  }
+
+  const updatedAll = clientItems(activeClient);
+  updatedAll.forEach((it, idx) => {
+    it.sortOrder = idx;
+    if (it.serial && !isNaN(Number(it.serial))) {
+      it.serial = String(idx + 1);
+    }
+    enqueue('items', it.id);
+  });
+  inserted.serial = String(insertIndex + 1);
+  enqueue('items', inserted.id);
+
+  pushUndo(`Insert row ${position}`);
+  const client = data.clients?.find(c => c.id === activeClient);
+  if (typeof logActivity === 'function') {
+    logActivity('add', `Inserted row ${position} "${targetItem.service || 'Row'}" in ${client?.name || 'client'}`, {
+      item: JSON.parse(JSON.stringify(inserted)),
+      clientId: activeClient,
+      clientName: client?.name || ''
+    });
+  }
+
+  selected.clear();
+  selected.add(inserted.id);
+  selectionCell = { id: inserted.id, key: 'service' };
+  save();
+  scheduleSync();
+  render();
+
+  setTimeout(() => {
+    const row = document.querySelector(`[data-row="${inserted.id}"]`);
+    row?.scrollIntoView({ block: 'nearest' });
+    const field = row?.querySelector('[data-cell="service"]');
+    if (field) activateSheetField(field);
+  }, 40);
+  return true;
+}
 
 function recordNav(prevTab, prevClient) {
   if (isNavigatingBack || !prevTab) return;
@@ -388,7 +454,7 @@ function render() {
   const live = !!(clientApi && session && data.settings.workspaceId);
   $$('#tabs button').forEach(b => b.classList.toggle('active', b.dataset.tab === tab));
   renderClients();
-  main.innerHTML = ({ dashboard:renderDashboard, sheet:renderSheet, tracker:renderTracker, tasks:renderTasks, chat:renderChat, groups:renderGroups, revenue:renderRevenue, payments:renderPayments, invoices:renderInvoices, 'client-details':renderClientDetails, settings:renderSettings, 'import-preview':renderImportPreview }[tab] || renderSheet)();
+  main.innerHTML = ({ dashboard:renderDashboard, sheet:renderSheet, tracker:renderTracker, tasks:renderTasks, chat:renderChat, groups:renderGroups, revenue:renderRevenue, payments:renderPayments, invoices:renderInvoices, 'client-details':renderClientDetails, activity:renderActivity, settings:renderSettings, 'import-preview':renderImportPreview }[tab] || renderSheet)();
   if(sameTab && main) main.scrollTop = preservedMainScroll;
   if(sameSheet && sheetScroll){const grid=main.querySelector('.sheet-viewport');if(grid){grid.scrollTop=sheetScroll.grid;grid.scrollLeft=sheetScroll.across;}}
   const indicator = $('#tabIndicator'), active = $(`#tabs button[data-tab="${tab}"]`);
@@ -396,7 +462,7 @@ function render() {
   if (lastRenderedTab && (lastRenderedTab !== tab || (tab === 'sheet' && lastRenderedClient !== activeClient))) {
     recordNav(lastRenderedTab, lastRenderedClient);
   }
-  if (lastRenderedTab !== tab) { const order = ['sheet','dashboard','tracker','tasks','chat','groups','revenue','payments','invoices','client-details','settings']; const direction = order.indexOf(tab) >= order.indexOf(lastRenderedTab) ? 'tab-next' : 'tab-prev'; $('#main').classList.remove('tab-next','tab-prev'); void $('#main').offsetWidth; $('#main').classList.add(direction); lastRenderedTab = tab; }
+  if (lastRenderedTab !== tab) { const order = ['sheet','dashboard','tracker','tasks','chat','groups','revenue','payments','invoices','client-details','activity','settings']; const direction = order.indexOf(tab) >= order.indexOf(lastRenderedTab) ? 'tab-next' : 'tab-prev'; $('#main').classList.remove('tab-next','tab-prev'); void $('#main').offsetWidth; $('#main').classList.add(direction); lastRenderedTab = tab; }
   if(tab==='settings')showUpdateState(desktopUpdate);
   if(tab==='chat'){ unreadChatCount = 0; updateChatUnreadBadge(); initChatInteractions(); }
   if(tab==='tasks'){ updateTasksDueBadge(); }
@@ -749,7 +815,7 @@ function renderSheet() {
       ${value('remarks',i.remarks||'')}</tr>`;
   }
   if(filter==='all')rows+=Array.from({length:blankRows},(_,n)=>blankRowHtml(all.length+n)).join('');
-  return `<div class="sheet-shell"><div class="sheet-toolbar"><div class="actions"><button type="button" class="small-btn icon-btn" data-action="undo" title="Undo (Ctrl+Z)" ${undoStack.length?'':'disabled'} aria-label="Undo"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7v6h6"/><path d="M21 17a9 9 0 0 0-9-9 9 9 0 0 0-6 2.3L3 13"/></svg></button><button type="button" class="small-btn icon-btn" data-action="redo" title="Redo (Ctrl+Y)" ${redoStack.length?'':'disabled'} aria-label="Redo"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round"><path d="M21 7v6h-6"/><path d="M3 17a9 9 0 0 1 9-9 9 9 0 0 1 6 2.3L21 13"/></svg></button><button class="small-btn green" data-action="add-multiples" title="Add multiple rows from formatted WhatsApp/text">➕ Add Multiples</button><button class="small-btn purple" data-action="smart-update" title="Find words and bulk update rate or status across rows">⚡ Smart Update</button><button class="small-btn blue" data-action="assign" ${selected.size?'':'disabled'}>● Start work</button><button class="small-btn" data-action="complete" ${selected.size?'':'disabled'}>✓ Mark sent</button><button class="small-btn" data-action="invoice" ${selected.size?'':'disabled'}>▣ Create invoice</button><button class="small-btn" data-action="share-chat" ${selected.size?'':'disabled'} title="Share selected row(s) in Team Chat">💬 Share in chat</button><button class="small-btn danger" data-action="delete" title="Delete selected row(s) (Del)" ${selected.size?'':'disabled'}>🗑 Delete row</button><button class="small-btn" data-action="group" ${selected.size>1?'':'disabled'}>Group deal</button><button class="small-btn" data-action="project-group" ${selected.size?'':'disabled'}>Group project</button><select id="bulkStatus" aria-label="Set selected rows status" ${selected.size?'':'disabled'}><option value="">Set status…</option>${['pending','working','changes','sent','paid','discarded'].map(s=>`<option value="${s}">${s[0].toUpperCase()+s.slice(1)}</option>`).join('')}<option value="paid-date">Paid on date…</option></select><select id="workFilter" aria-label="Filter work">${['all','pending','working','changes','sent','paid','discarded'].map(s=>`<option value="${s}" ${filter===s?'selected':''}>${s==='all'?'All work':s[0].toUpperCase()+s.slice(1)}</option>`).join('')}</select><span class="hint" id="selectedCount">${selectionLabelHtml()}</span></div></div>
+  return `<div class="sheet-shell"><div class="sheet-toolbar"><div class="actions"><button type="button" class="small-btn icon-btn" data-action="undo" title="Undo (Ctrl+Z)" ${undoStack.length?'':'disabled'} aria-label="Undo"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7v6h6"/><path d="M21 17a9 9 0 0 0-9-9 9 9 0 0 0-6 2.3L3 13"/></svg></button><button type="button" class="small-btn icon-btn" data-action="redo" title="Redo (Ctrl+Y)" ${redoStack.length?'':'disabled'} aria-label="Redo"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round"><path d="M21 7v6h-6"/><path d="M3 17a9 9 0 0 1 9-9 9 9 0 0 1 6 2.3L21 13"/></svg></button><button class="small-btn green" data-action="add-multiples" title="Add multiple rows from formatted WhatsApp/text">➕ Add Multiples</button><button class="small-btn purple" data-action="smart-update" title="Find words and bulk update rate or status across rows">⚡ Smart Update</button><button class="small-btn blue" data-action="assign" ${selected.size?'':'disabled'}>● Start work</button><button class="small-btn" data-action="complete" ${selected.size?'':'disabled'}>✓ Mark sent</button><button class="small-btn" data-action="invoice" ${selected.size?'':'disabled'}>▣ Create invoice</button><button class="small-btn" data-action="share-chat" ${selected.size?'':'disabled'} title="Share selected row(s) in Team Chat">💬 Share in chat</button><button class="small-btn danger" data-action="delete" title="Delete selected row(s) (Del)" ${selected.size?'':'disabled'}>🗑 Delete row</button><button type="button" class="small-btn" data-action="insert-above" title="Insert row above selected (Ctrl+Shift+Enter)" ${selected.size===1?'':'disabled'}>⬆ Row Above</button><button type="button" class="small-btn" data-action="insert-below" title="Insert row below selected (Ctrl+Alt+Enter)" ${selected.size===1?'':'disabled'}>⬇ Row Below</button><button class="small-btn" data-action="group" ${selected.size>1?'':'disabled'}>Group deal</button><button class="small-btn" data-action="project-group" ${selected.size?'':'disabled'}>Group project</button><select id="bulkStatus" aria-label="Set selected rows status" ${selected.size?'':'disabled'}><option value="">Set status…</option>${['pending','working','changes','sent','paid','discarded'].map(s=>`<option value="${s}">${s[0].toUpperCase()+s.slice(1)}</option>`).join('')}<option value="paid-date">Paid on date…</option></select><select id="workFilter" aria-label="Filter work">${['all','pending','working','changes','sent','paid','discarded'].map(s=>`<option value="${s}" ${filter===s?'selected':''}>${s==='all'?'All work':s[0].toUpperCase()+s.slice(1)}</option>`).join('')}</select><span class="hint" id="selectedCount">${selectionLabelHtml()}</span></div></div>
     <div class="sheet-viewport"><table class="sheet"><thead><tr><th class="row-selector"><input type="checkbox" id="selectAll" aria-label="Select visible rows"></th><th>SR</th><th>DATE</th><th>SERVICE PROVIDED</th><th>QTY</th><th>RATE</th><th>TOTAL</th><th>STATUS</th><th>ADVANCE</th><th>ASSIGNED</th><th>REMARKS</th></tr></thead><tbody>${rows}</tbody></table></div></div>`;
 }
 
@@ -2104,6 +2170,66 @@ function fmtTimeAgo(isoString) {
   }
 }
 
+function broadcastActivityLog(action, payload = {}) {
+  if (typeof channel !== 'undefined' && channel) {
+    try {
+      channel.send({
+        type: 'broadcast',
+        event: 'activity_log_update',
+        payload: {
+          action,
+          senderId: typeof currentUserId === 'function' ? currentUserId() : 'local-me',
+          timestamp: new Date().toISOString(),
+          ...payload
+        }
+      });
+    } catch (e) {
+      console.warn('Activity log broadcast warning:', e);
+    }
+  }
+}
+
+function handleIncomingActivityLogUpdate(payload) {
+  if (!payload) return;
+  data.activityLog = data.activityLog || [];
+  if (payload.action === 'rollback' && payload.activityId) {
+    const act = data.activityLog.find(a => a.id === payload.activityId);
+    if (act) act.rolledBack = true;
+  } else if (payload.entry) {
+    const existingIdx = data.activityLog.findIndex(a => a.id === payload.entry.id);
+    if (existingIdx >= 0) {
+      data.activityLog[existingIdx] = payload.entry;
+    } else {
+      data.activityLog.unshift(payload.entry);
+      if (data.activityLog.length > 500) data.activityLog.length = 500;
+    }
+  }
+  if (tab === 'activity' || tab === 'settings') render();
+}
+
+function mergeRemoteActivityLog(remoteEntries) {
+  if (!Array.isArray(remoteEntries) || !remoteEntries.length) return;
+  data.activityLog = data.activityLog || [];
+  const map = new Map();
+  for (const entry of data.activityLog) {
+    if (entry && entry.id) map.set(entry.id, entry);
+  }
+  for (const remote of remoteEntries) {
+    if (!remote || !remote.id) continue;
+    const local = map.get(remote.id);
+    if (!local) {
+      map.set(remote.id, remote);
+    } else {
+      if (remote.rolledBack && !local.rolledBack) local.rolledBack = true;
+    }
+  }
+  data.activityLog = Array.from(map.values()).sort((a, b) => {
+    const ta = new Date(a.timestamp || 0).getTime();
+    const tb = new Date(b.timestamp || 0).getTime();
+    return tb - ta;
+  }).slice(0, 500);
+}
+
 function logActivity(type, description, details = {}) {
   try {
     data.activityLog = data.activityLog || [];
@@ -2127,7 +2253,10 @@ function logActivity(type, description, details = {}) {
       rolledBack: false
     };
     data.activityLog.unshift(entry);
-    if (data.activityLog.length > 50) data.activityLog.length = 50;
+    if (data.activityLog.length > 500) data.activityLog.length = 500;
+    data.activityLogPendingSync = true;
+    broadcastActivityLog('new_entry', { entry });
+    if (typeof scheduleSync === 'function') scheduleSync();
   } catch (err) {
     console.error('logActivity error:', err);
   }
@@ -2223,6 +2352,8 @@ function rollbackActivity(activityId) {
   }
 
   act.rolledBack = true;
+  data.activityLogPendingSync = true;
+  broadcastActivityLog('rollback', { activityId, entry: act });
   save();
   render();
   scheduleSync();
@@ -2234,10 +2365,123 @@ function clearActivityLog() {
   if (!data.activityLog || !data.activityLog.length) return;
   if (confirm('Clear all recorded activity history? This cannot be undone.')) {
     data.activityLog = [];
+    data.activityLogPendingSync = true;
     save();
     render();
+    scheduleSync();
     toast('Activity log cleared');
   }
+}
+
+function renderActivity() {
+  const log = (data.activityLog || []).slice();
+  const query = (activitySearchQuery || '').toLowerCase().trim();
+  const filtered = log.filter(entry => {
+    if (activityFilter !== 'all' && entry.type !== activityFilter) return false;
+    if (!query) return true;
+    const matchDesc = (entry.description || '').toLowerCase().includes(query);
+    const matchUser = (entry.userName || '').toLowerCase().includes(query);
+    const matchClient = (entry.clientName || '').toLowerCase().includes(query);
+    return matchDesc || matchUser || matchClient;
+  });
+
+  const typeIcons = {
+    add: '➕',
+    update: '✏️',
+    delete: '🗑️',
+    paste: '📋',
+    status: '🏷️'
+  };
+
+  const counts = {
+    all: log.length,
+    add: log.filter(e => e.type === 'add').length,
+    update: log.filter(e => e.type === 'update').length,
+    delete: log.filter(e => e.type === 'delete').length,
+    paste: log.filter(e => e.type === 'paste').length,
+    status: log.filter(e => e.type === 'status').length
+  };
+
+  const displayed = filtered.slice(0, activityDisplayLimit);
+  const hasMore = filtered.length > activityDisplayLimit;
+
+  const pill = (type, label) => `
+    <button type="button" class="activity-pill-btn ${activityFilter === type ? 'active' : ''}" data-activity-filter="${type}">
+      ${label} (${counts[type] || 0})
+    </button>
+  `;
+
+  let rowsHtml = '';
+  if (!displayed.length) {
+    rowsHtml = `
+      <div class="empty" style="padding:48px 20px;">
+        <h3>No activities match</h3>
+        <p class="muted">Try choosing another filter or clearing the search query.</p>
+      </div>
+    `;
+  } else {
+    rowsHtml = displayed.map(act => {
+      const icon = typeIcons[act.type] || '📝';
+      const timeStr = fmtTimeAgo(act.timestamp);
+      return `
+        <div class="activity-card ${act.rolledBack ? 'rolled-back-card' : ''}" data-activity-item="${act.id}">
+          <div class="activity-card-icon">${icon}</div>
+          <div class="activity-card-body">
+            <div class="activity-card-desc">${esc(act.description)}</div>
+            <div class="activity-card-meta">
+              <span class="activity-badge ${act.type}">${act.type}</span>
+              <span><strong>${esc(act.userName || 'Team member')}</strong></span>
+              <span>•</span>
+              <span title="${esc(act.timestamp)}">${timeStr}</span>
+              ${act.clientName ? `<span>•</span><span class="activity-client-tag">${esc(act.clientName)}</span>` : ''}
+              ${act.rolledBack ? `<span class="pill-danger" style="padding:1px 6px;border-radius:4px;font-size:10px;font-weight:700;">ROLLED BACK</span>` : ''}
+            </div>
+          </div>
+          <div class="activity-card-actions">
+            ${!act.rolledBack ? `<button type="button" class="small-btn quiet" data-rollback-id="${act.id}" title="Roll back this action">↩ Roll back</button>` : ''}
+          </div>
+        </div>
+      `;
+    }).join('');
+  }
+
+  return `
+    <div class="activity-page">
+      <div class="section-top" style="margin-bottom:0;">
+        <div>
+          <h2>Team Activity Tracker</h2>
+          <p>Live sync of additions, cell edits, deletions, and pastes with instant one-click rollback.</p>
+        </div>
+        <div style="display:flex;gap:8px;">
+          ${log.length ? `<button type="button" class="small-btn quiet" id="clearActivityLogBtn" style="font-size:11.5px;">Clear Log</button>` : ''}
+        </div>
+      </div>
+
+      <div class="activity-toolbar">
+        <div class="activity-search-wrap">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="opacity:0.6;"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
+          <input type="text" id="activitySearchInput" placeholder="Search activities, services, team members..." value="${esc(activitySearchQuery)}">
+        </div>
+        <div class="activity-filter-pills">
+          ${pill('all', 'All')}
+          ${pill('add', 'Adds')}
+          ${pill('update', 'Edits')}
+          ${pill('delete', 'Deletions')}
+          ${pill('paste', 'Pastes')}
+          ${pill('status', 'Status')}
+        </div>
+      </div>
+
+      <div class="activity-list">
+        ${rowsHtml}
+        ${hasMore ? `
+          <button type="button" class="activity-load-more" id="activityLoadMoreBtn">
+            Load more (${filtered.length - activityDisplayLimit} remaining)
+          </button>
+        ` : ''}
+      </div>
+    </div>
+  `;
 }
 
 function renderActivityHistoryPanel() {
@@ -2306,7 +2550,10 @@ function renderActivityHistoryPanel() {
         <h3 style="margin:0;display:flex;align-items:center;gap:8px;"><span>📜 Activity Tracker & Rollback</span> <span class="pill" style="font-size:11px;padding:2px 8px;">${log.length} actions logged</span></h3>
         <p class="muted" style="margin:4px 0 0 0;font-size:13px;">Tracks all edits, additions, deletions, and copy-pastes across all clients. Accidentally deleted or overwritten rows can be restored instantly with one click.</p>
       </div>
-      ${log.length ? `<button type="button" class="small-btn quiet" id="clearActivityLogBtn" style="font-size:11px;">Clear Log</button>` : ''}
+      <div style="display:flex;gap:8px;align-items:center;">
+        <button type="button" class="small-btn blue" data-action="go-activity" style="font-size:11.5px;font-weight:700;">Open Activity Tracker Page →</button>
+        ${log.length ? `<button type="button" class="small-btn quiet" id="clearActivityLogBtn" style="font-size:11px;">Clear Log</button>` : ''}
+      </div>
     </div>
     ${rowsHtml}
   </div>`;
@@ -2339,6 +2586,33 @@ function bindMain() {
   const themeSelect=$('#settingsThemeSelect');if(themeSelect)themeSelect.onchange=e=>{applyTheme(e.target.value);save();};
   $$('[data-rollback-id]').forEach(b=>{b.onclick=e=>{e.stopPropagation();rollbackActivity(b.dataset.rollbackId);};});
   const clearActBtn=$('#clearActivityLogBtn');if(clearActBtn)clearActBtn.onclick=()=>clearActivityLog();
+  const actSearch = $('#activitySearchInput');
+  if (actSearch) {
+    actSearch.oninput = e => {
+      activitySearchQuery = e.target.value;
+      activityDisplayLimit = 50;
+      render();
+      const input = $('#activitySearchInput');
+      if (input) {
+        input.focus();
+        input.setSelectionRange(input.value.length, input.value.length);
+      }
+    };
+  }
+  $$('[data-activity-filter]').forEach(btn => {
+    btn.onclick = () => {
+      activityFilter = btn.dataset.activityFilter;
+      activityDisplayLimit = 50;
+      render();
+    };
+  });
+  const actLoadMore = $('#activityLoadMoreBtn');
+  if (actLoadMore) {
+    actLoadMore.onclick = () => {
+      activityDisplayLimit += 50;
+      render();
+    };
+  }
   $$('[data-toggle-tracker-client]').forEach(el=>{
     el.onclick=e=>{
       e.stopPropagation();
@@ -2529,7 +2803,10 @@ function bindMain() {
     window._editBlurRegistered = true;
     document.addEventListener('mousedown', e => {
       const active = document.querySelector('input.editing, select.editing, [data-cell].editing, [data-blank-cell].editing');
-      if (active && !active.contains(e.target)) {
+      if (active) {
+        if (active.contains(e.target) || e.target.closest('td')?.contains(active)) {
+          return;
+        }
         deactivateAllEditingFields();
       }
     }, true);
@@ -2545,6 +2822,13 @@ function bindMain() {
       if (e.target.closest('button, input.editing, input[type=checkbox]')) return;
       const field = e.target.closest('td')?.querySelector('[data-cell]');
       selectionCell = field ? { id: row.dataset.row, key: field.dataset.cell } : null;
+
+      // Direct editing on single click (instant typing for cost, service, etc.)
+      if (field && (e.target === field || field.contains(e.target))) {
+        activateSheetField(field);
+        return; // Do NOT call e.preventDefault() so native browser focus and caret work immediately!
+      }
+
       handleRowDragStart(row.dataset.row, e);
       e.preventDefault();
     };
@@ -2563,7 +2847,7 @@ function bindMain() {
         justDraggedSelection = false;
         return;
       }
-      if (e.target.closest('button') || e.target.matches('[type=checkbox]')) return;
+      if (e.target.closest('button, input.editing') || e.target.matches('[type=checkbox], [data-cell], [data-blank-cell]')) return;
       const field = e.target.closest('td')?.querySelector('[data-cell]');
       selectionCell = field ? { id: row.dataset.row, key: field.dataset.cell } : null;
 
@@ -2587,6 +2871,7 @@ function bindMain() {
       if (field) {
         activateSheetField(field);
         lastCellClick = { rowId: null, cellKey: null, blankOrder: null, time: 0 };
+        if (typeof field.select === 'function') field.select();
       }
     };
     row.oncontextmenu=e=>{
@@ -2600,6 +2885,8 @@ function bindMain() {
       menu.innerHTML=`<button id="contextCut"><span class="context-icon">✂</span><span>Cut row</span><kbd>Ctrl+X</kbd></button>`+
         `<button id="contextCopy"><span class="context-icon">⎘</span><span>Copy row</span><kbd>Ctrl+C</kbd></button>`+
         `<button id="contextPaste" ${hasClipboard?'':'disabled'}><span class="context-icon">📋</span><span>Paste row</span><kbd>Ctrl+V</kbd></button>`+
+        `<button id="contextInsertAbove"><span class="context-icon">⬆</span><span>Insert row above</span><kbd>Ctrl+Shift+Enter</kbd></button>`+
+        `<button id="contextInsertBelow"><span class="context-icon">⬇</span><span>Insert row below</span><kbd>Ctrl+Alt+Enter</kbd></button>`+
         `<button id="contextDuplicate"><span class="context-icon">⧉</span><span>Duplicate row</span><kbd>Ctrl+D</kbd></button>`+
         `<button id="contextAddMulti"><span class="context-icon">➕</span><span>Add multiples…</span></button>`+
         `<button id="contextSmartUpdate"><span class="context-icon">⚡</span><span>Smart Update…</span></button>`+
@@ -2621,6 +2908,8 @@ function bindMain() {
       $('#contextCut').onclick=()=>{menu.remove();copySelectedRows(true);};
       $('#contextCopy').onclick=()=>{menu.remove();copySelectedRows(false);};
       if($('#contextPaste'))$('#contextPaste').onclick=()=>{menu.remove();pasteCopiedRows(rowId);};
+      if($('#contextInsertAbove'))$('#contextInsertAbove').onclick=()=>{menu.remove();insertRowAt(rowId,'above');};
+      if($('#contextInsertBelow'))$('#contextInsertBelow').onclick=()=>{menu.remove();insertRowAt(rowId,'below');};
       $('#contextDuplicate').onclick=()=>{menu.remove();duplicateSelectedRow(rowId);};
       if($('#contextAddMulti'))$('#contextAddMulti').onclick=()=>{menu.remove();addMultiplesDialog();};
       if($('#contextSmartUpdate'))$('#contextSmartUpdate').onclick=()=>{menu.remove();smartUpdateDialog();};
@@ -2642,46 +2931,52 @@ function bindMain() {
       if (e.button !== 0) return;
       selected.clear();
       $$('.sheet tr.selected').forEach(r=>r.classList.remove('selected'));
-      updateBulkActions();
+      $$('.sheet tr.blank-row').forEach(r=>r.classList.remove('blank-selected'));
+      row.classList.add('blank-selected');
+      refreshSelection();
       const activeEditing = document.querySelector('input.editing, select.editing, [data-cell].editing, [data-blank-cell].editing');
-      if (activeEditing && !activeEditing.contains(e.target)) {
+      if (activeEditing && !activeEditing.contains(e.target) && !e.target.closest('td')?.contains(activeEditing)) {
         deactivateAllEditingFields();
+      }
+      const field=e.target.closest('td')?.querySelector('[data-blank-cell]');
+      selectionCell={blankOrder:Number(row.dataset.blankRow),key:field?.dataset?.blankCell||'service'};
+      if (field && (e.target === field || field.contains(e.target))) {
+        activateSheetField(field);
       }
     };
     row.onclick=e=>{
       selected.clear();
       $$('.sheet tr.selected').forEach(r=>r.classList.remove('selected'));
-      updateBulkActions();
+      $$('.sheet tr.blank-row').forEach(r=>r.classList.remove('blank-selected'));
+      row.classList.add('blank-selected');
+      refreshSelection();
       const field=e.target.closest('td')?.querySelector('[data-blank-cell]');
-      selectionCell=field?{blankOrder:Number(row.dataset.blankRow),key:field.dataset.blankCell}:null;
-      const now = Date.now();
-      const isSameBlank = lastCellClick.blankOrder === Number(row.dataset.blankRow) &&
-                          lastCellClick.cellKey === field?.dataset?.blankCell &&
-                          field;
-      const timeDiff = now - lastCellClick.time;
-      if (isSameBlank && timeDiff < 900) {
+      selectionCell={blankOrder:Number(row.dataset.blankRow),key:field?.dataset?.blankCell||'service'};
+      if(field) {
         activateSheetField(field);
-        lastCellClick = { rowId: null, cellKey: null, blankOrder: null, time: 0 };
-        return;
       }
-      lastCellClick = { rowId: null, blankOrder: Number(row.dataset.blankRow), cellKey: field?.dataset?.blankCell || null, time: now };
     };
     row.ondblclick=e=>{
       selected.clear();
       $$('.sheet tr.selected').forEach(r=>r.classList.remove('selected'));
-      updateBulkActions();
+      $$('.sheet tr.blank-row').forEach(r=>r.classList.remove('blank-selected'));
+      row.classList.add('blank-selected');
+      refreshSelection();
       const field=e.target.closest('td')?.querySelector('[data-blank-cell]');
       if(field) {
         activateSheetField(field);
-        lastCellClick = { rowId: null, cellKey: null, blankOrder: null, time: 0 };
+        if(typeof field.select === 'function') field.select();
       }
     };
     row.oncontextmenu=e=>{
       e.preventDefault();
       selected.clear();
       $$('.sheet tr.selected').forEach(r=>r.classList.remove('selected'));
-      updateBulkActions();
+      $$('.sheet tr.blank-row').forEach(r=>r.classList.remove('blank-selected'));
+      row.classList.add('blank-selected');
+      refreshSelection();
       const blankOrder=Number(row.dataset.blankRow);
+      selectionCell={blankOrder,key:'service'};
       const menu=$('#contextMenu')||document.createElement('div');
       menu.id='contextMenu';menu.className='context-menu';
       menu.innerHTML=`<button id="contextPasteBlank" ${rowClipboard.items.length?'':'disabled'}><span class="context-icon">📋</span><span>Paste row here</span><kbd>Ctrl+V</kbd></button>`+
@@ -2839,6 +3134,8 @@ function refreshSelection() {
   const group=$('[data-action="group"]');if(group)group.disabled=selected.size<2;
   const project=$('[data-action="project-group"]');if(project)project.disabled=!selected.size;
   const ungroup=$('[data-action="ungroup"]');if(ungroup)ungroup.disabled=!hasGroupedSelected();
+  const insertAbove=$('[data-action="insert-above"]');if(insertAbove)insertAbove.disabled=selected.size!==1;
+  const insertBelow=$('[data-action="insert-below"]');if(insertBelow)insertBelow.disabled=selected.size!==1;
   updateUndoRedoUI();
 }
 function clearCellDragHighlights() {
@@ -3423,10 +3720,6 @@ function pasteCopiedRows(targetId=null,targetBlankOrder=null) {
     targetIndex=items.findIndex(i=>i.id===firstSelected);
   }
 
-  if (targetIndex<0 || isBlankTarget) {
-    targetIndex=items.length;
-  }
-
   const copiedItems=rowClipboard.items;
   const addedItems = [];
   const modifiedItems = [];
@@ -3458,6 +3751,16 @@ function pasteCopiedRows(targetId=null,targetBlankOrder=null) {
     enqueue('items',target.id);
   });
 
+  // Re-index serials cleanly (1, 2, 3...)
+  const updatedAll = clientItems(activeClient);
+  updatedAll.forEach((it, idx) => {
+    it.sortOrder = idx;
+    if (it.serial && !isNaN(Number(it.serial))) {
+      it.serial = String(idx + 1);
+    }
+    enqueue('items', it.id);
+  });
+
   if (isCut&&rowClipboard.sourceRowIds.length) {
     rowClipboard.sourceRowIds.forEach(srcId=>{
       if (copiedItems.some((_,o)=>items[targetIndex+o]?.id===srcId)) return;
@@ -3482,6 +3785,12 @@ function pasteCopiedRows(targetId=null,targetBlankOrder=null) {
     toast('Row moved (pasted from cut)');
   } else {
     toast(copiedItems.length===1?'Row pasted (Ctrl+V)':`${copiedItems.length} rows pasted`);
+  }
+
+  selected.clear();
+  addedItems.forEach(i => selected.add(i.id));
+  if (addedItems.length) {
+    selectionCell = { id: addedItems[0].id, key: 'service' };
   }
 
   const client = data.clients?.find(c => c.id === activeClient);
@@ -6362,6 +6671,9 @@ function actions(action) {
   if(action==='ungroup')return ungroupSelectedRows();
   if(action==='share-chat')return shareSelectedRowsInChat();
   if(action==='cat-quick-ping')return openCatReactionPicker();
+  if(action==='insert-above'){if(selected.size===1)insertRowAt([...selected][0],'above');return;}
+  if(action==='insert-below'){if(selected.size===1)insertRowAt([...selected][0],'below');return;}
+  if(action==='go-activity'){tab='activity';render();return;}
   if(action==='go-settings'){tab='settings';render();return;}
   if(action==='billing')return billingDialog(); if(action==='save-settings')return saveSettings();
   if(action==='save-connection'){data.settings.url=inputValue('supaUrl').replace(/\/$/,'');data.settings.key=inputValue('supaKey');save();setupSupabase();render();toast('Connection saved');return;}
@@ -7518,13 +7830,19 @@ async function flushPending() {
         if (ts < pushCutoff) recentLocalPushes.delete(k);
       }
     }
-    if (data.tasksPendingSync && data.settings.workspaceId && clientApi) {
+    if ((data.tasksPendingSync || data.activityLogPendingSync) && data.settings.workspaceId && clientApi) {
       try {
         data.settings.seller = data.settings.seller || {};
-        data.settings.seller.notice_board = (data.tasks || []).slice(0, 300);
-        data.settings.seller.deleted_task_ids = (data.deletedTaskIds || []).slice(-250);
+        if (data.tasksPendingSync) {
+          data.settings.seller.notice_board = (data.tasks || []).slice(0, 300);
+          data.settings.seller.deleted_task_ids = (data.deletedTaskIds || []).slice(-250);
+        }
+        if (data.activityLogPendingSync) {
+          data.settings.seller.activity_log = (data.activityLog || []).slice(0, 500);
+        }
         await clientApi.from('workspaces').update({ business: data.settings.seller }).eq('id', data.settings.workspaceId);
         data.tasksPendingSync = false;
+        data.activityLogPendingSync = false;
       } catch (err) {
         console.warn('Notice board flush sync warning:', err);
       }
@@ -7580,6 +7898,9 @@ async function pullRemote(){
   if (Array.isArray(w.data?.business?.notice_board) || Array.isArray(w.data?.business?.tasks)) {
     const remoteTasks = w.data.business.notice_board || w.data.business.tasks || [];
     mergeRemoteNoticeBoard(remoteTasks);
+  }
+  if (Array.isArray(w.data?.business?.activity_log)) {
+    mergeRemoteActivityLog(w.data.business.activity_log);
   }
   ['clients','groups','projectGroups','items','invoices','receipts'].forEach((table,k)=>{
     const pending=new Set(data.pending.filter(p=>p.table===table).map(p=>p.id));
@@ -7670,6 +7991,11 @@ function subscribe(){
   channel.on('broadcast', { event: 'notice_board_update' }, async ({ payload }) => {
     if (!payload || payload.senderId === currentUserId()) return;
     handleIncomingNoticeBoardUpdate(payload);
+  });
+
+  channel.on('broadcast', { event: 'activity_log_update' }, async ({ payload }) => {
+    if (!payload || payload.senderId === currentUserId()) return;
+    handleIncomingActivityLogUpdate(payload);
   });
 
   channel.on('presence', { event: 'join' }, async ({ newPresences }) => {
@@ -7901,6 +8227,12 @@ document.addEventListener('keydown',e=>{
       }
       if(isCtrl&&key==='d'&&selected.size){
         e.preventDefault();duplicateSelectedRow([...selected][0]);return;
+      }
+      if(isCtrl&&e.shiftKey&&e.key==='Enter'&&selected.size===1){
+        e.preventDefault();insertRowAt([...selected][0],'above');return;
+      }
+      if(isCtrl&&e.key==='Enter'&&selected.size===1){
+        e.preventDefault();insertRowAt([...selected][0],'below');return;
       }
       if(e.altKey&&e.key==='ArrowUp'&&selected.size){
         e.preventDefault();moveRowByDelta([...selected][0],-1);return;
