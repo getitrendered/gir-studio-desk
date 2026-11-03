@@ -2633,6 +2633,12 @@ tr.row-fill-drag {
   color: #64748b !important;
 }
 
+[data-theme="dark"] .client-tab small.pending-badge {
+  background: #123321 !important;
+  color: #4ade80 !important;
+  border: 1px solid #1e5236 !important;
+}
+
 [data-theme="dark"] .client-tab small.sent-badge {
   background: #33240d !important;
   color: #fbbf24 !important;
