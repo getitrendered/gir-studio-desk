@@ -73,7 +73,9 @@ if (typeof window !== 'undefined' && window.matchMedia) {
     });
   } catch {}
 }
-let data = structuredClone(defaults), tab = 'sheet', lastRenderedTab = null, lastRenderedClient = null, activeClient = null, selected = new Set(), selectionAnchor = null, selectionCell = null, collapsedGroups = new Set(), blankRows = 60, highlightUser = null, filter = 'all', clientApi = null, session = null, channel = null, syncing = false, toastTimer, syncTimer, lastSyncTime = Date.now(), importPreview = null, previewClientIndex = 0, migrating = false;
+let data = structuredClone(defaults), tab = 'sheet', lastRenderedTab = null, lastRenderedClient = null, activeClient = null, selected = new Set(), selectionAnchor = null, selectionCell = null, collapsedGroups = new Set(), blankRows = 25, highlightUser = null, filter = 'all', clientApi = null, session = null, channel = null, syncing = false, toastTimer, syncTimer, lastSyncTime = Date.now(), importPreview = null, previewClientIndex = 0, migrating = false;
+const recentLocalPushes = new Map();
+let isDeferredRemotePull = false;
 let isRowDragSelecting = false, hasRowDragged = false, justDraggedSelection = false, dragStartRowId = null, dragTargetRowId = null, dragStartCellKey = null, dragStartShift = false, dragStartWithCtrl = false, dragInitialSelected = null;
 let pendingChatAttachment = null, chatDraftText = '', activeStickerTab = 'stickers', stickerSearchQuery = '', lastPartnerOnlineTime = 0, unreadChatCount = 0, chatSyncTimer = null, noticeBoardSyncTimer = null;
 let lastCellClick = { rowId: null, cellKey: null, blankOrder: null, time: 0 };
@@ -139,7 +141,7 @@ function save() {
     if (window.desk?.write) {
       window.desk.write(data).catch(e => toast('Could not save locally: ' + e.message));
     }
-  }, 60);
+  }, 350);
 }
 function saveImmediate() {
   clearTimeout(saveTimer);
@@ -148,7 +150,7 @@ function saveImmediate() {
   }
 }
 function enqueue(table,id) { const key=table+':'+id; if(!data.pending.some(p=>p.key===key))data.pending.push({key,table,id}); }
-function scheduleSync(){if(!clientApi||!session||!data.settings.workspaceId)return;clearTimeout(syncTimer);syncTimer=setTimeout(()=>flushPending().catch(e=>toast('Sync waiting: '+e.message)),400);}
+function scheduleSync(){if(!clientApi||!session||!data.settings.workspaceId)return;clearTimeout(syncTimer);syncTimer=setTimeout(()=>flushPending().catch(e=>toast('Sync waiting: '+e.message)),800);}
 function queue(table, id) { enqueue(table,id); save(); scheduleSync(); }
 function mutate(table, record) { record.updatedAt = new Date().toISOString(); const list = data[table]; const ix = list.findIndex(x => x.id === record.id); if (ix < 0) list.push(record); else list[ix] = record; queue(table, record.id); render(); }
 function currentClient() { return data.clients.find(c => c.id === activeClient); }
@@ -341,7 +343,25 @@ function financials() {
   }
   return amount;
 }
-function counts() { const all = data.items.filter(i=>i.status!=='discarded'), todayValue = today(); return { total:all.length, discarded:data.items.length-all.length, done:all.filter(i => ['sent','paid'].includes(i.status)).length, working:all.filter(i => ['working','changes'].includes(i.status)).length, pending:all.filter(i => i.status === 'pending').length, overdue:all.filter(i => i.dueDate && i.dueDate < todayValue && !['sent','paid'].includes(i.status)).length }; }
+function counts() {
+  const items = data.items || [];
+  const todayValue = today();
+  let total = 0, discarded = 0, done = 0, working = 0, pending = 0, overdue = 0;
+  for (let idx = 0; idx < items.length; idx++) {
+    const i = items[idx];
+    if (i.status === 'discarded') {
+      discarded++;
+      continue;
+    }
+    total++;
+    const s = i.status;
+    if (s === 'sent' || s === 'paid') done++;
+    else if (s === 'working' || s === 'changes') working++;
+    else if (s === 'pending') pending++;
+    if (i.dueDate && i.dueDate < todayValue && s !== 'sent' && s !== 'paid') overdue++;
+  }
+  return { total, discarded, done, working, pending, overdue };
+}
 function render() {
   closeStatusMenu();
   applyTheme();
@@ -2107,8 +2127,7 @@ function logActivity(type, description, details = {}) {
       rolledBack: false
     };
     data.activityLog.unshift(entry);
-    if (data.activityLog.length > 200) data.activityLog.length = 200;
-    save();
+    if (data.activityLog.length > 50) data.activityLog.length = 50;
   } catch (err) {
     console.error('logActivity error:', err);
   }
@@ -2480,7 +2499,7 @@ function bindMain() {
   $$('[data-tracker-status]').forEach(sel=>sel.onchange=e=>{e.stopPropagation();updateTrackerItemStatus(sel.dataset.trackerStatus,sel.value);});
   $$('[data-check]').forEach(b=>{b.onclick=e=>e.stopPropagation();b.onchange=()=>{b.checked?selected.add(b.dataset.check):selected.delete(b.dataset.check);selectionAnchor=b.dataset.check;refreshSelection();};});
   const all=$('#selectAll'); if(all) all.onchange=()=>{$$('[data-check]').forEach(b=>all.checked?selected.add(b.dataset.check):selected.delete(b.dataset.check));refreshSelection();};
-  $$('[data-cell]').forEach(el=>{ el.onchange=()=>editCell(el.dataset.id,el.dataset.cell,el.value); if(el.tagName==='INPUT') el.onpaste=e=>pasteGrid(e,el); });
+  $$('[data-cell]').forEach(el=>{ el.onchange=()=>editCell(el.dataset.id,el.dataset.cell,el.value, true); if(el.tagName==='INPUT') el.onpaste=e=>pasteGrid(e,el); });
   $$('[data-status-menu]').forEach(button=>button.onclick=e=>{
     e.stopPropagation();
     if(tab==='sheet')selectSheetRow(button.dataset.statusMenu,false,false);
@@ -2752,7 +2771,7 @@ function bindMain() {
   $$('[data-receipt-delete]').forEach(b=>b.onclick=()=>deleteReceiptDialog(b.dataset.receiptDelete));
   $$('[data-receipt-jump]').forEach(b=>b.onclick=()=>jumpToReceiptWorksheet(b.dataset.receiptJump));
   $$('[data-receipt-ungroup]').forEach(b=>b.onclick=()=>jumpAndUngroupReceipt(b.dataset.receiptUngroup));
-  const viewport=$('.sheet-viewport');if(tab==='sheet'&&viewport)viewport.onscroll=()=>{if(filter==='all'&&viewport.scrollHeight-viewport.scrollTop-viewport.clientHeight<700){blankRows+=40;render();}};
+  // Fixed blankRows buffer prevents disruptive DOM destruction and layout freezing during fast scrolling
   $$('[data-group-edit]').forEach(b=>b.onclick=()=>groupDialog(b.dataset.groupEdit));
   $$('[data-rename-card]').forEach(b=>b.onclick=()=>{const card=b.closest('.group-card');card.querySelector('[data-open-group]').hidden=true;b.hidden=true;const editor=card.querySelector('.group-card-editor');editor.hidden=false;const input=editor.querySelector('input');if (typeof input.focus === 'function') input.focus();input.select();});
   $$('[data-cancel-card]').forEach(b=>b.onclick=()=>{const card=b.closest('.group-card');card.querySelector('.group-card-editor').hidden=true;card.querySelector('[data-open-group]').hidden=false;card.querySelector('[data-rename-card]').hidden=false;});
@@ -3041,6 +3060,10 @@ function deactivateAllEditingFields(exceptEl = null) {
       materializeBlankRow(el);
     }
   });
+  if (isDeferredRemotePull) {
+    isDeferredRemotePull = false;
+    setTimeout(() => { if (typeof pullRemote === 'function') pullRemote().catch(() => {}); }, 300);
+  }
 }
 
 function activateSheetField(field) {
@@ -7484,9 +7507,15 @@ async function flushPending() {
         const chunk=records.slice(start,start+100);
         const {error}=await clientApi.from(remoteTable[table]).upsert(chunk.map(x=>remoteRow(table,x)),{onConflict:'id'});
         if(error)throw error;
+        const now = Date.now();
+        for(const r of chunk) recentLocalPushes.set(`${table}:${r.id}`, now);
         const ids=new Set(chunk.map(x=>x.id));
         data.pending=data.pending.filter(p=>!(p.table===table&&ids.has(p.id)));
-        save();
+      }
+      save();
+      const pushCutoff = Date.now() - 20000;
+      for (const [k, ts] of recentLocalPushes.entries()) {
+        if (ts < pushCutoff) recentLocalPushes.delete(k);
       }
     }
     if (data.tasksPendingSync && data.settings.workspaceId && clientApi) {
@@ -7661,6 +7690,15 @@ function subscribe(){
   
   for(const table of ['clients','deal_groups','project_groups','work_items','invoices','payment_receipts','members']){
     channel.on('postgres_changes',{event:'*',schema:'public',table,filter:`workspace_id=eq.${data.settings.workspaceId}`},(payload)=>{
+      const localTable = table === 'work_items' ? 'items' : table === 'deal_groups' ? 'groups' : table === 'project_groups' ? 'projectGroups' : table === 'payment_receipts' ? 'receipts' : table;
+      const recId = payload?.new?.id || payload?.old?.id;
+      if (recId) {
+        const lastPushed = recentLocalPushes.get(`${localTable}:${recId}`);
+        if (lastPushed && (Date.now() - lastPushed < 10000)) {
+          // Ignore echo of local save to prevent freezing and redundant re-pulls
+          return;
+        }
+      }
       if(table==='work_items'&&payload?.new){
         const item=payload.new;
         const currentItem=data.items.find(x=>x.id===item.id);
@@ -7683,7 +7721,13 @@ function subscribe(){
         }
       }
       clearTimeout(timer);
-      timer=setTimeout(()=>{pullRemote().catch(e=>toast('Live refresh failed: '+e.message));},250);
+      timer=setTimeout(()=>{
+        if (typeof document !== 'undefined' && document.querySelector('input.editing, select.editing, [data-cell].editing, [data-blank-cell].editing')) {
+          isDeferredRemotePull = true;
+          return;
+        }
+        pullRemote().catch(e=>console.warn('Live refresh warning: '+e.message));
+      },800);
     });
   }
   channel.subscribe(async status => {

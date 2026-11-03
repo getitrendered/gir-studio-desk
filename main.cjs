@@ -321,11 +321,24 @@ app.on('before-quit', () => {
 app.on('window-all-closed', () => {
   if (process.platform !== 'darwin' && isQuitting) app.quit();
 });
-ipcMain.handle('read-store', () => { try { return JSON.parse(fs.readFileSync(file(), 'utf8')); } catch { return null; } });
-ipcMain.handle('write-store', (_e, value) => {
-  if (!value || JSON.stringify(value).length > 30_000_000) throw new Error('Invalid or oversized data');
-  fs.mkdirSync(path.dirname(file()), { recursive: true });
-  const tmp = file() + '.tmp'; fs.writeFileSync(tmp, JSON.stringify(value), 'utf8'); fs.renameSync(tmp, file()); return true;
+ipcMain.handle('read-store', async () => {
+  try {
+    const content = await fs.promises.readFile(file(), 'utf8');
+    return JSON.parse(content);
+  } catch {
+    return null;
+  }
+});
+ipcMain.handle('write-store', async (_e, value) => {
+  if (!value) throw new Error('Invalid data');
+  const serialized = JSON.stringify(value);
+  if (serialized.length > 30_000_000) throw new Error('Invalid or oversized data');
+  const target = file();
+  await fs.promises.mkdir(path.dirname(target), { recursive: true });
+  const tmp = target + '.tmp';
+  await fs.promises.writeFile(tmp, serialized, 'utf8');
+  await fs.promises.rename(tmp, target);
+  return true;
 });
 ipcMain.handle('choose-workbook', async () => {
   const picked = await dialog.showOpenDialog(win, { properties: ['openFile'], filters: [{ name: 'Excel workbook', extensions: ['xlsx'] }] });
