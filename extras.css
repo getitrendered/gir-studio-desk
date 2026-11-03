@@ -3035,17 +3035,91 @@ tr.row-fill-drag {
 
 /* Status Menu */
 [data-theme="dark"] .status-menu {
-  background: #16222f !important;
-  border: 1px solid #283d52 !important;
-  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.6) !important;
+  background: #111a24 !important;
+  border: 1px solid #233446 !important;
+  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.75) !important;
 }
 
 [data-theme="dark"] .status-option {
-  color: #e2e8f0 !important;
+  border: 1px solid transparent !important;
+  transition: all 0.12s ease;
 }
 
-[data-theme="dark"] .status-option:hover {
-  background: #1f3246 !important;
+[data-theme="dark"] .status-option.pending {
+  background: #182330 !important;
+  color: #94a3b8 !important;
+  border-color: #26384c !important;
+}
+[data-theme="dark"] .status-option.pending .status-dot {
+  background: #94a3b8 !important;
+}
+
+[data-theme="dark"] .status-option.working {
+  background: #102944 !important;
+  color: #60a5fa !important;
+  border-color: #1e4572 !important;
+}
+[data-theme="dark"] .status-option.working .status-dot {
+  background: #3b82f6 !important;
+}
+
+[data-theme="dark"] .status-option.changes {
+  background: #281a3d !important;
+  color: #c084fc !important;
+  border-color: #492a70 !important;
+}
+[data-theme="dark"] .status-option.changes .status-dot {
+  background: #a855f7 !important;
+}
+
+[data-theme="dark"] .status-option.sent {
+  background: #33240d !important;
+  color: #fbbf24 !important;
+  border-color: #553b16 !important;
+}
+[data-theme="dark"] .status-option.sent .status-dot {
+  background: #f59e0b !important;
+}
+
+[data-theme="dark"] .status-option.paid {
+  background: #113421 !important;
+  color: #34d399 !important;
+  border-color: #1f5436 !important;
+}
+[data-theme="dark"] .status-option.paid .status-dot {
+  background: #10b981 !important;
+}
+
+[data-theme="dark"] .status-option.discarded {
+  background: #36171a !important;
+  color: #f87171 !important;
+  border-color: #611e24 !important;
+}
+[data-theme="dark"] .status-option.discarded .status-dot {
+  background: #ef4444 !important;
+}
+
+[data-theme="dark"] .status-option.paid-at {
+  background: #113421 !important;
+  color: #34d399 !important;
+  border-color: #1f5436 !important;
+}
+[data-theme="dark"] .status-option.paid-at .status-dot {
+  background: #10b981 !important;
+}
+
+[data-theme="dark"] .status-option:hover,
+[data-theme="dark"] .status-option:focus-visible {
+  filter: brightness(1.22) !important;
+  transform: translateX(1px);
+}
+
+[data-theme="dark"] .status-option.current {
+  box-shadow: inset 0 0 0 1.5px currentColor !important;
+}
+
+[data-theme="dark"] .status-check {
+  color: currentColor !important;
 }
 
 /* Dashboard Cards & Panels */
