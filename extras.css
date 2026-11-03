@@ -2611,17 +2611,20 @@ tr.row-fill-drag {
 }
 
 [data-theme="dark"] .client-tab {
-  border-right: 1px solid #192634 !important;
+  background: #101823 !important;
+  border: 1px solid #1e2c3c !important;
   color: #8fa0b5 !important;
 }
 
 [data-theme="dark"] .client-tab:hover {
-  background: #15202b !important;
+  background: #172332 !important;
+  border-color: #2b3d52 !important;
   color: #f1f5f9 !important;
 }
 
 [data-theme="dark"] .client-tab.active {
-  background: #162432 !important;
+  background: #132b1f !important;
+  border-color: #10b981 !important;
   color: #4ade80 !important;
   box-shadow: inset 0 -3px #10b981 !important;
 }
@@ -2630,7 +2633,14 @@ tr.row-fill-drag {
   color: #64748b !important;
 }
 
+[data-theme="dark"] .client-tab small.sent-badge {
+  background: #33240d !important;
+  color: #fbbf24 !important;
+  border: 1px solid #523b13 !important;
+}
+
 [data-theme="dark"] .new-client-tab {
+  border: 1px solid #1e2c3c !important;
   border-left: 1px solid #1e2c3c !important;
   background: #122b1e !important;
   color: #4ade80 !important;
@@ -2639,10 +2649,13 @@ tr.row-fill-drag {
 [data-theme="dark"] .new-client-tab:hover {
   background: #183827 !important;
   color: #6ee7b7 !important;
+  border-color: #10b981 !important;
 }
 
 /* Worksheet Shell & Toolbar */
-[data-theme="dark"] .sheet-shell {
+[data-theme="dark"] #app.sheet-mode main,
+[data-theme="dark"] .sheet-shell,
+[data-theme="dark"] .sheet-viewport {
   background: #0b1118 !important;
 }
 
@@ -2749,46 +2762,91 @@ tr.row-fill-drag {
 [data-theme="dark"] .sheet th:first-child,
 [data-theme="dark"] .sheet td:first-child {
   background: #101822 !important;
+  border-right-color: #1c2836 !important;
+  border-bottom-color: #1c2836 !important;
 }
 
 [data-theme="dark"] .sheet td {
   border-right: 1px solid #1c2836 !important;
   border-bottom: 1px solid #1c2836 !important;
   color: #e2e8f0 !important;
+  background: #0e1622 !important;
+}
+
+[data-theme="dark"] .sheet td:not(.status-cell) {
+  background: #0e1622 !important;
 }
 
 [data-theme="dark"] .sheet tr.has-entry td:not(.status-cell) {
-  border-bottom-color: #28394c !important;
-  border-right-color: #28394c !important;
+  background: #0e1622 !important;
+  border-bottom-color: #202f40 !important;
+  border-right-color: #202f40 !important;
 }
 
-[data-theme="dark"] .sheet tr.blank-row td {
-  background: #0d141c !important;
-  color: #526374 !important;
+[data-theme="dark"] .sheet tr.grouped:not(.working-own):not(.working-other):not(.selected) td:not(.status-cell),
+[data-theme="dark"] .sheet tr.paid-group:not(.working-own):not(.working-other):not(.selected) td:not(.status-cell) {
+  background: #0e1622 !important;
 }
 
-[data-theme="dark"] .sheet tr.blank-row:nth-child(even) td {
+[data-theme="dark"] .sheet tr.blank-row td,
+[data-theme="dark"] .sheet tr.blank-row td:not(.status-cell) {
   background: #0b1118 !important;
+  color: #475569 !important;
+  border-bottom-color: #17222e !important;
+  border-right-color: #17222e !important;
+}
+
+[data-theme="dark"] .sheet tr.blank-row:nth-child(even) td,
+[data-theme="dark"] .sheet tr.blank-row:nth-child(even) td:not(.status-cell) {
+  background: #090e14 !important;
 }
 
 [data-theme="dark"] .sheet tr:hover td:not(.status-cell) {
-  background: #182432 !important;
+  background: #172433 !important;
+}
+
+[data-theme="dark"] .sheet tr.blank-row:hover td.status-cell {
+  background: #172433 !important;
 }
 
 [data-theme="dark"] .sheet tr.selected td:not(.status-cell),
-[data-theme="dark"] .sheet tr.selected td.row-selector {
+[data-theme="dark"] .sheet tr.selected td.row-selector,
+[data-theme="dark"] .sheet tr.blank-row.blank-selected td {
   background: #133a26 !important;
   box-shadow: inset 0 1px #10b981, inset 0 -1px #10b981 !important;
+}
+
+[data-theme="dark"] .sheet tr.selected td,
+[data-theme="dark"] .sheet tr.blank-row.blank-selected td {
+  box-shadow: inset 0 -2px #10b981 !important;
 }
 
 [data-theme="dark"] .sheet tr.selected td.status-cell {
   box-shadow: inset 0 1px #10b981, inset 0 -1px #10b981 !important;
 }
 
+[data-theme="dark"] .sheet tr.discarded-row td,
+[data-theme="dark"] .sheet tr.discarded-row td:not(.status-cell) {
+  background: #141a20 !important;
+  color: #64748b !important;
+}
+
 [data-theme="dark"] .sheet input:not([type=checkbox]),
 [data-theme="dark"] .sheet select {
   color: #f1f5f9 !important;
   background: transparent !important;
+}
+
+[data-theme="dark"] .sheet input[readonly] {
+  color: #f1f5f9 !important;
+  background: transparent !important;
+}
+
+[data-theme="dark"] .sheet input.editing {
+  background: #162434 !important;
+  color: #ffffff !important;
+  border-color: #10b981 !important;
+  box-shadow: inset 0 0 0 1px #10b981 !important;
 }
 
 [data-theme="dark"] .sheet input:focus,
@@ -2811,6 +2869,16 @@ tr.row-fill-drag {
 [data-theme="dark"] .sheet .assignee-button:hover {
   border-color: #10b981 !important;
   background: #1d2e40 !important;
+}
+
+[data-theme="dark"] .status-trigger {
+  color: #f1f5f9 !important;
+}
+
+[data-theme="dark"] .status-trigger:hover,
+[data-theme="dark"] .status-trigger[aria-expanded=true] {
+  box-shadow: inset 0 0 0 1px #10b981 !important;
+  background: rgba(255, 255, 255, 0.08) !important;
 }
 
 /* Status Cells */
@@ -3220,6 +3288,110 @@ tr.row-fill-drag {
 
 [data-theme="dark"] .tracker-accordion-header:hover {
   background: #17222f !important;
+}
+
+[data-theme="dark"] .tracker-client-card {
+  background: #131c26 !important;
+  border-color: #202e3e !important;
+}
+
+[data-theme="dark"] .tracker-client-card:hover {
+  border-color: #2e445b !important;
+}
+
+[data-theme="dark"] .tracker-client-card.open {
+  border-color: #10b981 !important;
+  box-shadow: 0 2px 10px rgba(16, 185, 129, 0.15) !important;
+}
+
+[data-theme="dark"] .tracker-client-header {
+  background: #15202c !important;
+  color: #f1f5f9 !important;
+}
+
+[data-theme="dark"] .tracker-client-card.open .tracker-client-header {
+  background: #172432 !important;
+  border-bottom: 1px solid #202e3e !important;
+}
+
+[data-theme="dark"] .tracker-client-header:hover {
+  background: #1c2b3a !important;
+}
+
+[data-theme="dark"] .tracker-client-title strong {
+  color: #f1f5f9 !important;
+}
+
+[data-theme="dark"] .tracker-client-total {
+  background: #123321 !important;
+  color: #4ade80 !important;
+}
+
+[data-theme="dark"] .tracker-client-chevron {
+  color: #8fa0b5 !important;
+}
+
+[data-theme="dark"] .tracker-client-card.open .tracker-client-chevron {
+  color: #4ade80 !important;
+}
+
+[data-theme="dark"] .tracker-client-items {
+  background: #0f1620 !important;
+}
+
+[data-theme="dark"] .tracker-pill-btn {
+  background: #162230 !important;
+  border-color: #283c50 !important;
+  color: #cbd5e1 !important;
+}
+
+[data-theme="dark"] .tracker-pill-btn:hover {
+  background: #1f3044 !important;
+  color: #f1f5f9 !important;
+}
+
+[data-theme="dark"] .tracker-search-input {
+  background: #0e151e !important;
+  border-color: #223244 !important;
+  color: #f1f5f9 !important;
+}
+
+[data-theme="dark"] .preview-client-tabs button {
+  background: #162230 !important;
+  border-color: #283c50 !important;
+  color: #cbd5e1 !important;
+}
+
+[data-theme="dark"] .preview-client-tabs button.active {
+  background: #123321 !important;
+  border-color: #10b981 !important;
+  color: #4ade80 !important;
+}
+
+[data-theme="dark"] .assignee-choices button {
+  background: #162230 !important;
+  border-color: #283c50 !important;
+  color: #e2e8f0 !important;
+}
+
+[data-theme="dark"] .assignee-choices button:hover {
+  background: #1e3042 !important;
+}
+
+[data-theme="dark"] .rail-toggle {
+  background: #162230 !important;
+  border-color: #283c50 !important;
+  color: #94a3b8 !important;
+}
+
+[data-theme="dark"] .rail-toggle:hover {
+  background: #1f3246 !important;
+  color: #f1f5f9 !important;
+}
+
+[data-theme="dark"] .revenue-month-breakdown {
+  background: #0f1620 !important;
+  border-top: 1px solid #1e2c3c !important;
 }
 
 /* Groups Tab */
