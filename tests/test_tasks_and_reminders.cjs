@@ -187,6 +187,14 @@ assert.ok(tasksHtml.includes('Completed Tasks'), 'Tasks tab must render Complete
 assert.ok(tasksHtml.includes('Render 3D Logo'), 'Upcoming task title must be in HTML');
 assert.ok(tasksHtml.includes('Call Client for Approval'), 'Active task title must be in HTML');
 assert.ok(tasksHtml.includes('Send Invoice #402'), 'Overdue task title must be in HTML');
+
+// Test empty state: Only top Add Task button should exist, no redundant inner buttons
+vm.runInContext("data.tasks = []", sandbox);
+const emptyTasksHtml = vm.runInContext("renderTasks()", sandbox);
+assert.ok(emptyTasksHtml.includes('id="openAddTaskBtn"'), 'Top Add Task button must be present in header');
+assert.ok(!emptyTasksHtml.includes('id="openAddTaskHeroBtn"'), 'openAddTaskHeroBtn should be removed');
+assert.ok(!emptyTasksHtml.includes('id="openAddTaskEmptyBtn"'), 'openAddTaskEmptyBtn should be removed');
+
 console.log('✓ Test 6: renderTasks HTML structure and sections verified');
 
 // 8. Test Background Reminder Checker & Notifications

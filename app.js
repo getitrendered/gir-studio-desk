@@ -1276,7 +1276,6 @@ function renderTasks() {
           <div class="tasks-hero-empty">
             <span class="hero-empty-icon">☕</span>
             <p><strong>All caught up!</strong> No upcoming tasks or overdue reminders right now.</p>
-            <button type="button" class="small-btn green" id="openAddTaskHeroBtn">+ Program a Task</button>
           </div>
         `}
       </div>
@@ -1285,7 +1284,6 @@ function renderTasks() {
         <div class="empty tasks-empty-state">
           <h3>No tasks or reminders yet</h3>
           <p>Never miss a deadline or follow-up. Add a reminder using our interactive clock & scroll dials.</p>
-          <button type="button" class="primary" id="openAddTaskEmptyBtn">+ Program Your First Task</button>
         </div>
       ` : `
         <!-- Section 1: Overdue Tasks (Light Red) -->
@@ -2007,12 +2005,6 @@ function bindMain() {
   // Tasks Tab action bindings
   const openTaskBtn = $('#openAddTaskBtn');
   if (openTaskBtn) openTaskBtn.onclick = () => openTaskModal();
-
-  const openTaskHeroBtn = $('#openAddTaskHeroBtn');
-  if (openTaskHeroBtn) openTaskHeroBtn.onclick = () => openTaskModal();
-
-  const openTaskEmptyBtn = $('#openAddTaskEmptyBtn');
-  if (openTaskEmptyBtn) openTaskEmptyBtn.onclick = () => openTaskModal();
 
   const clearCompletedBtn = $('#clearAllCompletedTasksBtn');
   if (clearCompletedBtn) {
