@@ -2819,12 +2819,13 @@ function bindMain() {
       if (activeEditing && !activeEditing.contains(e.target)) {
         deactivateAllEditingFields();
       }
+      $$('.sheet tr.blank-row').forEach(r => r.classList.remove('blank-selected'));
       if (e.target.closest('button, input.editing, input[type=checkbox]')) return;
       const field = e.target.closest('td')?.querySelector('[data-cell]');
       selectionCell = field ? { id: row.dataset.row, key: field.dataset.cell } : null;
 
       // Direct editing on single click (instant typing for cost, service, etc.)
-      if (field && (e.target === field || field.contains(e.target))) {
+      if (field) {
         activateSheetField(field);
         return; // Do NOT call e.preventDefault() so native browser focus and caret work immediately!
       }
@@ -2833,7 +2834,7 @@ function bindMain() {
       e.preventDefault();
     };
     row.onmouseenter = e => {
-      if (isRowDragSelecting) {
+      if (isRowDragSelecting && (e.buttons === 1 || e.which === 1)) {
         handleRowDragOver(row.dataset.row, e);
       }
     };
@@ -3208,23 +3209,7 @@ function handleRowDragOver(targetRowId, e = {}) {
       selected = new Set(rangeIds);
     }
     refreshSelection();
-
     clearCellDragHighlights();
-    if (hasRowDragged) {
-      if (dragStartShift || e.shiftKey) {
-        rangeIds.forEach(rId => {
-          const rowEl = document.querySelector(`[data-row="${rId}"]`);
-          if (rowEl) rowEl.classList.add('row-fill-drag');
-        });
-      } else if (dragStartCellKey) {
-        rangeIds.forEach(rId => {
-          const cellInput = document.querySelector(`[data-row="${rId}"] [data-cell="${dragStartCellKey}"]`);
-          if (cellInput) {
-            cellInput.closest('td')?.classList.add('cell-fill-drag');
-          }
-        });
-      }
-    }
   }
 }
 
@@ -3235,8 +3220,6 @@ function handleRowDragEnd(e = {}) {
       document.body.classList.remove('row-drag-selecting');
     }
     clearCellDragHighlights();
-
-    const isShift = dragStartShift || (e && e.shiftKey);
 
     if (hasRowDragged && dragStartRowId && dragTargetRowId && dragStartRowId !== dragTargetRowId) {
       justDraggedSelection = true;
@@ -3250,68 +3233,11 @@ function handleRowDragEnd(e = {}) {
         const minIdx = Math.min(startIdx, currentIdx);
         const maxIdx = Math.max(startIdx, currentIdx);
         const rangeIds = allRowIds.slice(minIdx, maxIdx + 1);
-        const targetIds = rangeIds.filter(id => id !== dragStartRowId);
 
-        const sourceItem = (data.items || []).find(i => i.id === dragStartRowId);
-
-        if (sourceItem && targetIds.length > 0) {
-          if (isShift) {
-            pushUndo(`Copy row to ${targetIds.length} rows`);
-            targetIds.forEach(tId => {
-              const targetItem = (data.items || []).find(i => i.id === tId);
-              if (targetItem) {
-                targetItem.service = sourceItem.service;
-                targetItem.quantity = sourceItem.quantity;
-                targetItem.rate = sourceItem.rate;
-                targetItem.quotedTotal = sourceItem.quotedTotal;
-                targetItem.manualTotal = true;
-                targetItem.status = sourceItem.status;
-                targetItem.remarks = sourceItem.remarks;
-                targetItem.workDate = sourceItem.workDate;
-                targetItem.advanceAmount = sourceItem.advanceAmount;
-                targetItem.updatedAt = new Date().toISOString();
-                enqueue('items', targetItem.id);
-              }
-            });
-            save();
-            scheduleSync();
-            selected = new Set(rangeIds);
-            selectionAnchor = dragStartRowId;
-            render();
-            toast(`Copied entire row to ${targetIds.length} row${targetIds.length > 1 ? 's' : ''}`);
-          } else if (dragStartCellKey) {
-            const colName = dragStartCellKey[0].toUpperCase() + dragStartCellKey.slice(1);
-            pushUndo(`Fill ${colName} down`);
-            targetIds.forEach(tId => {
-              const targetItem = (data.items || []).find(i => i.id === tId);
-              if (targetItem) {
-                if (dragStartCellKey === 'rate') {
-                  targetItem.rate = num(sourceItem.rate);
-                  targetItem.quotedTotal = num(targetItem.quantity) * num(targetItem.rate);
-                  targetItem.manualTotal = true;
-                } else if (dragStartCellKey === 'quantity') {
-                  targetItem.quantity = num(sourceItem.quantity) || 1;
-                  targetItem.quotedTotal = num(targetItem.quantity) * num(targetItem.rate);
-                  targetItem.manualTotal = true;
-                } else if (dragStartCellKey === 'quotedTotal') {
-                  targetItem.quotedTotal = num(sourceItem.quotedTotal);
-                  targetItem.manualTotal = true;
-                } else {
-                  targetItem[dragStartCellKey] = sourceItem[dragStartCellKey] ?? '';
-                }
-                targetItem.updatedAt = new Date().toISOString();
-                enqueue('items', targetItem.id);
-              }
-            });
-            save();
-            scheduleSync();
-            selected = new Set(rangeIds);
-            selectionAnchor = dragStartRowId;
-            render();
-            const displayVal = dragStartCellKey === 'rate' ? money(sourceItem.rate) : (sourceItem[dragStartCellKey] ?? '');
-            toast(`Copied ${colName} (${displayVal}) to ${targetIds.length} cell${targetIds.length > 1 ? 's' : ''}`);
-          }
-        }
+        // Safe Excel-style row range selection: strictly selects rows, NEVER overwrites data!
+        selected = new Set(rangeIds);
+        selectionAnchor = dragStartRowId;
+        refreshSelection();
       }
     }
 
@@ -3370,7 +3296,6 @@ function activateSheetField(field) {
     field.readOnly = false;
     field.classList.add('editing');
     if (typeof field.focus === 'function') field.focus();
-    if (typeof field.select === 'function') field.select();
     field.onkeydown = e => {
       if (e.key === 'Enter') {
         e.preventDefault();
