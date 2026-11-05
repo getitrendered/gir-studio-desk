@@ -5541,4 +5541,10 @@ tr.row-fill-drag {
   color: #34d399;
 }
 
+/* Hide Chat tab and toolbar share button */
+#tabs button[data-tab="chat"],
+.sheet-toolbar [data-action="share-chat"] {
+  display: none !important;
+}
+
 
