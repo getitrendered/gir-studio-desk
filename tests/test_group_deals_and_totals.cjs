@@ -21,7 +21,7 @@ function setupTestEnvironment() {
         { id: 'i2', clientId: 'c1', projectGroupId: 'p1', groupId: null, service: '3D MANDAP', quantity: 1, rate: 3000, quotedTotal: 3000, advanceAmount: 0, status: 'paid', paidAt: '2026-10-10' },
         { id: 'i3', clientId: 'c1', projectGroupId: 'p1', groupId: null, service: '3D MANDAP', quantity: 1, rate: 2820, quotedTotal: 2820, advanceAmount: 0, status: 'paid', paidAt: '2026-10-10' },
         // 1 item in g1 (BAGA IGNITE)
-        { id: 'i4', clientId: 'c2', projectGroupId: null, groupId: 'g1', service: 'STAGE', quantity: 1, rate: 70000, quotedTotal: 70000, advanceAmount: 0, status: 'paid', paidAt: '2026-10-10' }
+        { id: 'i4', clientId: 'c2', projectGroupId: null, groupId: 'g1', service: 'STAGE', quantity: 1, rate: 70000, quotedTotal: 70000, advanceAmount: 0, status: 'sent' }
       ],
       invoices: [],
       receipts: [],
@@ -111,8 +111,12 @@ console.log('Testing Group Deals and Total Amount Display...');
 
   const headerHtml = ctx.groupHeader('project', p1, items);
   assert(headerHtml.includes('Total ₹8,820'), `Header should include 'Total ₹8,820', got: ${headerHtml}`);
-  assert(headerHtml.includes('data-group-deal="project:p1"'), 'Header must include Group Deal button');
-  console.log('✓ Test 1: Project group renders shows correct Total ₹8,820 and Group deal button');
+  assert(headerHtml.includes('Paid in full'), 'Paid group header must include prominent Paid in full seal');
+  assert(!headerHtml.includes('data-group-deal="project:p1"'), 'Paid group header must omit Group Deal button');
+  assert(!headerHtml.includes('data-group-status="project:p1:sent"'), 'Paid group header must omit Mark sent button');
+  assert(!headerHtml.includes('data-group-status="project:p1:paid"'), 'Paid group header must omit Mark paid button');
+  assert(headerHtml.includes('data-group-paid-date="project:p1"'), 'Paid group header must keep Paid date button');
+  console.log('✓ Test 1: Paid project group renders shows correct Total ₹8,820, prominent Paid in full seal, and cleans redundant buttons');
 }
 
 // Test 2: groupTotalValue and groupHeader for Deal Group with agreed amount
@@ -127,7 +131,7 @@ console.log('Testing Group Deals and Total Amount Display...');
 
   const headerHtml = ctx.groupHeader('deal', g1, items);
   assert(headerHtml.includes('Agreed ₹70,000'), `Header should include 'Agreed ₹70,000', got: ${headerHtml}`);
-  assert(headerHtml.includes('data-group-deal="deal:g1"'), 'Header must include Group Deal button');
+  assert(headerHtml.includes('data-group-deal="deal:g1"'), 'Active group header must include Group Deal button');
   console.log('✓ Test 2: Deal group BAGA IGNITE shows Agreed ₹70,000 and Group deal button');
 }
 
@@ -138,12 +142,13 @@ console.log('Testing Group Deals and Total Amount Display...');
 
   assert(html.includes('PROJECT GROUP'), 'Must have PROJECT GROUP badge');
   assert(html.includes('<span>Total ₹8,820</span>'), 'Project card must show <span>Total ₹8,820</span>');
-  assert(html.includes('data-group-deal-card="project:p1"'), 'Project card must have Group deal button');
+  assert(html.includes('Paid in full'), 'Paid project card must show prominent Paid in full seal');
+  assert(!html.includes('data-group-deal-card="project:p1"'), 'Paid project card must omit Group deal button');
 
   assert(html.includes('DEAL GROUP'), 'Must have DEAL GROUP badge');
   assert(html.includes('<span>Agreed ₹70,000</span>'), 'Deal card must show <span>Agreed ₹70,000</span>');
   assert(html.includes('data-group-deal-card="deal:g1"'), 'Deal card must have Group deal button');
-  console.log('✓ Test 3: Groups tab cards show formatted total amounts and group deal buttons');
+  console.log('✓ Test 3: Groups tab cards show formatted total amounts, paid seals, and group deal buttons');
 }
 
 // Test 4: Partially paid project group shows both total and paid amounts

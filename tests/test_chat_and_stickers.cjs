@@ -360,11 +360,9 @@ console.log('Testing Team Chat, Work Sharing, and Cat Stickers...');
 
   // Render chat
   const chatHtml = ctx.renderChat();
-  assert(chatHtml.includes('Samuel Profile'), 'Header must show own profile name');
   assert(chatHtml.includes('Mezrid Partner'), 'Header must show partner profile name');
-  assert(chatHtml.includes('samuelProfileImgBase64'), 'Header must show own avatar image from settings');
   assert(chatHtml.includes('mezridProfileImgBase64'), 'Header must show partner avatar image');
-  assert(chatHtml.includes('chat-self-badge'), 'Header must include self profile chip');
+  assert(!chatHtml.includes('chat-self-badge'), 'Header must NOT include self profile chip (removed per user request)');
 
   // Send message from self
   ctx.elements['#chatInputText'] = { value: 'Checking the profile integration' };

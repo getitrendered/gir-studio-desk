@@ -74,6 +74,7 @@ if (typeof window !== 'undefined' && window.matchMedia) {
   } catch {}
 }
 let data = structuredClone(defaults), tab = 'sheet', lastRenderedTab = null, lastRenderedClient = null, activeClient = null, selected = new Set(), selectionAnchor = null, selectionCell = null, collapsedGroups = new Set(), blankRows = 25, highlightUser = null, filter = 'all', clientApi = null, session = null, channel = null, syncing = false, toastTimer, syncTimer, lastSyncTime = Date.now(), importPreview = null, previewClientIndex = 0, migrating = false;
+let goalFilter = 'active', goalSearchQuery = '';
 const recentLocalPushes = new Map();
 let isDeferredRemotePull = false;
 let isRowDragSelecting = false, hasRowDragged = false, justDraggedSelection = false, dragStartRowId = null, dragTargetRowId = null, dragStartCellKey = null, dragStartShift = false, dragStartWithCtrl = false, dragInitialSelected = null;
@@ -454,7 +455,7 @@ function render() {
   const live = !!(clientApi && session && data.settings.workspaceId);
   $$('#tabs button').forEach(b => b.classList.toggle('active', b.dataset.tab === tab));
   renderClients();
-  main.innerHTML = ({ dashboard:renderDashboard, sheet:renderSheet, tracker:renderTracker, tasks:renderTasks, chat:renderChat, groups:renderGroups, revenue:renderRevenue, payments:renderPayments, invoices:renderInvoices, 'client-details':renderClientDetails, activity:renderActivity, settings:renderSettings, 'import-preview':renderImportPreview }[tab] || renderSheet)();
+  main.innerHTML = ({ dashboard:renderDashboard, sheet:renderSheet, tracker:renderTracker, tasks:renderTasks, chat:renderChat, groups:renderGroups, goals:renderGoals, revenue:renderRevenue, payments:renderPayments, invoices:renderInvoices, 'client-details':renderClientDetails, activity:renderActivity, settings:renderSettings, 'import-preview':renderImportPreview }[tab] || renderSheet)();
   if(sameTab && main) main.scrollTop = preservedMainScroll;
   if(sameSheet && sheetScroll){const grid=main.querySelector('.sheet-viewport');if(grid){grid.scrollTop=sheetScroll.grid;grid.scrollLeft=sheetScroll.across;}}
   const indicator = $('#tabIndicator'), active = $(`#tabs button[data-tab="${tab}"]`);
@@ -462,7 +463,7 @@ function render() {
   if (lastRenderedTab && (lastRenderedTab !== tab || (tab === 'sheet' && lastRenderedClient !== activeClient))) {
     recordNav(lastRenderedTab, lastRenderedClient);
   }
-  if (lastRenderedTab !== tab) { const order = ['sheet','dashboard','tracker','tasks','chat','groups','revenue','payments','invoices','client-details','activity','settings']; const direction = order.indexOf(tab) >= order.indexOf(lastRenderedTab) ? 'tab-next' : 'tab-prev'; $('#main').classList.remove('tab-next','tab-prev'); void $('#main').offsetWidth; $('#main').classList.add(direction); lastRenderedTab = tab; }
+  if (lastRenderedTab !== tab) { const order = ['sheet','dashboard','tracker','tasks','chat','groups','goals','revenue','payments','invoices','client-details','activity','settings']; const direction = order.indexOf(tab) >= order.indexOf(lastRenderedTab) ? 'tab-next' : 'tab-prev'; $('#main').classList.remove('tab-next','tab-prev'); void $('#main').offsetWidth; $('#main').classList.add(direction); lastRenderedTab = tab; }
   if(tab==='settings')showUpdateState(desktopUpdate);
   if(tab==='chat'){ unreadChatCount = 0; updateChatUnreadBadge(); initChatInteractions(); }
   if(tab==='tasks'){ updateTasksDueBadge(); }
@@ -694,7 +695,17 @@ function groupHeader(kind,group,items) {
     }
   }
   const status=groupStatus(items);
-  return `<tr class="sheet-group-header ${kind}" data-sheet-group="${kind}:${group.id}"><td colspan="11"><div class="group-heading"><button data-group-collapse="${kind}:${group.id}" aria-expanded="${!folded}"><svg class="group-chevron ${folded?'collapsed':''}" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="m3.5 5.75 4.5 4.5 4.5-4.5" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg><strong>${esc(group.label)}</strong><span>${done}/${active.length} complete${detail}</span></button><span class="group-status ${status.toLowerCase().replaceAll(' ','-')}">${status}</span><button class="group-quick" data-group-status="${kind}:${group.id}:sent" ${!active.length?'disabled':''}>Mark sent</button><button class="group-quick" data-group-status="${kind}:${group.id}:paid" ${!active.length?'disabled':''}>Mark paid</button><button class="group-deal-btn" data-group-deal="${kind}:${group.id}" title="Make or edit group deal">Group deal</button><button class="group-date-btn" data-group-paid-date="${kind}:${group.id}" title="Set or modify payment date for this group">Paid date</button>${kind==='project'?`<button class="group-add" data-group-add="${group.id}" title="Add work under this project">＋ Row</button>`:''}<button class="group-rename" data-group-rename="${kind}:${group.id}" title="Rename group">Rename</button><button class="group-ungroup" data-group-ungroup="${kind}:${group.id}" title="Ungroup (keep rows, remove group)">Ungroup</button></div></td></tr>`;
+  const isPaid = active.length > 0 && status === 'Paid';
+  const paidSeal = isPaid ? `<span class="group-paid-seal"><svg viewBox="0 0 16 16" width="11" height="11" fill="currentColor"><path d="M13.78 4.22a.75.75 0 0 1 0 1.06l-7.25 7.25a.75.75 0 0 1-1.06 0L2.22 9.28a.75.75 0 0 1 1.06 0z"/></svg> Paid in full</span>` : '';
+  const actionButtons = isPaid ? `
+    <button class="group-date-btn" data-group-paid-date="${kind}:${group.id}" title="Set or modify payment date for this group">Paid date</button>
+  ` : `
+    <button class="group-quick" data-group-status="${kind}:${group.id}:sent" ${!active.length?'disabled':''}>Mark sent</button>
+    <button class="group-quick" data-group-status="${kind}:${group.id}:paid" ${!active.length?'disabled':''}>Mark paid</button>
+    <button class="group-deal-btn" data-group-deal="${kind}:${group.id}" title="Make or edit group deal">Group deal</button>
+    <button class="group-date-btn" data-group-paid-date="${kind}:${group.id}" title="Set or modify payment date for this group">Paid date</button>
+  `;
+  return `<tr class="sheet-group-header ${kind} ${isPaid ? 'is-paid-group-row' : ''}" data-sheet-group="${kind}:${group.id}"><td colspan="11"><div class="group-heading"><button data-group-collapse="${kind}:${group.id}" aria-expanded="${!folded}"><svg class="group-chevron ${folded?'collapsed':''}" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="m3.5 5.75 4.5 4.5 4.5-4.5" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg><strong>${esc(group.label)}</strong><span>${done}/${active.length} complete${detail}</span></button><span class="group-status ${status.toLowerCase().replaceAll(' ','-')}">${status}</span>${paidSeal}${actionButtons}${kind==='project'?`<button class="group-add" data-group-add="${group.id}" title="Add work under this project">＋ Row</button>`:''}<button class="group-rename" data-group-rename="${kind}:${group.id}" title="Rename group">Rename</button><button class="group-ungroup" data-group-ungroup="${kind}:${group.id}" title="Ungroup (keep rows, remove group)">Ungroup</button></div></td></tr>`;
 }
 function groupStatus(items){const active=items.filter(i=>i.status!=='discarded');if(!active.length)return 'Discarded';if(active.every(i=>i.status==='paid'))return 'Paid';if(active.every(i=>['sent','paid'].includes(i.status)))return 'Sent';if(active.some(i=>['working','changes'].includes(i.status)))return 'Working';return 'Pending';}
 function blankRowHtml(order) {
@@ -1951,9 +1962,209 @@ function renderGroups() {
         amount=`<span>Total ${money(gVal.total)}</span>`;
       }
     }
-    return `<div class="group-card"><button class="group-card-open" data-open-group="${g.kind}:${g.id}"><span class="group-badge">${g.kind==='project'?'PROJECT GROUP':'DEAL GROUP'}</span><strong>${esc(g.label)}</strong><small>${esc(data.clients.find(c=>c.id===g.clientId)?.name)} · ${done}/${active.length} complete · ${active.length-done} left · ${groupStatus(rows)}</small>${amount}<div class="bar"><span style="width:${active.length?done/active.length*100:0}%"></span></div></button><div class="group-card-actions"><button class="group-quick" data-group-status="${g.kind}:${g.id}:sent">Mark sent</button><button class="group-quick" data-group-status="${g.kind}:${g.id}:paid">Mark paid</button><button class="group-quick" data-group-deal-card="${g.kind}:${g.id}">Group deal</button><button class="group-quick" data-group-paid-date="${g.kind}:${g.id}">Paid date</button></div><button class="group-card-rename" data-rename-card="${g.kind}:${g.id}" title="Rename group">Rename</button><button class="group-card-rename" data-ungroup-card="${g.kind}:${g.id}" title="Ungroup group" style="margin-left:6px">Ungroup</button><div class="group-card-editor" hidden><label>Group name<input value="${esc(g.label)}" aria-label="Group name"></label><div><button type="button" data-save-card="${g.kind}:${g.id}">Save</button><button type="button" data-cancel-card>Cancel</button></div></div></div>`;
+    const status=groupStatus(rows);
+    const isPaid = active.length > 0 && status === 'Paid';
+    const paidSeal = isPaid ? `<span class="group-paid-seal"><svg viewBox="0 0 16 16" width="12" height="12" fill="currentColor"><path d="M13.78 4.22a.75.75 0 0 1 0 1.06l-7.25 7.25a.75.75 0 0 1-1.06 0L2.22 9.28a.75.75 0 0 1 1.06 0z"/></svg> Paid in full</span>` : '';
+    const actions = isPaid ? `
+      <div class="group-card-actions"><button class="group-quick" data-group-paid-date="${g.kind}:${g.id}">Paid date</button></div>
+    ` : `
+      <div class="group-card-actions"><button class="group-quick" data-group-status="${g.kind}:${g.id}:sent">Mark sent</button><button class="group-quick" data-group-status="${g.kind}:${g.id}:paid">Mark paid</button><button class="group-quick" data-group-deal-card="${g.kind}:${g.id}">Group deal</button><button class="group-quick" data-group-paid-date="${g.kind}:${g.id}">Paid date</button></div>
+    `;
+    return `<div class="group-card ${isPaid ? 'is-paid-group' : ''}"><button class="group-card-open" data-open-group="${g.kind}:${g.id}"><div class="group-card-top-row"><span class="group-badge">${g.kind==='project'?'PROJECT GROUP':'DEAL GROUP'}</span>${paidSeal}</div><strong>${esc(g.label)}</strong><small>${esc(data.clients.find(c=>c.id===g.clientId)?.name)} · ${done}/${active.length} complete · ${active.length-done} left · ${status}</small>${amount}<div class="bar"><span style="width:${active.length?done/active.length*100:0}%"></span></div></button>${actions}<button class="group-card-rename" data-rename-card="${g.kind}:${g.id}" title="Rename group">Rename</button><button class="group-card-rename" data-ungroup-card="${g.kind}:${g.id}" title="Ungroup group" style="margin-left:6px">Ungroup</button><div class="group-card-editor" hidden><label>Group name<input value="${esc(g.label)}" aria-label="Group name"></label><div><button type="button" data-save-card="${g.kind}:${g.id}">Save</button><button type="button" data-cancel-card>Cancel</button></div></div></div>`;
   }).join('');
   return `<div class="section-top"><div><h2>Groups</h2><p>Project folders and negotiated deals across clients.</p></div></div>${groups.length?`<div class="group-grid">${cards}</div>`:'<div class="empty"><h3>No groups yet</h3><p>Select rows on a worksheet to create a project group or grouped deal.</p></div>'}`;
+}
+function renderGoals() {
+  const allGroups = [
+    ...data.projectGroups.map(g => ({ ...g, kind: 'project' })),
+    ...data.groups.map(g => ({ ...g, kind: 'deal' }))
+  ];
+
+  let totalPendingTasks = 0;
+  let totalCompletedTasks = 0;
+  let totalTasks = 0;
+
+  const groupStats = allGroups.map(g => {
+    const rows = (data.items || []).filter(i => (g.kind === 'project' ? i.projectGroupId : i.groupId) === g.id);
+    const active = rows.filter(i => i.status !== 'discarded');
+    const pending = active.filter(i => i.status === 'pending').length;
+    const working = active.filter(i => ['working', 'changes'].includes(i.status)).length;
+    const sent = active.filter(i => i.status === 'sent').length;
+    const paid = active.filter(i => i.status === 'paid').length;
+    const completed = sent + paid;
+    const remaining = active.length - completed;
+    const percent = active.length ? Math.round((completed / active.length) * 100) : 0;
+    const gVal = groupTotalValue(g.kind, g, rows);
+    const isPaidInFull = active.length > 0 && active.every(i => i.status === 'paid');
+    const isAllSentOrPaid = active.length > 0 && active.every(i => ['sent', 'paid'].includes(i.status));
+
+    totalPendingTasks += remaining;
+    totalCompletedTasks += completed;
+    totalTasks += active.length;
+
+    const client = (data.clients || []).find(c => c.id === g.clientId);
+
+    return {
+      group: g,
+      client,
+      rows,
+      active,
+      pending,
+      working,
+      sent,
+      paid,
+      completed,
+      remaining,
+      percent,
+      gVal,
+      isPaidInFull,
+      isAllSentOrPaid
+    };
+  });
+
+  const overallRate = totalTasks ? Math.round((totalCompletedTasks / totalTasks) * 100) : 0;
+  const activeGroupsCount = groupStats.filter(s => s.remaining > 0).length;
+
+  let filtered = groupStats;
+  if (goalFilter === 'active') {
+    filtered = filtered.filter(s => s.remaining > 0);
+  } else if (goalFilter === 'completed') {
+    filtered = filtered.filter(s => s.remaining === 0 && s.active.length > 0);
+  }
+
+  if (goalSearchQuery) {
+    const q = goalSearchQuery.toLowerCase();
+    filtered = filtered.filter(s => 
+      (s.group.label || '').toLowerCase().includes(q) ||
+      (s.client?.name || '').toLowerCase().includes(q)
+    );
+  }
+
+  const circumference = 2 * Math.PI * 44; // ~276.46
+
+  const cardsHtml = filtered.map(s => {
+    const g = s.group;
+    const clientName = s.client?.name || 'Client';
+    const offset = circumference - (s.percent / 100) * circumference;
+    const isDone = s.remaining === 0;
+
+    let valueText = '';
+    if (s.gVal.agreed) {
+      valueText = `Agreed ${money(s.gVal.total)}`;
+    } else if (s.gVal.total > 0) {
+      if (s.gVal.paid > 0 && s.gVal.paid < s.gVal.total) {
+        valueText = `Total ${money(s.gVal.total)} (${money(s.gVal.paid)} paid)`;
+      } else {
+        valueText = `Total ${money(s.gVal.total)}`;
+      }
+    }
+
+    return `
+      <div class="goal-card ${isDone ? 'is-completed' : ''} ${s.isPaidInFull ? 'is-paid' : ''}" data-goal-id="${g.kind}:${g.id}">
+        <div class="goal-card-header">
+          <div class="goal-card-title-wrap">
+            <div class="goal-tag-row">
+              <span class="goal-kind-badge">${g.kind === 'project' ? 'PROJECT' : 'DEAL'}</span>
+              <span class="goal-client-pill">${esc(clientName)}</span>
+              ${s.isPaidInFull ? `<span class="group-paid-seal"><svg viewBox="0 0 16 16" width="10" height="10" fill="currentColor"><path d="M13.78 4.22a.75.75 0 0 1 0 1.06l-7.25 7.25a.75.75 0 0 1-1.06 0L2.22 9.28a.75.75 0 0 1 1.06 0z"/></svg> Paid</span>` : ''}
+            </div>
+            <h3 class="goal-title">${esc(g.label)}</h3>
+          </div>
+          <span class="goal-pct-badge ${s.percent === 100 ? 'done' : ''}">${s.percent}% done</span>
+        </div>
+
+        <div class="goal-progress-section">
+          <div class="goal-ring-wrap" title="${s.percent}% complete · ${s.remaining} tasks remaining">
+            <svg class="goal-ring-svg" viewBox="0 0 104 104">
+              <circle class="goal-ring-track" cx="52" cy="52" r="44"/>
+              <circle class="goal-ring-bar ${s.percent === 100 ? 'done' : ''}" cx="52" cy="52" r="44" style="stroke-dasharray:${circumference};stroke-dashoffset:${offset};"/>
+            </svg>
+            <div class="goal-ring-content">
+              <span class="goal-ring-num">${s.remaining}</span>
+              <span class="goal-ring-text">${s.remaining === 1 ? 'task left' : 'tasks left'}</span>
+            </div>
+          </div>
+          <div class="goal-meta-col">
+            <div class="goal-stat-chips">
+              <span class="goal-chip pending" title="Pending work">⏳ ${s.pending} pending</span>
+              <span class="goal-chip working" title="In progress">🔨 ${s.working} working</span>
+              <span class="goal-chip sent" title="Sent to client">🚀 ${s.sent} sent</span>
+              <span class="goal-chip paid" title="Paid">💰 ${s.paid} paid</span>
+            </div>
+            ${valueText ? `<div class="goal-value-badge"><span class="goal-value-label">Financials:</span> <span class="goal-value-num">${valueText}</span></div>` : ''}
+            <div class="goal-quick-info">
+              ${s.remaining > 0 ? `<span class="goal-active-msg">🎯 Today's Goal: Reduce this to 0</span>` : `<span class="goal-done-msg">✓ All work completed!</span>`}
+            </div>
+          </div>
+        </div>
+
+        <div class="goal-actions">
+          <button type="button" class="small-btn blue goal-view-pending-btn" data-goal-pending="${g.kind}:${g.id}" title="Jump directly to pending tasks in worksheet">⚡ View Pending (${s.remaining})</button>
+          <button type="button" class="small-btn goal-view-sheet-btn" data-goal-sheet="${g.kind}:${g.id}" title="View entire group in worksheet">View in Sheet →</button>
+        </div>
+      </div>
+    `;
+  }).join('');
+
+  return `
+    <div class="goals-page">
+      <div class="section-top">
+        <div>
+          <h2>Goals & Targets</h2>
+          <p>Track unfinished tasks across groups and hit your daily completion targets.</p>
+        </div>
+      </div>
+
+      <div class="goals-hero">
+        <div class="goal-hero-card target">
+          <div class="goal-hero-icon">🎯</div>
+          <div class="goal-hero-info">
+            <span class="goal-hero-label">Remaining Work Target</span>
+            <span class="goal-hero-val">${totalPendingTasks}</span>
+            <span class="goal-hero-sub">tasks left to finish across all groups</span>
+          </div>
+        </div>
+        <div class="goal-hero-card completed">
+          <div class="goal-hero-icon">✓</div>
+          <div class="goal-hero-info">
+            <span class="goal-hero-label">Completed Tasks</span>
+            <span class="goal-hero-val">${totalCompletedTasks}</span>
+            <span class="goal-hero-sub">marked sent or paid</span>
+          </div>
+        </div>
+        <div class="goal-hero-card active-groups">
+          <div class="goal-hero-icon">📁</div>
+          <div class="goal-hero-info">
+            <span class="goal-hero-label">Active Groups</span>
+            <span class="goal-hero-val">${activeGroupsCount}</span>
+            <span class="goal-hero-sub">with work in progress</span>
+          </div>
+        </div>
+        <div class="goal-hero-card rate">
+          <div class="goal-hero-icon">📈</div>
+          <div class="goal-hero-info">
+            <span class="goal-hero-label">Overall Completion</span>
+            <span class="goal-hero-val">${overallRate}%</span>
+            <span class="goal-hero-sub">${totalCompletedTasks} of ${totalTasks} total tasks</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="goals-filter-bar">
+        <div class="goal-search-box">
+          <svg viewBox="0 0 16 16" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2"><circle cx="7" cy="7" r="5"/><path d="m11 11 3.5 3.5"/></svg>
+          <input type="text" id="goalSearchInput" placeholder="Search goals or clients…" value="${esc(goalSearchQuery)}">
+        </div>
+        <div class="goal-filter-pills">
+          <button type="button" class="goal-pill ${goalFilter === 'active' ? 'active' : ''}" data-goal-filter="active">Active Targets (${groupStats.filter(s => s.remaining > 0).length})</button>
+          <button type="button" class="goal-pill ${goalFilter === 'all' ? 'active' : ''}" data-goal-filter="all">All Groups (${groupStats.length})</button>
+          <button type="button" class="goal-pill ${goalFilter === 'completed' ? 'active' : ''}" data-goal-filter="completed">Completed (${groupStats.filter(s => s.remaining === 0 && s.active.length > 0).length})</button>
+        </div>
+      </div>
+
+      ${filtered.length ? `<div class="goals-grid">${cardsHtml}</div>` : `<div class="empty"><h3>No goals match this filter</h3><p>Try switching to "All Groups" or clearing your search term.</p></div>`}
+    </div>
+  `;
 }function renderClientDetails() {
   return `<div class="section-top"><div><h2>Client Details</h2><p>Billing information used on invoices.</p></div></div><div class="panel">${data.clients.length?data.clients.map(c=>`<div class="list-row"><div><strong>${esc(c.name)}</strong><small>${esc(c.billing?.name||'No billing name')} · ${esc(c.billing?.email||'No email')}</small></div><button class="small-btn" data-billing-edit="${c.id}">Edit details</button></div>`).join(''):'<p class="muted">Add a client using the + button in the bottom tab bar.</p>'}</div>`;
 }
@@ -2941,7 +3152,7 @@ function bindMain() {
       }
       const field=e.target.closest('td')?.querySelector('[data-blank-cell]');
       selectionCell={blankOrder:Number(row.dataset.blankRow),key:field?.dataset?.blankCell||'service'};
-      if (field && (e.target === field || field.contains(e.target))) {
+      if (field) {
         activateSheetField(field);
       }
     };
@@ -3015,23 +3226,24 @@ function bindMain() {
       const canMarkSent = groupItems.length > 0 && groupItems.some(i => !['sent', 'paid'].includes(i.status));
       const canMarkPaid = groupItems.length > 0 && groupItems.some(i => i.status !== 'paid');
 
+      const isGroupPaid = groupItems.length > 0 && groupStatus(groupItems) === 'Paid';
       const menu = $('#contextMenu') || document.createElement('div');
       menu.id = 'contextMenu';
       menu.className = 'context-menu';
       menu.innerHTML = `
         <button id="contextGroupUngroup"><span class="context-icon">⎘</span><span>Ungroup ${kind === 'project' ? 'project' : 'deal'}</span></button>
-        <button id="contextGroupDeal"><span class="context-icon">🏷️</span><span>Group deal…</span></button>
+        ${isGroupPaid ? '' : `<button id="contextGroupDeal"><span class="context-icon">🏷️</span><span>Group deal…</span></button>`}
         <button id="contextGroupRename"><span class="context-icon">✏️</span><span>Rename group</span></button>
         <div class="context-divider"></div>
         ${kind === 'project' ? `<button id="contextGroupAddRow"><span class="context-icon">➕</span><span>Add row in project</span></button>` : ''}
-        <button id="contextGroupMarkSent" ${canMarkSent ? '' : 'disabled'}><span class="context-icon">✓</span><span>Mark all sent</span></button>
-        <button id="contextGroupMarkPaid" ${canMarkPaid ? '' : 'disabled'}><span class="context-icon">₹</span><span>Mark all paid</span></button>
+        ${isGroupPaid ? '' : `<button id="contextGroupMarkSent" ${canMarkSent ? '' : 'disabled'}><span class="context-icon">✓</span><span>Mark all sent</span></button>`}
+        ${isGroupPaid ? '' : `<button id="contextGroupMarkPaid" ${canMarkPaid ? '' : 'disabled'}><span class="context-icon">₹</span><span>Mark all paid</span></button>`}
         <button id="contextGroupPaidDate"><span class="context-icon">📅</span><span>Set paid date…</span></button>
       `;
       positionContextMenu(menu, e.clientX, e.clientY);
 
       $('#contextGroupUngroup').onclick = () => { menu.remove(); ungroupDialog(kind, id); };
-      $('#contextGroupDeal').onclick = () => { menu.remove(); openGroupDealDialog(kind, id); };
+      if ($('#contextGroupDeal')) $('#contextGroupDeal').onclick = () => { menu.remove(); openGroupDealDialog(kind, id); };
       $('#contextGroupRename').onclick = () => { menu.remove(); renameGroup(kind, id); };
       if ($('#contextGroupAddRow')) {
         $('#contextGroupAddRow').onclick = () => {
@@ -3073,6 +3285,56 @@ function bindMain() {
   $$('[data-cancel-card]').forEach(b=>b.onclick=()=>{const card=b.closest('.group-card');card.querySelector('.group-card-editor').hidden=true;card.querySelector('[data-open-group]').hidden=false;card.querySelector('[data-rename-card]').hidden=false;});
   $$('[data-save-card]').forEach(b=>{const saveName=()=>{const [kind,id]=b.dataset.saveCard.split(':'),table=kind==='project'?'projectGroups':'groups',group=data[table].find(g=>g.id===id),name=b.closest('.group-card-editor').querySelector('input').value.trim();if(!group)return;if(!name){toast('Enter a group name');return;}if(name===group.label){b.closest('.group-card-editor').querySelector('[data-cancel-card]').click();return;}const scroll=$('#main').scrollTop;group.label=name;mutate(table,group);$('#main').scrollTop=scroll;toast('Group renamed');};b.onclick=saveName;b.closest('.group-card-editor').querySelector('input').onkeydown=e=>{if(e.key==='Enter')saveName();if(e.key==='Escape')b.closest('.group-card-editor').querySelector('[data-cancel-card]').click();};});
   $$('[data-open-group]').forEach(b=>b.onclick=()=>{const [kind,id]=b.dataset.openGroup.split(':');const group=(kind==='project'?data.projectGroups:data.groups).find(g=>g.id===id);if(!group)return;activeClient=group.clientId;filter='all';collapsedGroups.delete(kind+':'+id);tab='sheet';render();setTimeout(()=>document.querySelector(`[data-group-collapse="${kind}:${id}"]`)?.scrollIntoView({block:'center'}),50);});
+  $$('[data-goal-pending]').forEach(b => b.onclick = () => {
+    const [kind, id] = b.dataset.goalPending.split(':');
+    const table = kind === 'project' ? 'projectGroups' : 'groups';
+    const group = (data[table] || []).find(g => g.id === id);
+    if (!group) return;
+    activeClient = group.clientId;
+    filter = 'all';
+    collapsedGroups.delete(kind + ':' + id);
+    selected.clear();
+    const pendingItems = (data.items || []).filter(i => (kind === 'project' ? i.projectGroupId : i.groupId) === id && !['sent', 'paid', 'discarded'].includes(i.status));
+    pendingItems.forEach(i => selected.add(i.id));
+    tab = 'sheet';
+    render();
+    setTimeout(() => {
+      const targetEl = pendingItems.length ? document.querySelector(`[data-row="${pendingItems[0].id}"]`) : document.querySelector(`[data-sheet-group="${kind}:${id}"]`);
+      targetEl?.scrollIntoView({ block: 'center', behavior: 'smooth' });
+    }, 60);
+  });
+  $$('[data-goal-sheet]').forEach(b => b.onclick = () => {
+    const [kind, id] = b.dataset.goalSheet.split(':');
+    const table = kind === 'project' ? 'projectGroups' : 'groups';
+    const group = (data[table] || []).find(g => g.id === id);
+    if (!group) return;
+    activeClient = group.clientId;
+    filter = 'all';
+    collapsedGroups.delete(kind + ':' + id);
+    selected.clear();
+    tab = 'sheet';
+    render();
+    setTimeout(() => {
+      const headerRow = document.querySelector(`[data-sheet-group="${kind}:${id}"]`);
+      headerRow?.scrollIntoView({ block: 'center', behavior: 'smooth' });
+    }, 60);
+  });
+  $$('[data-goal-filter]').forEach(b => b.onclick = () => {
+    goalFilter = b.dataset.goalFilter;
+    render();
+  });
+  const goalSearch = $('#goalSearchInput');
+  if (goalSearch) {
+    goalSearch.oninput = () => {
+      goalSearchQuery = goalSearch.value.trim().toLowerCase();
+      render();
+      const nextInput = $('#goalSearchInput');
+      if (nextInput) {
+        nextInput.focus();
+        nextInput.setSelectionRange(nextInput.value.length, nextInput.value.length);
+      }
+    };
+  }
   $$('[data-billing-edit]').forEach(b=>b.onclick=()=>billingDialog(b.dataset.billingEdit));
   $$('[data-client-open]').forEach(b=>b.onclick=()=>{activeClient=b.dataset.clientOpen;tab='sheet';render();});
   $$('[data-view-uninvoiced]').forEach(b=>b.onclick=()=>{activeClient=b.dataset.viewUninvoiced;selected=new Set(financials().sentItems.filter(i=>i.clientId===activeClient).map(i=>i.id));filter='sent';tab='sheet';render();const first=$('[data-row].selected');first?.scrollIntoView({block:'center'});});
@@ -3350,13 +3612,27 @@ function materializeBlankRow(field) {
 }
 function pasteBlankGrid(event,field) {
   const raw=event.clipboardData.getData('text/plain');if(!raw)return;event.preventDefault();
+  pushUndo('Paste rows');
   const columns=['serial','workDate','service','quantity','rate','quotedTotal','status','advanceAmount','assigneeId','remarks'];
-  const start=columns.indexOf(field.dataset.blankCell),startOrder=Number(field.dataset.blankOrder);
+  let start=columns.indexOf(field.dataset.blankCell);
+  const startOrder=Number(field.dataset.blankOrder);
+  const lines = raw.trimEnd().split(/\r?\n/).filter(l => l.trim());
+  if (!lines.length) return;
+
+  const firstCols = lines[0].split('\t');
+  if (firstCols.length >= 4 || (/^\d+$/.test(firstCols[0].trim()) && firstCols.length >= 2)) {
+    start = 0;
+  }
+  if (start < 0) start = 2;
+
   const added = [];
-  for(const [offset,line] of raw.trimEnd().split(/\r?\n/).entries()){
-    if(!line.trim())continue;
+  for(const [offset,line] of lines.entries()){
     const item=newItem(activeClient,startOrder+offset);
-    line.split('\t').forEach((value,index)=>{const key=columns[start+index];if(!key)return;item[key]=['quantity','rate','quotedTotal','advanceAmount'].includes(key)?Math.max(0,num(value)):key==='status'?(value.trim()==='-'?'discarded':value.trim().toLowerCase()||'pending'):value;});
+    line.split('\t').forEach((value,index)=>{
+      const key=columns[start+index];
+      if(!key)return;
+      item[key]=['quantity','rate','quotedTotal','advanceAmount'].includes(key)?Math.max(0,num(value)):key==='status'?(value.trim()==='-'?'discarded':value.trim().toLowerCase()||'pending'):value;
+    });
     if(!line.split('\t').some((_,index)=>columns[start+index]==='quotedTotal'))item.quotedTotal=num(item.quantity)*num(item.rate);
     data.items.push(item);added.push(item);if(item.status==='paid'){recordPaidItems([{...item,status:'pending'}]);item.paidAt=today();item.paidAtTs=new Date().toISOString();}if(num(item.advanceAmount)>0&&item.status!=='paid'){createReceipt(item.clientId,num(item.advanceAmount),`Advance · ${item.service}`,'advance',item.id);item.advanceReceivedAt=today();}enqueue('items',item.id);
   }
@@ -3418,8 +3694,17 @@ function editCell(id, key, value, skipRender = false) {
 }
 function pasteGrid(e,el) {
   const text=e.clipboardData.getData('text/plain'); if(!text.includes('\t')&&!text.includes('\n'))return;
-  e.preventDefault(); const columns=['serial','workDate','service','quantity','rate','quotedTotal','status','advanceAmount','assigneeId','remarks']; const startCol=columns.indexOf(el.dataset.cell); if(startCol<0)return;
-  const rows=text.trimEnd().split(/\r?\n/).map(r=>r.split('\t')); const items=groupedSheetItems(clientItems()); let start=items.findIndex(i=>i.id===el.dataset.id);
+  pushUndo('Paste from clipboard');
+  e.preventDefault();
+  const columns=['serial','workDate','service','quantity','rate','quotedTotal','status','advanceAmount','assigneeId','remarks'];
+  let startCol=columns.indexOf(el.dataset.cell);
+  if(startCol<0)return;
+  const rows=text.trimEnd().split(/\r?\n/).map(r=>r.split('\t'));
+  if (rows[0].length >= 5 && (/^\d+$/.test(rows[0][0].trim()) || /^\d{4}-\d{2}-\d{2}$/.test(rows[0][1]?.trim()))) {
+    startCol = 0;
+  }
+  const items=groupedSheetItems(clientItems());
+  let start=items.findIndex(i=>i.id===el.dataset.id);
   for(const cells of rows) {
     let item=items[start]; if(!item){item=newItem(activeClient,items.length);items.push(item);data.items.push(item);}
     const beforeStatus=item.status,beforeAdvance=num(item.advanceAmount);
@@ -3634,46 +3919,46 @@ function pasteCopiedRows(targetId=null,targetBlankOrder=null) {
   const isCut=rowClipboard.mode==='cut';
   pushUndo(isCut ? 'Move row (pasted from cut)' : 'Paste rows');
 
-  const items=groupedSheetItems(clientItems());
+  const allItems = clientItems(activeClient);
   const isBlankTarget = targetBlankOrder != null || (targetId == null && !selected.size);
 
-  let targetIndex=-1;
+  let targetIndex = -1;
   if (!isBlankTarget && targetId) {
-    targetIndex=items.findIndex(i=>i.id===targetId);
+    targetIndex = allItems.findIndex(i => i.id === targetId);
   } else if (!isBlankTarget && selected.size) {
-    const firstSelected=[...selected][0];
-    targetIndex=items.findIndex(i=>i.id===firstSelected);
+    const firstSelected = [...selected][0];
+    targetIndex = allItems.findIndex(i => i.id === firstSelected);
   }
 
-  const copiedItems=rowClipboard.items;
+  const copiedItems = rowClipboard.items;
   const addedItems = [];
   const modifiedItems = [];
   const previousItems = [];
 
-  copiedItems.forEach((copied,offset)=>{
-    const destIndex=targetIndex+offset;
-    let target = isBlankTarget ? null : items[destIndex];
+  copiedItems.forEach((copied, offset) => {
+    const destIndex = targetIndex + offset;
+    let target = isBlankTarget ? null : allItems[destIndex];
     if (!target) {
-      target=newItem(activeClient,items.length);
-      items.push(target);
+      target = newItem(activeClient, allItems.length);
+      allItems.push(target);
       data.items.push(target);
       addedItems.push(target);
     } else {
       previousItems.push({ ...target });
       modifiedItems.push(target);
     }
-    target.service=copied.service||'';
-    target.quantity=copied.quantity!=null?copied.quantity:1;
-    target.rate=copied.rate!=null?copied.rate:0;
-    target.quotedTotal=copied.quotedTotal!=null?copied.quotedTotal:(num(target.quantity)*num(target.rate));
-    target.manualTotal=!!copied.manualTotal;
-    target.status=copied.status||'pending';
-    target.advanceAmount=copied.advanceAmount||0;
-    target.assigneeId=copied.assigneeId||'';
-    target.remarks=copied.remarks||'';
-    target.dueDate=copied.dueDate||'';
-    target.updatedAt=new Date().toISOString();
-    enqueue('items',target.id);
+    target.service = copied.service || '';
+    target.quantity = copied.quantity != null ? copied.quantity : 1;
+    target.rate = copied.rate != null ? copied.rate : 0;
+    target.quotedTotal = copied.quotedTotal != null ? copied.quotedTotal : (num(target.quantity) * num(target.rate));
+    target.manualTotal = !!copied.manualTotal;
+    target.status = copied.status || 'pending';
+    target.advanceAmount = copied.advanceAmount || 0;
+    target.assigneeId = copied.assigneeId || '';
+    target.remarks = copied.remarks || '';
+    target.dueDate = copied.dueDate || '';
+    target.updatedAt = new Date().toISOString();
+    enqueue('items', target.id);
   });
 
   // Re-index serials cleanly (1, 2, 3...)
@@ -3686,36 +3971,40 @@ function pasteCopiedRows(targetId=null,targetBlankOrder=null) {
     enqueue('items', it.id);
   });
 
-  if (isCut&&rowClipboard.sourceRowIds.length) {
-    rowClipboard.sourceRowIds.forEach(srcId=>{
-      if (copiedItems.some((_,o)=>items[targetIndex+o]?.id===srcId)) return;
-      const src=data.items.find(i=>i.id===srcId);
+  if (isCut && rowClipboard.sourceRowIds.length) {
+    rowClipboard.sourceRowIds.forEach(srcId => {
+      if (copiedItems.some((_, o) => allItems[targetIndex + o]?.id === srcId)) return;
+      const src = data.items.find(i => i.id === srcId);
       if (src) {
-        src.service='';
-        src.quantity=1;
-        src.rate=0;
-        src.quotedTotal=0;
-        src.manualTotal=false;
-        src.status='pending';
-        src.advanceAmount=0;
-        src.assigneeId='';
-        src.remarks='';
-        src.dueDate='';
-        src.updatedAt=new Date().toISOString();
-        enqueue('items',src.id);
+        src.service = '';
+        src.quantity = 1;
+        src.rate = 0;
+        src.quotedTotal = 0;
+        src.manualTotal = false;
+        src.status = 'pending';
+        src.advanceAmount = 0;
+        src.assigneeId = '';
+        src.remarks = '';
+        src.dueDate = '';
+        src.updatedAt = new Date().toISOString();
+        enqueue('items', src.id);
       }
     });
-    rowClipboard.mode='copy';
-    $$('[data-row]').forEach(r=>r.classList.remove('row-cut-pending'));
+    rowClipboard.mode = 'copy';
+    rowClipboard.sourceRowIds = [];
+    $$('[data-row]').forEach(r => r.classList.remove('row-cut-pending'));
     toast('Row moved (pasted from cut)');
   } else {
-    toast(copiedItems.length===1?'Row pasted (Ctrl+V)':`${copiedItems.length} rows pasted`);
+    toast(copiedItems.length === 1 ? 'Row pasted (Ctrl+V)' : `${copiedItems.length} rows pasted`);
   }
 
   selected.clear();
-  addedItems.forEach(i => selected.add(i.id));
   if (addedItems.length) {
+    addedItems.forEach(i => selected.add(i.id));
     selectionCell = { id: addedItems[0].id, key: 'service' };
+  } else if (modifiedItems.length) {
+    modifiedItems.forEach(i => selected.add(i.id));
+    selectionCell = { id: modifiedItems[0].id, key: 'service' };
   }
 
   const client = data.clients?.find(c => c.id === activeClient);
@@ -5307,16 +5596,6 @@ function renderChat() {
                 ? '<span class="status-online"><span class="pulse-dot"></span> Online now</span>' 
                 : '<span>Offline / In background</span>'}
             </div>
-          </div>
-        </div>
-
-        <div class="chat-self-badge" data-action="go-settings" title="Profile configured in Settings: ${esc(myName)} (Click to edit in Settings)">
-          <div class="chat-self-avatar-wrap">
-            <span class="chat-self-avatar">${avatar(currentUserId(), myName, '', data.settings.avatarData)}</span>
-          </div>
-          <div class="chat-self-details">
-            <strong>${esc(myName)}</strong>
-            <span class="chat-self-tag">(You)</span>
           </div>
         </div>
 
