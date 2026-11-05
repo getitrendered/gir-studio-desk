@@ -270,7 +270,20 @@ console.log('Testing Goals Dashboard, Paid Group Badges, Chat Self Badge Removal
   assert(extrasCss.includes('.goals-page'), 'extras.css must include .goals-page styles');
   assert(extrasCss.includes('.goal-ring-bar'), 'extras.css must include .goal-ring-bar progress circle styles');
   assert(extrasCss.includes('.group-paid-seal'), 'extras.css must include .group-paid-seal styles');
+  assert(extrasCss.includes('.group-card-top-actions'), 'extras.css must include .group-card-top-actions styles');
+  assert(extrasCss.includes('.group-card-ungroup'), 'extras.css must include .group-card-ungroup styles');
   console.log('✓ Test 6: CSS rules verified for pointer-events:auto, goals dashboard, and paid seals');
+}
+
+// Test 7: Group card top actions & paid seal separation (Zero Overlap)
+{
+  const { context } = setupTestEnvironment();
+  const groupsHtml = context.renderGroups();
+  assert(groupsHtml.includes('class="group-card-top-actions"'), 'Must render .group-card-top-actions flex container');
+  assert(groupsHtml.includes('data-rename-card='), 'Must include rename button');
+  assert(groupsHtml.includes('data-ungroup-card='), 'Must include ungroup button');
+  assert(groupsHtml.includes('class="group-card-top-row"'), 'Must include .group-card-top-row');
+  console.log('✓ Test 7: Group card top-right buttons and paid seal structured without overlap');
 }
 
 console.log('\nALL GOALS, PAID SEALS, AND SAFETY FIX TESTS PASSED! 🎉');

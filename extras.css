@@ -198,9 +198,10 @@ table.sheet input.editing{user-select:text}
 .group-card:hover,.tracker-item:hover{border-color:#8fbea0;background:#f7fbf8}.group-card small,.tracker-item small{color:#84978a}.group-card .bar{width:100%}
 .group-card{position:relative}
 .group-card-open{display:flex;flex-direction:column;align-items:flex-start;gap:8px;width:100%;padding:0;border:0;background:transparent;text-align:left;color:inherit}
-.group-card-open[hidden],.group-card-rename[hidden],.group-card-editor[hidden]{display:none}
-.group-card-rename{position:absolute;top:11px;right:12px;border:1px solid #c9d9ce;border-radius:6px;background:#fff;color:#24764b;padding:5px 9px;font-size:10px;font-weight:750}
-.group-card-rename:hover{border-color:#168451;background:#eaf5ed}
+.group-card-open[hidden],.group-card-rename[hidden],.group-card-ungroup[hidden],.group-card-top-actions[hidden],.group-card-editor[hidden]{display:none!important}
+.group-card-top-actions{position:absolute;top:10px;right:12px;display:flex;align-items:center;gap:6px;z-index:2}
+.group-card-rename,.group-card-ungroup{position:static;border:1px solid #c9d9ce;border-radius:6px;background:#fff;color:#24764b;padding:4px 8px;font-size:10px;font-weight:750;cursor:pointer;line-height:1.2;transition:all .15s ease}
+.group-card-rename:hover,.group-card-ungroup:hover{border-color:#168451;background:#eaf5ed}
 .group-card-editor{display:flex;flex-direction:column;gap:10px;width:100%}
 .group-card-editor label{display:flex;flex-direction:column;gap:5px;font-size:10px;font-weight:700;color:#64806c}
 .group-card-editor input{height:34px;width:100%;border:1px solid #a8c9b2;border-radius:6px;background:#fff;color:#244431;padding:0 9px;outline:none;font-size:12px}
@@ -3495,10 +3496,16 @@ tr.row-fill-drag {
   color: #64748b !important;
 }
 
-[data-theme="dark"] .group-card-rename {
+[data-theme="dark"] .group-card-rename,
+[data-theme="dark"] .group-card-ungroup {
   background: #162230 !important;
   border-color: #283c50 !important;
   color: #4ade80 !important;
+}
+[data-theme="dark"] .group-card-rename:hover,
+[data-theme="dark"] .group-card-ungroup:hover {
+  background: #1e3347 !important;
+  border-color: #4ade80 !important;
 }
 
 [data-theme="dark"] .group-card-editor input {
@@ -5042,10 +5049,13 @@ tr.row-fill-drag {
 }
 .group-card-top-row {
   display: flex;
-  justify-content: space-between;
   align-items: center;
-  width: 100%;
+  justify-content: flex-start;
   gap: 8px;
+  width: 100%;
+  padding-right: 140px;
+  box-sizing: border-box;
+  flex-wrap: wrap;
 }
 .group-card.is-paid-group {
   border-color: #10b981;
