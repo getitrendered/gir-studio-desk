@@ -575,8 +575,96 @@ function renderDashboard() {
   const totalClosestDue = closestClients.reduce((sum, x) => sum + x.due, 0);
   const totalSentGroupsDue = sentGroups.reduce((sum, x) => sum + x.due, 0);
 
+  // Notice Board & Upcoming Meetings gist
+  const allTasks = Array.isArray(data.tasks) ? data.tasks : [];
+  const activeTasks = allTasks.filter(t => !t.completed);
+  const overdueTasks = activeTasks.filter(t => getTaskCategory(t) === 'overdue').sort((a,b) => new Date(a.remindAt).getTime() - new Date(b.remindAt).getTime());
+  const trendingTasks = activeTasks.filter(t => getTaskCategory(t) === 'active').sort((a,b) => new Date(a.remindAt).getTime() - new Date(b.remindAt).getTime());
+  const upcomingTasks = activeTasks.filter(t => getTaskCategory(t) === 'upcoming').sort((a,b) => new Date(a.remindAt).getTime() - new Date(b.remindAt).getTime());
+  const featuredTasks = [...overdueTasks, ...trendingTasks, ...upcomingTasks].slice(0, 4);
+
+  const noticeBoardGistHtml = `
+    <div class="panel highlight-panel-notice dashboard-notice-panel">
+      <div class="panel-header-with-badge">
+        <div class="panel-title-wrap">
+          <span class="panel-icon">📌</span>
+          <div>
+            <h3>Notice Board &amp; Upcoming Meetings</h3>
+            <p class="panel-sub">Scheduled team meetings, upcoming deadlines, and live countdown timers</p>
+          </div>
+        </div>
+        <div class="dashboard-notice-header-actions">
+          ${overdueTasks.length ? `<span class="badge-notice-overdue">🚨 ${overdueTasks.length} Overdue</span>` : ''}
+          ${trendingTasks.length ? `<span class="badge-notice-focus">⚡ ${trendingTasks.length} In Focus</span>` : ''}
+          <button type="button" class="small-btn" data-dashboard-add-task title="Pin a new meeting or reminder">+ Add Notice</button>
+          <button type="button" class="small-btn blue" data-open-notice-board title="Open the full Notice Board">Open Notice Board (${activeTasks.length}) →</button>
+        </div>
+      </div>
+      ${featuredTasks.length ? `
+        <div class="dashboard-notice-grid">
+          ${featuredTasks.map(t => {
+            const cat = getTaskCategory(t);
+            const isOverdue = cat === 'overdue';
+            const isTrending = cat === 'active';
+            const dtText = formatTaskDateTime(t.remindAt);
+            const cdText = formatTaskCountdown(t.remindAt);
+            return `
+              <div class="dashboard-notice-card card-${cat}" data-task-id="${t.id}">
+                <div class="dashboard-notice-card-header">
+                  <div class="dashboard-notice-pills">
+                    ${isOverdue ? `<span class="notice-pill pill-overdue">🚨 OVERDUE</span>` : ''}
+                    ${isTrending ? `<span class="notice-pill pill-trending">⚡ IN FOCUS</span>` : ''}
+                    ${!isOverdue && !isTrending ? `<span class="notice-pill pill-normal">📌 NOTICE</span>` : ''}
+                    <span class="dashboard-notice-date">📅 ${esc(dtText)}</span>
+                  </div>
+                  <div class="task-countdown dashboard-timer timer-${cat}" data-remind-at="${t.remindAt}" data-category="${cat}">
+                    ${cdText}
+                  </div>
+                </div>
+                <div class="dashboard-notice-card-body">
+                  <h4 class="dashboard-notice-title">${esc(t.title)}</h4>
+                  ${t.description ? `<p class="dashboard-notice-desc">${esc(t.description)}</p>` : ''}
+                </div>
+                <div class="dashboard-notice-card-footer">
+                  <div class="dashboard-notice-author">
+                    ${t.createdBy ? `<span>👤 ${esc(t.createdBy)}</span>` : ''}
+                  </div>
+                  <div class="dashboard-notice-actions">
+                    <button type="button" class="small-btn ${isOverdue ? 'danger' : 'green'} task-btn-complete" data-task-action="complete" data-task-id="${t.id}" title="Mark completed">✓ Complete</button>
+                    <button type="button" class="small-btn" data-task-jump="${t.id}" title="View in Notice Board">View →</button>
+                  </div>
+                </div>
+              </div>
+            `;
+          }).join('')}
+        </div>
+        ${activeTasks.length > featuredTasks.length ? `
+          <div class="dashboard-notice-more">
+            <button type="button" class="dashboard-notice-more-btn" data-open-notice-board>
+              <span>+ View ${activeTasks.length - featuredTasks.length} more notice${(activeTasks.length - featuredTasks.length) === 1 ? '' : 's'} on Notice Board</span>
+              <span>→</span>
+            </button>
+          </div>
+        ` : ''}
+      ` : `
+        <div class="dashboard-notice-empty">
+          <div class="dashboard-notice-empty-content">
+            <span class="empty-pin-icon">📌</span>
+            <div class="empty-notice-text">
+              <strong>Notice Board is all clear</strong>
+              <p class="muted">No upcoming meetings or pending reminders scheduled right now.</p>
+            </div>
+          </div>
+          <button type="button" class="small-btn blue" data-dashboard-add-task>+ Add Meeting / Reminder</button>
+        </div>
+      `}
+    </div>
+  `;
+
   return `<div class="section-top"><div><h2>Your studio at a glance</h2><p>Live progress across ${data.clients.length} clients.</p></div></div>
     <div class="cards"><div class="card blue"><div class="card-label">Completed work</div><div class="card-value">${completion}%</div><div class="card-foot">${c.done} of ${c.total} tasks sent or paid</div></div><div class="card"><div class="card-label">In progress</div><div class="card-value">${c.working}</div><div class="card-foot">${c.pending} waiting to start</div></div><div class="card amber"><div class="card-label">Work sent expected</div><div class="card-value">${money(f.awaiting)}</div><div class="card-foot">Sent or invoiced balances due</div></div><div class="card green"><div class="card-label">Revenue received</div><div class="card-value">${money(f.revenue)}</div><div class="card-foot">Paid work and open-work advances</div></div></div>
+
+    ${noticeBoardGistHtml}
 
     <div class="dashboard-insights-container">
       <div class="panel highlight-panel">
@@ -1373,7 +1461,7 @@ function checkTaskReminders() {
 }
 
 function updateLiveTaskCountdowns() {
-  if (tab !== 'tasks') return;
+  if (tab !== 'tasks' && tab !== 'dashboard') return;
   const elements = $$('.task-countdown[data-remind-at]');
   const now = Date.now();
   let needsRerender = false;
@@ -2984,7 +3072,17 @@ function bindMain() {
   $$('[data-tracker-status]').forEach(sel=>sel.onchange=e=>{e.stopPropagation();updateTrackerItemStatus(sel.dataset.trackerStatus,sel.value);});
   $$('[data-check]').forEach(b=>{b.onclick=e=>e.stopPropagation();b.onchange=()=>{b.checked?selected.add(b.dataset.check):selected.delete(b.dataset.check);selectionAnchor=b.dataset.check;refreshSelection();};});
   const all=$('#selectAll'); if(all) all.onchange=()=>{$$('[data-check]').forEach(b=>all.checked?selected.add(b.dataset.check):selected.delete(b.dataset.check));refreshSelection();};
-  $$('[data-cell]').forEach(el=>{ el.onchange=()=>editCell(el.dataset.id,el.dataset.cell,el.value, true); if(el.tagName==='INPUT') el.onpaste=e=>pasteGrid(e,el); });
+  $$('[data-cell]').forEach(el=>{
+    el.onchange=()=>editCell(el.dataset.id,el.dataset.cell,el.value, true);
+    if(el.tagName==='INPUT') {
+      el.onpaste=e=>pasteGrid(e,el);
+      el.addEventListener('focus', () => {
+        if (el.readOnly || !el.classList.contains('editing')) {
+          activateSheetField(el);
+        }
+      });
+    }
+  });
   $$('[data-status-menu]').forEach(button=>button.onclick=e=>{
     e.stopPropagation();
     if(tab==='sheet')selectSheetRow(button.dataset.statusMenu,false,false);
@@ -3018,6 +3116,12 @@ function bindMain() {
         if (active.contains(e.target) || e.target.closest('td')?.contains(active)) {
           return;
         }
+        // If clicking directly into another editable sheet cell, pass it as exceptEl so it doesn't get wiped abruptly
+        const targetCell = e.target.closest('td')?.querySelector('[data-cell], [data-blank-cell]');
+        if (targetCell) {
+          deactivateAllEditingFields(targetCell);
+          return;
+        }
         deactivateAllEditingFields();
       }
     }, true);
@@ -3038,6 +3142,9 @@ function bindMain() {
       // Direct editing on single click (instant typing for cost, service, etc.)
       if (field) {
         activateSheetField(field);
+        if (e.target !== field && typeof field.focus === 'function') {
+          field.focus();
+        }
         return; // Do NOT call e.preventDefault() so native browser focus and caret work immediately!
       }
 
@@ -3059,7 +3166,16 @@ function bindMain() {
         justDraggedSelection = false;
         return;
       }
-      if (e.target.closest('button, input.editing') || e.target.matches('[type=checkbox], [data-cell], [data-blank-cell]')) return;
+      // If clicked inside an editable cell (directly on input or on td), ensure active and NEVER select row
+      const cellField = e.target.closest('td')?.querySelector('[data-cell]');
+      if (e.target.closest('button, input.editing') || cellField) {
+        if (cellField && !cellField.classList.contains('editing')) {
+          activateSheetField(cellField);
+          if (typeof cellField.focus === 'function') cellField.focus();
+        }
+        return;
+      }
+      if (e.target.matches('[type=checkbox], [data-cell], [data-blank-cell]')) return;
       const field = e.target.closest('td')?.querySelector('[data-cell]');
       selectionCell = field ? { id: row.dataset.row, key: field.dataset.cell } : null;
 
@@ -3083,6 +3199,7 @@ function bindMain() {
       if (field) {
         activateSheetField(field);
         lastCellClick = { rowId: null, cellKey: null, blankOrder: null, time: 0 };
+        if (typeof field.focus === 'function') field.focus();
         if (typeof field.select === 'function') field.select();
       }
     };
@@ -3154,18 +3271,16 @@ function bindMain() {
       selectionCell={blankOrder:Number(row.dataset.blankRow),key:field?.dataset?.blankCell||'service'};
       if (field) {
         activateSheetField(field);
+        if (e.target !== field && typeof field.focus === 'function') {
+          field.focus();
+        }
       }
     };
     row.onclick=e=>{
-      selected.clear();
-      $$('.sheet tr.selected').forEach(r=>r.classList.remove('selected'));
-      $$('.sheet tr.blank-row').forEach(r=>r.classList.remove('blank-selected'));
-      row.classList.add('blank-selected');
-      refreshSelection();
       const field=e.target.closest('td')?.querySelector('[data-blank-cell]');
-      selectionCell={blankOrder:Number(row.dataset.blankRow),key:field?.dataset?.blankCell||'service'};
-      if(field) {
+      if (field && !field.classList.contains('editing')) {
         activateSheetField(field);
+        if (typeof field.focus === 'function') field.focus();
       }
     };
     row.ondblclick=e=>{
@@ -3177,6 +3292,7 @@ function bindMain() {
       const field=e.target.closest('td')?.querySelector('[data-blank-cell]');
       if(field) {
         activateSheetField(field);
+        if(typeof field.focus === 'function') field.focus();
         if(typeof field.select === 'function') field.select();
       }
     };
@@ -3204,7 +3320,15 @@ function bindMain() {
       setTimeout(()=>document.addEventListener('click',()=>menu.remove(),{once:true}),0);
     };
   });
-  $$('[data-blank-cell]').forEach(el=>{el.onchange=()=>materializeBlankRow(el);el.onpaste=e=>pasteBlankGrid(e,el);});
+  $$('[data-blank-cell]').forEach(el=>{
+    el.onchange=()=>materializeBlankRow(el);
+    el.onpaste=e=>pasteBlankGrid(e,el);
+    el.addEventListener('focus', () => {
+      if (el.readOnly || !el.classList.contains('editing')) {
+        activateSheetField(el);
+      }
+    });
+  });
   $$('[data-group-collapse]').forEach(b=>b.onclick=()=>{const id=b.dataset.groupCollapse;collapsedGroups.has(id)?collapsedGroups.delete(id):collapsedGroups.add(id);render();});
   $$('[data-group-add]').forEach(b=>b.onclick=()=>{const group=data.projectGroups.find(g=>g.id===b.dataset.groupAdd);if(!group)return;const item=newItem(group.clientId,clientItems(group.clientId).length);item.projectGroupId=group.id;mutate('items',item);setTimeout(()=>{const row=document.querySelector(`[data-row="${item.id}"]`);row?.scrollIntoView({block:'center'});const field=row?.querySelector('[data-cell="service"]');if(field)activateSheetField(field);},60);});
   $$('[data-group-rename]').forEach(b=>b.onclick=()=>{const [kind,id]=b.dataset.groupRename.split(':');renameGroup(kind,id);});
@@ -3336,6 +3460,19 @@ function bindMain() {
     };
   }
   $$('[data-billing-edit]').forEach(b=>b.onclick=()=>billingDialog(b.dataset.billingEdit));
+  $$('[data-open-notice-board]').forEach(b => b.onclick = () => { tab = 'tasks'; render(); });
+  $$('[data-dashboard-add-task]').forEach(b => b.onclick = () => { openTaskModal(); });
+  $$('[data-task-jump]').forEach(b => b.onclick = () => {
+    const tid = b.dataset.taskJump;
+    tab = 'tasks';
+    render();
+    setTimeout(() => {
+      const el = document.querySelector(`[data-task-id="${tid}"]`);
+      el?.scrollIntoView({ block: 'center', behavior: 'smooth' });
+      el?.classList.add('group-highlight-flash');
+      setTimeout(() => el?.classList.remove('group-highlight-flash'), 2500);
+    }, 80);
+  });
   $$('[data-client-open]').forEach(b=>b.onclick=()=>{activeClient=b.dataset.clientOpen;tab='sheet';render();});
   $$('[data-view-uninvoiced]').forEach(b=>b.onclick=()=>{activeClient=b.dataset.viewUninvoiced;selected=new Set(financials().sentItems.filter(i=>i.clientId===activeClient).map(i=>i.id));filter='sent';tab='sheet';render();const first=$('[data-row].selected');first?.scrollIntoView({block:'center'});});
   $$('[data-view-outstanding]').forEach(b=>b.onclick=()=>{activeClient=b.dataset.viewOutstanding;selected=new Set(financials().outstandingItems.filter(i=>i.clientId===activeClient).flatMap(i=>i.itemIds));filter='all';tab='sheet';render();const first=$('[data-row].selected');first?.scrollIntoView({block:'center'});});
@@ -3551,6 +3688,8 @@ function deactivateAllEditingFields(exceptEl = null) {
   }
 }
 
+const SHEET_EDIT_COLS = ['workDate', 'service', 'quantity', 'rate', 'quotedTotal', 'advanceAmount', 'remarks'];
+
 function activateSheetField(field) {
   if (!field) return;
   deactivateAllEditingFields(field);
@@ -3561,7 +3700,54 @@ function activateSheetField(field) {
     field.onkeydown = e => {
       if (e.key === 'Enter') {
         e.preventDefault();
+        const currentTr = field.closest('tr');
+        const cellKey = field.dataset.cell || field.dataset.blankCell;
         deactivateAllEditingFields();
+        const nextTr = currentTr?.nextElementSibling;
+        if (nextTr) {
+          const nextField = nextTr.querySelector(`[data-cell="${cellKey}"], [data-blank-cell="${cellKey}"]`);
+          if (nextField) {
+            activateSheetField(nextField);
+            if (typeof nextField.select === 'function') nextField.select();
+          }
+        }
+      } else if (e.key === 'Tab') {
+        e.preventDefault();
+        const currentTr = field.closest('tr');
+        const cellKey = field.dataset.cell || field.dataset.blankCell;
+        const colIdx = SHEET_EDIT_COLS.indexOf(cellKey);
+        deactivateAllEditingFields();
+        if (colIdx >= 0) {
+          const delta = e.shiftKey ? -1 : 1;
+          const nextIdx = colIdx + delta;
+          if (nextIdx >= 0 && nextIdx < SHEET_EDIT_COLS.length) {
+            const nextKey = SHEET_EDIT_COLS[nextIdx];
+            const nextField = currentTr.querySelector(`[data-cell="${nextKey}"], [data-blank-cell="${nextKey}"]`);
+            if (nextField) {
+              activateSheetField(nextField);
+              if (typeof nextField.select === 'function') nextField.select();
+            }
+          } else if (!e.shiftKey && nextIdx >= SHEET_EDIT_COLS.length) {
+            const nextTr = currentTr.nextElementSibling;
+            if (nextTr) {
+              const nextField = nextTr.querySelector(`[data-cell="${SHEET_EDIT_COLS[0]}"], [data-blank-cell="${SHEET_EDIT_COLS[0]}"]`);
+              if (nextField) {
+                activateSheetField(nextField);
+                if (typeof nextField.select === 'function') nextField.select();
+              }
+            }
+          } else if (e.shiftKey && nextIdx < 0) {
+            const prevTr = currentTr.previousElementSibling;
+            if (prevTr) {
+              const lastKey = SHEET_EDIT_COLS[SHEET_EDIT_COLS.length - 1];
+              const prevField = prevTr.querySelector(`[data-cell="${lastKey}"], [data-blank-cell="${lastKey}"]`);
+              if (prevField) {
+                activateSheetField(prevField);
+                if (typeof prevField.select === 'function') prevField.select();
+              }
+            }
+          }
+        }
       } else if (e.key === 'Escape') {
         e.preventDefault();
         if (field.dataset.id && field.dataset.cell) {
@@ -3593,7 +3779,7 @@ function activateSheetField(field) {
     };
   }
 }
-function materializeBlankRow(field) {
+function materializeBlankRow(field, targetNextKey = null) {
   const value=field.value.trim();if(!value)return;
   const order=Number(field.dataset.blankOrder),key=field.dataset.blankCell;
   const item=newItem(activeClient,order);
@@ -3609,6 +3795,18 @@ function materializeBlankRow(field) {
       clientName: client?.name || ''
     });
   }
+  const nextKey = targetNextKey || (key === 'service' ? 'rate' : key);
+  setTimeout(() => {
+    const rowEl = document.querySelector(`[data-row="${item.id}"]`);
+    if (rowEl) {
+      const nextField = rowEl.querySelector(`[data-cell="${nextKey}"]`);
+      if (nextField) {
+        activateSheetField(nextField);
+        if (typeof nextField.focus === 'function') nextField.focus();
+        if (typeof nextField.select === 'function') nextField.select();
+      }
+    }
+  }, 20);
 }
 function pasteBlankGrid(event,field) {
   const raw=event.clipboardData.getData('text/plain');if(!raw)return;event.preventDefault();
