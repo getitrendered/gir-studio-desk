@@ -796,6 +796,25 @@ function groupHeader(kind,group,items) {
   return `<tr class="sheet-group-header ${kind} ${isPaid ? 'is-paid-group-row' : ''}" data-sheet-group="${kind}:${group.id}"><td colspan="11"><div class="group-heading"><button data-group-collapse="${kind}:${group.id}" aria-expanded="${!folded}"><svg class="group-chevron ${folded?'collapsed':''}" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="m3.5 5.75 4.5 4.5 4.5-4.5" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg><strong>${esc(group.label)}</strong><span>${done}/${active.length} complete${detail}</span></button><span class="group-status ${status.toLowerCase().replaceAll(' ','-')}">${status}</span>${paidSeal}${actionButtons}${kind==='project'?`<button class="group-add" data-group-add="${group.id}" title="Add work under this project">＋ Row</button>`:''}<button class="group-rename" data-group-rename="${kind}:${group.id}" title="Rename group">Rename</button><button class="group-ungroup" data-group-ungroup="${kind}:${group.id}" title="Ungroup (keep rows, remove group)">Ungroup</button></div></td></tr>`;
 }
 function groupStatus(items){const active=items.filter(i=>i.status!=='discarded');if(!active.length)return 'Discarded';if(active.every(i=>i.status==='paid'))return 'Paid';if(active.every(i=>['sent','paid'].includes(i.status)))return 'Sent';if(active.some(i=>['working','changes'].includes(i.status)))return 'Working';return 'Pending';}
+function updateGroupHeaderDOM(item) {
+  if (!item) return;
+  const entries = [];
+  if (item.projectGroupId) { const pg = (data.projectGroups || []).find(g => g.id === item.projectGroupId); if (pg) entries.push({ kind: 'project', group: pg }); }
+  if (item.groupId) { const dg = (data.groups || []).find(g => g.id === item.groupId); if (dg) entries.push({ kind: 'deal', group: dg }); }
+  for (const { kind, group } of entries) {
+    const headerRow = document.querySelector(`[data-sheet-group="${kind}:${group.id}"]`);
+    if (!headerRow) continue;
+    const items = (data.items || []).filter(i => (kind === 'project' ? i.projectGroupId : i.groupId) === group.id);
+    const active = items.filter(i => i.status !== 'discarded');
+    const done = items.filter(i => ['sent', 'paid'].includes(i.status)).length;
+    const gVal = groupTotalValue(kind, group, items);
+    let detail = '';
+    if (gVal.agreed) { detail = ` · Agreed ${money(gVal.total)}`; }
+    else if (gVal.total > 0) { detail = gVal.paid > 0 && gVal.paid < gVal.total ? ` · Total ${money(gVal.total)} (${money(gVal.paid)} paid)` : ` · Total ${money(gVal.total)}`; }
+    const span = headerRow.querySelector('[data-group-collapse] span');
+    if (span) span.textContent = `${done}/${active.length} complete${detail}`;
+  }
+}
 function blankRowHtml(order) {
   const cell=key=>`<td><input data-blank-cell="${key}" data-blank-order="${order}" value="" readonly></td>`;
   return `<tr class="blank-row" data-blank-row="${order}"><td class="row-selector"></td><td class="serial-cell">${order+1}</td>${cell('workDate')}${cell('service')}${cell('quantity')}${cell('rate')}${cell('quotedTotal')}<td class="status-cell"></td>${cell('advanceAmount')}<td class="assignee-cell"></td>${cell('remarks')}</tr>`;
@@ -3076,6 +3095,28 @@ function bindMain() {
     el.onchange=()=>editCell(el.dataset.id,el.dataset.cell,el.value, true);
     if(el.tagName==='INPUT') {
       el.onpaste=e=>pasteGrid(e,el);
+      el.addEventListener('input', () => {
+        const id = el.dataset.id, key = el.dataset.cell;
+        if (!id || !key) return;
+        const i = (data.items || []).find(x => x.id === id);
+        if (!i) return;
+        let val = el.value;
+        if (['quantity', 'rate', 'quotedTotal', 'advanceAmount'].includes(key)) val = Math.max(0, num(val));
+        if (i[key] === val) return;
+        i[key] = val;
+        if (key === 'quantity' || key === 'rate') {
+          i.manualTotal = false;
+          i.quotedTotal = num(i.quantity) * num(i.rate);
+          const ti = el.closest('tr')?.querySelector('[data-cell="quotedTotal"]');
+          if (ti) ti.value = i.quotedTotal;
+        } else if (key === 'quotedTotal') {
+          i.manualTotal = true;
+        }
+        i.updatedAt = new Date().toISOString();
+        queue('items', i.id);
+        refreshSelection();
+        updateGroupHeaderDOM(i);
+      });
       el.addEventListener('focus', () => {
         if (el.readOnly || !el.classList.contains('editing')) {
           activateSheetField(el);
@@ -3883,6 +3924,7 @@ function editCell(id, key, value, skipRender = false) {
       }
     }
     refreshSelection();
+    updateGroupHeaderDOM(i);
   } else {
     mutate('items',i);
   }
@@ -8257,6 +8299,14 @@ async function pullRemote(){
   if(!clientApi||!data.settings.workspaceId)return;
   await ensureActiveSession();
   if(!session)return;
+  const activeEditing = (typeof document !== 'undefined') && (
+    document.querySelector('input.editing, select.editing, [data-cell].editing, [data-blank-cell].editing') ||
+    (document.activeElement?.matches?.('input[data-cell], input[data-blank-cell]') ? document.activeElement : null)
+  );
+  if (activeEditing && tab === 'sheet') {
+    isDeferredRemotePull = true;
+    return;
+  }
   const ws=data.settings.workspaceId;
   const [w,m,...tables]=await Promise.all([
     clientApi.from('workspaces').select('*').eq('id',ws).single(),
@@ -8308,7 +8358,22 @@ async function pullRemote(){
     const pending=new Set(data.pending.filter(p=>p.table===table).map(p=>p.id));
     const pendingDeletes=new Set((data.pendingDeletes||[]).filter(p=>p.table===table).map(p=>p.id));
     const locals=(data[table]||[]).filter(x=>pending.has(x.id));
-    data[table]=(tables[k]||[]).filter(x=>!pendingDeletes.has(x.id)).map(x=>localRow(table,x));
+    const oldLocal = new Map((data[table]||[]).map(x=>[x.id,x]));
+    data[table]=(tables[k]||[]).filter(x=>!pendingDeletes.has(x.id)).map(x=>{
+      const remote = localRow(table,x);
+      if (table === 'items') {
+        const prev = oldLocal.get(remote.id);
+        if (prev && !pending.has(remote.id)) {
+          if (prev.updatedAt && remote.updatedAt && new Date(prev.updatedAt) > new Date(remote.updatedAt)) {
+            return prev;
+          }
+          if (num(prev.rate) > 0 && num(remote.rate) === 0) {
+            return { ...remote, rate: prev.rate, quotedTotal: prev.quotedTotal || (num(remote.quantity) * num(prev.rate)) };
+          }
+        }
+      }
+      return remote;
+    });
     for(const local of locals){
       const ix=data[table].findIndex(x=>x.id===local.id);
       if(ix<0)data[table].push(local);else data[table][ix]=local;
@@ -8318,6 +8383,15 @@ async function pullRemote(){
   if(!activeClient || !data.clients.some(c=>c.id===activeClient))activeClient=sortedClients()[0]?.id||null;
   lastSyncTime=Date.now();
   save();
+  const stillEditing = (typeof document !== 'undefined') && (
+    document.querySelector('input.editing, select.editing, [data-cell].editing, [data-blank-cell].editing') ||
+    (document.activeElement?.matches?.('input[data-cell], input[data-blank-cell]') ? document.activeElement : null)
+  );
+  if (stillEditing && tab === 'sheet') {
+    isDeferredRemotePull = true;
+    updateSyncUI();
+    return;
+  }
   render();
   updateSyncUI();
 }

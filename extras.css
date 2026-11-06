@@ -5053,6 +5053,7 @@ tr.row-fill-drag {
   justify-content: flex-start;
   gap: 8px;
   width: 100%;
+  max-width: calc(100% - 130px);
   padding-right: 155px;
   box-sizing: border-box;
   flex-wrap: wrap;
