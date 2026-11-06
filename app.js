@@ -3176,7 +3176,16 @@ function bindMain() {
         deactivateAllEditingFields();
       }
       $$('.sheet tr.blank-row').forEach(r => r.classList.remove('blank-selected'));
-      if (e.target.closest('button, input.editing, input[type=checkbox]')) return;
+      if (e.target.closest('button, input[type=checkbox]')) return;
+
+      // 1. Shift+Click or Ctrl+Click multi-row selection
+      if (e.shiftKey || e.ctrlKey || e.metaKey) {
+        deactivateAllEditingFields();
+        handleRowDragStart(row.dataset.row, e);
+        e.preventDefault();
+        return;
+      }
+
       const field = e.target.closest('td')?.querySelector('[data-cell]');
       selectionCell = field ? { id: row.dataset.row, key: field.dataset.cell } : null;
 
@@ -3186,11 +3195,12 @@ function bindMain() {
         if (e.target !== field && typeof field.focus === 'function') {
           field.focus();
         }
-        return; // Do NOT call e.preventDefault() so native browser focus and caret work immediately!
       }
 
       handleRowDragStart(row.dataset.row, e);
-      e.preventDefault();
+      if (!field) {
+        e.preventDefault();
+      }
     };
     row.onmouseenter = e => {
       if (isRowDragSelecting && (e.buttons === 1 || e.which === 1)) {
@@ -3205,6 +3215,10 @@ function bindMain() {
     row.onclick = e => {
       if (justDraggedSelection) {
         justDraggedSelection = false;
+        return;
+      }
+      if (e.shiftKey || e.ctrlKey || e.metaKey) {
+        selectSheetRow(row.dataset.row, e.shiftKey, e.ctrlKey || e.metaKey);
         return;
       }
       // If clicked inside an editable cell (directly on input or on td), ensure active and NEVER select row
@@ -3630,6 +3644,7 @@ function handleRowDragOver(targetRowId, e = {}) {
 
   if (targetRowId !== dragStartRowId) {
     hasRowDragged = true;
+    deactivateAllEditingFields();
   }
   dragTargetRowId = targetRowId;
   if (e.shiftKey) dragStartShift = true;
