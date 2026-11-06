@@ -2920,6 +2920,94 @@ tr.row-fill-drag {
   color: #64748b !important;
 }
 
+/* Dark Mode Selected Row Status Cells - Prevents Light Pastels & Bleached White Text */
+[data-theme="dark"] .sheet tr.selected td.status-cell.pending {
+  background: #172433 !important;
+}
+
+[data-theme="dark"] .sheet tr.selected td.status-cell.working {
+  background: #102d4d !important;
+}
+
+[data-theme="dark"] .sheet tr.selected td.status-cell.changes {
+  background: #2d1c44 !important;
+}
+
+[data-theme="dark"] .sheet tr.selected td.status-cell.sent {
+  background: #39280e !important;
+}
+
+[data-theme="dark"] .sheet tr.selected td.status-cell.paid {
+  background: #0f3d25 !important;
+}
+
+[data-theme="dark"] .sheet tr.selected td.status-cell.discarded {
+  background: #192027 !important;
+}
+
+/* Dark Mode Status Trigger & Dot inside status cells */
+[data-theme="dark"] .sheet td.status-cell.pending .status-trigger,
+[data-theme="dark"] .sheet tr.selected td.status-cell.pending .status-trigger {
+  color: #94a3b8 !important;
+}
+[data-theme="dark"] .sheet td.status-cell.pending .status-dot,
+[data-theme="dark"] .sheet tr.selected td.status-cell.pending .status-dot {
+  background: #64748b !important;
+}
+
+[data-theme="dark"] .sheet td.status-cell.working .status-trigger,
+[data-theme="dark"] .sheet tr.selected td.status-cell.working .status-trigger {
+  color: #93c5fd !important;
+}
+[data-theme="dark"] .sheet td.status-cell.working .status-dot,
+[data-theme="dark"] .sheet tr.selected td.status-cell.working .status-dot {
+  background: #3b82f6 !important;
+  box-shadow: 0 0 6px rgba(59, 130, 246, 0.5) !important;
+}
+
+[data-theme="dark"] .sheet td.status-cell.changes .status-trigger,
+[data-theme="dark"] .sheet tr.selected td.status-cell.changes .status-trigger {
+  color: #d8b4fe !important;
+}
+[data-theme="dark"] .sheet td.status-cell.changes .status-dot,
+[data-theme="dark"] .sheet tr.selected td.status-cell.changes .status-dot {
+  background: #a855f7 !important;
+  box-shadow: 0 0 6px rgba(168, 85, 247, 0.5) !important;
+}
+
+[data-theme="dark"] .sheet td.status-cell.sent .status-trigger,
+[data-theme="dark"] .sheet tr.selected td.status-cell.sent .status-trigger {
+  color: #fcd34d !important;
+}
+[data-theme="dark"] .sheet td.status-cell.sent .status-dot,
+[data-theme="dark"] .sheet tr.selected td.status-cell.sent .status-dot {
+  background: #f59e0b !important;
+  box-shadow: 0 0 6px rgba(245, 158, 11, 0.5) !important;
+}
+
+[data-theme="dark"] .sheet td.status-cell.paid .status-trigger,
+[data-theme="dark"] .sheet tr.selected td.status-cell.paid .status-trigger {
+  color: #6ee7b7 !important;
+}
+[data-theme="dark"] .sheet td.status-cell.paid .status-dot,
+[data-theme="dark"] .sheet tr.selected td.status-cell.paid .status-dot {
+  background: #10b981 !important;
+  box-shadow: 0 0 6px rgba(16, 185, 129, 0.6) !important;
+}
+[data-theme="dark"] .sheet td.status-cell.paid .status-chevron,
+[data-theme="dark"] .sheet tr.selected td.status-cell.paid .status-chevron {
+  color: #34d399 !important;
+}
+
+[data-theme="dark"] .sheet td.status-cell.discarded .status-trigger,
+[data-theme="dark"] .sheet tr.selected td.status-cell.discarded .status-trigger {
+  color: #64748b !important;
+}
+[data-theme="dark"] .sheet td.status-cell.discarded .status-dot,
+[data-theme="dark"] .sheet tr.selected td.status-cell.discarded .status-dot {
+  background: #ef4444 !important;
+}
+
 /* Group Headers */
 [data-theme="dark"] .sheet-group-header td {
   background: #122c1e !important;

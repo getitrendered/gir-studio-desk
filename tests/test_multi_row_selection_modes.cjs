@@ -21,6 +21,13 @@ assert(appCode.includes("handleRowDragOver(row.dataset.row, e);"), 'row.onmousee
 assert(appCode.includes("hasRowDragged = true;\n    deactivateAllEditingFields();"), 'handleRowDragOver must deactivate editing fields once drag starts across rows');
 console.log('✓ Test 3: Dragging across rows deactivates editing and selects row range');
 
+// 4. Verify dark mode selected status cell styling
+const cssPath = path.resolve(__dirname, '../extras.css');
+const cssCode = fs.readFileSync(cssPath, 'utf8');
+assert(cssCode.includes('[data-theme="dark"] .sheet tr.selected td.status-cell.paid'), 'extras.css must define dark mode selected status-cell.paid background');
+assert(cssCode.includes('[data-theme="dark"] .sheet tr.selected td.status-cell.paid .status-trigger'), 'extras.css must define dark mode selected status-cell.paid text color');
+console.log('✓ Test 4: Dark mode selected row status cell styling verified');
+
 // 4. Functional Simulation Test: Shift, Ctrl, and Drag Selection
 {
   const rowIds = ['row1', 'row2', 'row3', 'row4', 'row5', 'row6', 'row7', 'row8'];
