@@ -7,7 +7,7 @@ const num = v => Number(String(v ?? '').replace(/[^0-9.-]/g, '')) || 0;
 const esc = v => String(v ?? '').replace(/[&<>"']/g, c => ({ '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;' }[c]));
 const cleanSerial = v => { if (v == null || v === '') return ''; const s = String(v).trim(), n = Number(s); if (!isNaN(n) && Number.isInteger(n) && !s.includes('e') && !s.includes('E')) return String(n); return s.replace(/\.0+$/, ''); };
 const fmtDate = d => { if (!d) return '—'; const x = new Date(d + 'T00:00:00'); return Number.isNaN(x.getTime()) ? d : x.toLocaleDateString('en-IN', { day:'numeric', month:'short', year:'numeric' }); };
-const defaults = { clients:[], groups:[], projectGroups:[], items:[], invoices:[], receipts:[], members:[], chatMessages:[], tasks:[], deletedTaskIds:[], activityLog:[], pending:[], settings:{ seller:{ name:'GIR — Get It Rendered', address:'', email:'', phone:'', taxId:'', bankDetails:'', bankAccounts:[], activeBankAccountId:'', logoData:'' }, url:'https://isdxybpeagloikchhsbp.supabase.co', key:'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImlzZHh5YnBlYWdsb2lrY2hoc2JwIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTI1NzkzMjcsImV4cCI6MjEwODE1NTMyN30.ll1YG9uyrTqmLzE90miCk-O1Ab5VkBPfqrCPDDUc5u8', workspaceId:'17f39873-e10f-4bdf-93ee-1f92b3e25251', displayName:'Samuel', localPartner:'Mezrid', avatarData:'', partnerAvatarData:'', catType:'orange', zoom:100, theme:'light' } };
+const defaults = { clients:[], groups:[], projectGroups:[], items:[], invoices:[], receipts:[], members:[], chatMessages:[], tasks:[], deletedTaskIds:[], activityLog:[], pending:[], rentals:[], rentalItems:[], settings:{ seller:{ name:'GIR — Get It Rendered', address:'', email:'', phone:'', taxId:'', bankDetails:'', bankAccounts:[], activeBankAccountId:'', logoData:'' }, url:'https://isdxybpeagloikchhsbp.supabase.co', key:'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImlzZHh5YnBlYWdsb2lrY2hoc2JwIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTI1NzkzMjcsImV4cCI6MjEwODE1NTMyN30.ll1YG9uyrTqmLzE90miCk-O1Ab5VkBPfqrCPDDUc5u8', workspaceId:'17f39873-e10f-4bdf-93ee-1f92b3e25251', displayName:'Samuel', localPartner:'Mezrid', avatarData:'', partnerAvatarData:'', catType:'orange', zoom:100, theme:'light' } };
 const GIR_WORKSPACE_ID='17f39873-e10f-4bdf-93ee-1f92b3e25251';
 
 function getEffectiveTheme(themeSetting) {
@@ -79,6 +79,7 @@ const recentLocalPushes = new Map();
 let isDeferredRemotePull = false;
 let isRowDragSelecting = false, hasRowDragged = false, justDraggedSelection = false, dragStartRowId = null, dragTargetRowId = null, dragStartCellKey = null, dragStartShift = false, dragStartWithCtrl = false, dragInitialSelected = null;
 let pendingChatAttachment = null, chatDraftText = '', activeStickerTab = 'stickers', stickerSearchQuery = '', lastPartnerOnlineTime = 0, unreadChatCount = 0, chatSyncTimer = null, noticeBoardSyncTimer = null;
+let rentalViewMode = 'calendar', rentalFilter = 'all', rentalCalendarMonth = '', rentalSearchDate = '', rentalSearchQuery = '', rentalDraggedId = null;
 let lastCellClick = { rowId: null, cellKey: null, blankOrder: null, time: 0 };
 let authLoading=true,workspaceReady=false,workspaceResolving=false,accessMode='signin',accessError='',activeStatusMenu=null;
 let desktopUpdate = { status: 'unavailable', message: 'Checking update support…' };
@@ -408,6 +409,23 @@ function financials() {
       month(receipt.receivedMonth,'received',val);
     }
   }
+  const rentalsList = Array.isArray(data.rentals) ? data.rentals : [];
+  let rRev = 0, rAwaiting = 0, rTotal = 0;
+  for (const r of rentalsList) {
+    if (r.status === 'cancelled') continue;
+    const settled = Math.max(0, num(r.settledAmount != null ? r.settledAmount : r.rate));
+    const adv = Math.min(settled, Math.max(0, num(r.advanceAmount)));
+    rTotal += settled;
+    if (r.paymentStatus === 'paid') {
+      rRev += settled;
+    } else if (r.paymentStatus === 'advance') {
+      rRev += adv;
+      rAwaiting += Math.max(0, settled - adv);
+    } else {
+      rAwaiting += settled;
+    }
+  }
+  amount.rentals = { revenue: rRev, awaiting: rAwaiting, total: rTotal };
   return amount;
 }
 function counts() {
@@ -455,7 +473,7 @@ function render() {
   const live = !!(clientApi && session && data.settings.workspaceId);
   $$('#tabs button').forEach(b => b.classList.toggle('active', b.dataset.tab === tab));
   renderClients();
-  main.innerHTML = ({ dashboard:renderDashboard, sheet:renderSheet, tracker:renderTracker, tasks:renderTasks, chat:renderChat, groups:renderGroups, goals:renderGoals, revenue:renderRevenue, payments:renderPayments, invoices:renderInvoices, 'client-details':renderClientDetails, activity:renderActivity, settings:renderSettings, 'import-preview':renderImportPreview }[tab] || renderSheet)();
+  main.innerHTML = ({ dashboard:renderDashboard, sheet:renderSheet, tracker:renderTracker, tasks:renderTasks, chat:renderChat, groups:renderGroups, goals:renderGoals, revenue:renderRevenue, rentals:renderRentals, payments:renderPayments, invoices:renderInvoices, 'client-details':renderClientDetails, activity:renderActivity, settings:renderSettings, 'import-preview':renderImportPreview }[tab] || renderSheet)();
   if(sameTab && main) main.scrollTop = preservedMainScroll;
   if(sameSheet && sheetScroll){const grid=main.querySelector('.sheet-viewport');if(grid){grid.scrollTop=sheetScroll.grid;grid.scrollLeft=sheetScroll.across;}}
   const indicator = $('#tabIndicator'), active = $(`#tabs button[data-tab="${tab}"]`);
@@ -463,7 +481,7 @@ function render() {
   if (lastRenderedTab && (lastRenderedTab !== tab || (tab === 'sheet' && lastRenderedClient !== activeClient))) {
     recordNav(lastRenderedTab, lastRenderedClient);
   }
-  if (lastRenderedTab !== tab) { const order = ['sheet','dashboard','tracker','tasks','chat','groups','goals','revenue','payments','invoices','client-details','activity','settings']; const direction = order.indexOf(tab) >= order.indexOf(lastRenderedTab) ? 'tab-next' : 'tab-prev'; $('#main').classList.remove('tab-next','tab-prev'); void $('#main').offsetWidth; $('#main').classList.add(direction); lastRenderedTab = tab; }
+  if (lastRenderedTab !== tab) { const order = ['sheet','dashboard','tracker','tasks','chat','groups','goals','revenue','rentals','payments','invoices','client-details','activity','settings']; const direction = order.indexOf(tab) >= order.indexOf(lastRenderedTab) ? 'tab-next' : 'tab-prev'; $('#main').classList.remove('tab-next','tab-prev'); void $('#main').offsetWidth; $('#main').classList.add(direction); lastRenderedTab = tab; }
   if(tab==='settings')showUpdateState(desktopUpdate);
   if(tab==='chat'){ unreadChatCount = 0; updateChatUnreadBadge(); initChatInteractions(); }
   if(tab==='tasks'){ updateTasksDueBadge(); }
@@ -661,10 +679,67 @@ function renderDashboard() {
     </div>
   `;
 
+  const rf = typeof rentalFinancials === 'function' ? rentalFinancials() : { totalBookings: 0, received: 0, awaiting: 0, totalBooked: 0, upcomingSchedule: [] };
+  const upcomingRentals = (data.rentals || []).filter(r => r.status !== 'cancelled' && (r.bookingDate >= today() || r.paymentStatus !== 'paid')).sort((a,b)=>(a.bookingDate||'').localeCompare(b.bookingDate||'')).slice(0, 4);
+
+  const rentalsDashboardHtml = `
+    <div class="panel highlight-panel highlight-panel-rentals">
+      <div class="panel-header-with-badge">
+        <div class="panel-title-wrap">
+          <span class="panel-icon">📦</span>
+          <div>
+            <h3>Upcoming Equipment Rentals</h3>
+            <p class="panel-sub">Blocked gear dates, hours, and incoming rental payments.</p>
+          </div>
+        </div>
+        <div class="dashboard-header-actions">
+          <span class="panel-counter-badge">${rf.totalBookings} booked</span>
+          <button type="button" class="small-btn blue" data-jump-rentals>Manage Rentals ↗</button>
+        </div>
+      </div>
+      ${upcomingRentals.length ? `
+        <div class="dashboard-rentals-grid">
+          ${upcomingRentals.map(r => {
+            const isToday = r.bookingDate === today();
+            return `
+              <div class="dashboard-rental-card ${r.paymentStatus}" data-rental-id="${r.id}">
+                <div class="dashboard-rental-top">
+                  <span class="dashboard-rental-date ${isToday ? 'today' : ''}">📅 ${fmtDate(r.bookingDate)}${isToday ? ' (Today)' : ''}</span>
+                  <span class="pill ${r.paymentStatus === 'paid' ? 'paid' : r.paymentStatus === 'advance' ? 'working' : 'pending'}">${r.paymentStatus === 'paid' ? 'Paid' : r.paymentStatus === 'advance' ? 'Advance' : 'Due'}</span>
+                </div>
+                <strong class="dashboard-rental-item">${esc(r.itemName)}</strong>
+                <div class="dashboard-rental-sub muted font-11">
+                  <span>👤 ${esc(r.clientName)}</span> · <span>⏱ ${r.hours ? r.hours + ' hrs' : 'Full day'}</span>
+                </div>
+                <div class="dashboard-rental-amount">
+                  <span>Settled: <strong>${money(r.settledAmount != null ? r.settledAmount : r.rate)}</strong></span>
+                  ${r.advanceAmount ? `<small class="muted font-11">(Adv: ${money(r.advanceAmount)})</small>` : ''}
+                </div>
+              </div>
+            `;
+          }).join('')}
+        </div>
+      ` : `
+        <div class="dashboard-notice-empty">
+          <div class="dashboard-notice-empty-content">
+            <span class="empty-pin-icon">📦</span>
+            <div class="empty-notice-text">
+              <strong>No active rentals booked</strong>
+              <p class="muted">Add rental gear and block booking dates in the Rentals tab.</p>
+            </div>
+          </div>
+          <button type="button" class="small-btn blue" data-jump-rentals>+ Book Rental</button>
+        </div>
+      `}
+    </div>
+  `;
+
   return `<div class="section-top"><div><h2>Your studio at a glance</h2><p>Live progress across ${data.clients.length} clients.</p></div></div>
     <div class="cards"><div class="card blue"><div class="card-label">Completed work</div><div class="card-value">${completion}%</div><div class="card-foot">${c.done} of ${c.total} tasks sent or paid</div></div><div class="card"><div class="card-label">In progress</div><div class="card-value">${c.working}</div><div class="card-foot">${c.pending} waiting to start</div></div><div class="card amber"><div class="card-label">Work sent expected</div><div class="card-value">${money(f.awaiting)}</div><div class="card-foot">Sent or invoiced balances due</div></div><div class="card green"><div class="card-label">Revenue received</div><div class="card-value">${money(f.revenue)}</div><div class="card-foot">Paid work and open-work advances</div></div></div>
 
     ${noticeBoardGistHtml}
+
+    ${rentalsDashboardHtml}
 
     <div class="dashboard-insights-container">
       <div class="panel highlight-panel">
@@ -2293,9 +2368,11 @@ function renderRevenue() {
     months.set(key,month);
   }
   const monthName=key=>esc(new Date(key+'-01T00:00:00').toLocaleDateString('en-IN',{month:'long',year:'numeric'}));
+  const rf = typeof rentalFinancials === 'function' ? rentalFinancials() : { totalBookings: 0, received: 0, awaiting: 0, totalBooked: 0, upcomingSchedule: [], paidCount: 0, advanceCount: 0, pendingCount: 0 };
+  const totalCombinedReceived = f.revenue + rf.received;
   return `<div class="section-top"><div><h2>Revenue</h2><p>Money received is recorded by payment date and client. Estimated incoming is unpaid active work.</p></div></div>
     <div class="cards"><div class="card green"><div class="card-label">Received</div><div class="card-value">${money(f.revenue)}</div><div class="card-foot">Recorded cash receipts</div></div><div class="card blue"><div class="card-label">Paid work value</div><div class="card-value">${money(f.closed)}</div><div class="card-foot">Value marked paid on worksheets</div></div><div class="card amber"><div class="card-label">Open-work advances</div><div class="card-value">${money(f.openAdvances)}</div><div class="card-foot">Already received; included in historical receipts where recorded</div></div><div class="card"><div class="card-label">Discarded project value</div><div class="card-value">${money(f.discarded)}</div><div class="card-foot">Excluded from income estimates</div></div></div>
-    <div class="cards"><div class="card amber"><div class="card-label">Work sent expected</div><div class="card-value">${money(f.awaiting)}</div><div class="card-foot">Sent or invoiced balances still due</div></div><div class="card blue"><div class="card-label">Estimated incoming</div><div class="card-value">${money(f.estimated)}</div><div class="card-foot">All unpaid active work, including sent</div></div></div>
+    <div class="cards"><div class="card amber"><div class="card-label">Work sent expected</div><div class="card-value">${money(f.awaiting)}</div><div class="card-foot">Sent or invoiced balances still due</div></div><div class="card blue"><div class="card-label">Estimated incoming</div><div class="card-value">${money(f.estimated)}</div><div class="card-foot">All unpaid active work, including sent</div></div><div class="card green"><div class="card-label">Rentals cash received</div><div class="card-value">${money(rf.received)}</div><div class="card-foot">${rf.paidCount} paid · ${rf.advanceCount} advance</div></div><div class="card blue"><div class="card-label">Combined studio revenue</div><div class="card-value">${money(totalCombinedReceived)}</div><div class="card-foot">Services + rentals combined</div></div></div>
     <div class="panel">
       <h3>Revenue by month</h3>
       <p class="muted">Click any month to open the dropdown details showing exactly who has paid, payment dates, and amounts.</p>
@@ -2326,6 +2403,57 @@ function renderRevenue() {
         </div>
       `:'<p class="muted">No payment receipts recorded.</p>'}
     </div>
+    <div class="panel">
+      <div class="panel-header-with-badge">
+        <div class="panel-title-wrap">
+          <span class="panel-icon">📦</span>
+          <div>
+            <h3>Upcoming Rental Cashflow Schedule</h3>
+            <p class="muted">Forecast of exactly when rental money will come in based on booking dates and payment milestones.</p>
+          </div>
+        </div>
+        <button type="button" class="small-btn blue" data-jump-rentals>Manage Rentals ↗</button>
+      </div>
+      ${rf.upcomingSchedule.length ? `
+        <table class="table-list">
+          <thead>
+            <tr>
+              <th>EXPECTED INFLOW DATE</th>
+              <th>CLIENT / EVENT</th>
+              <th>RENTED EQUIPMENT</th>
+              <th>DURATION</th>
+              <th style="text-align:right">SETTLED AMOUNT</th>
+              <th style="text-align:right">ADVANCE PAID</th>
+              <th style="text-align:right">EXPECTED INFLOW</th>
+              <th>PAYMENT STATUS</th>
+              <th style="text-align:right">ACTIONS</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${rf.upcomingSchedule.map(s => `
+              <tr>
+                <td><strong>${fmtDate(s.expectedPaymentDate || s.bookingDate)}</strong></td>
+                <td><strong>${esc(s.clientName)}</strong></td>
+                <td>${esc(s.itemName)}</td>
+                <td>${s.hours ? s.hours + ' hrs' : 'Full day'}</td>
+                <td style="text-align:right">${money(s.settledAmount)}</td>
+                <td style="text-align:right">${s.advanceAmount ? money(s.advanceAmount) : '—'}</td>
+                <td style="text-align:right"><strong style="color:var(--blue, #168451)">${money(s.balanceDue)}</strong></td>
+                <td><span class="pill ${s.paymentStatus === 'paid' ? 'paid' : s.paymentStatus === 'advance' ? 'working' : 'pending'}">${s.paymentStatus === 'paid' ? 'Paid' : s.paymentStatus === 'advance' ? 'Advance Paid' : 'Pending'}</span></td>
+                <td style="text-align:right">
+                  <div style="display:inline-flex;gap:4px;">
+                    ${s.paymentStatus !== 'paid' ? `<button type="button" class="small-btn blue" data-rental-mark-paid="${s.id}" title="Mark Paid">✓ Mark Paid</button>` : ''}
+                    <button type="button" class="small-btn" data-rental-edit="${s.id}" title="Edit Booking">Edit</button>
+                  </div>
+                </td>
+              </tr>
+            `).join('')}
+          </tbody>
+        </table>
+      ` : `
+        <p class="muted">No upcoming rental payments pending. Schedule rentals in the <button class="small-btn" data-jump-rentals style="display:inline;padding:2px 8px;">Rentals</button> tab.</p>
+      `}
+    </div>
     ${renderOutstandingPanel(f)}`;
 }
 function renderOutstandingPanel(f=financials()) {
@@ -2340,6 +2468,1120 @@ function renderOutstandingPanel(f=financials()) {
   const clients=[...grouped].sort((a,b)=>b[1].balance-a[1].balance);
   return `<div class="panel"><h3>Outstanding by client</h3><p class="muted">Unpaid active work, including pending work and issued invoices. Advances already received are deducted.</p>${clients.length?clients.map(([id,entry])=>`<div class="list-row"><div><strong>${esc(data.clients.find(c=>c.id===id)?.name||'Client')}</strong><small>${entry.itemIds.size} row${entry.itemIds.size===1?'':'s'} · ${[...entry.statuses].map(s=>s==='changes'?'Changes':s==='invoiced'?'Invoiced':s[0].toUpperCase()+s.slice(1)).join(', ')}</small></div><div class="actions"><strong>${money(entry.balance)}</strong><button class="small-btn" data-view-outstanding="${esc(id)}">View work</button></div></div>`).join(''):'<p class="muted">No unpaid active work.</p>'}</div>`;
 }
+
+// ==========================================
+// RENTALS MANAGEMENT ENGINE (v0.2.80)
+// ==========================================
+
+function ensureDefaultRentalItems() {
+  if (!Array.isArray(data.rentalItems) || !data.rentalItems.length) {
+    data.rentalItems = [
+      { id: 'item-light-600d', name: 'Aputure 600d Pro Light Kit', category: 'Lighting', rate: 4500, rateType: 'day', description: 'Daylight LED with fresnel, softbox & C-stand' },
+      { id: 'item-sound-jbl', name: 'JBL EON One Pro Sound System & Mics', category: 'Sound', rate: 6000, rateType: 'day', description: 'Line array PA system with 2 wireless handheld mics' },
+      { id: 'item-proj-4k', name: '4K Laser Projector (5000 Lumens) + 120" Screen', category: 'Video', rate: 5500, rateType: 'day', description: 'High brightness projector with motorized folding screen' },
+      { id: 'item-par-led', name: 'LED Par Cans (Set of 8) with DMX', category: 'Lighting', rate: 3500, rateType: 'day', description: 'RGBW wash lights with DMX controller & cables' },
+      { id: 'item-cstands', name: 'Heavy Duty C-Stands & Booms (Pair)', category: 'Grip', rate: 1200, rateType: 'day', description: 'Stainless steel 40" C-stands with grip heads and arms' },
+      { id: 'item-fog-haze', name: 'Fog & Haze Machine with Fluid', category: 'Effects', rate: 2000, rateType: 'day', description: 'Dual fog/hazer with wireless remote and quick dispersion' },
+      { id: 'item-mic-lav', name: 'Wireless Lavalier Mic Kit (Sennheiser)', category: 'Audio', rate: 2500, rateType: 'day', description: 'Dual transmitter and receiver kit with clip mics' }
+    ];
+  }
+  if (!Array.isArray(data.rentals)) {
+    data.rentals = [];
+  }
+}
+
+function rentalFinancials() {
+  const rentals = Array.isArray(data.rentals) ? data.rentals : [];
+  let totalBooked = 0, received = 0, awaiting = 0, paidCount = 0, pendingCount = 0, advanceCount = 0;
+  const byMonth = new Map();
+  const upcomingSchedule = [];
+
+  for (const r of rentals) {
+    if (r.status === 'cancelled') continue;
+    const settled = Math.max(0, num(r.settledAmount != null ? r.settledAmount : r.rate));
+    const adv = Math.min(settled, Math.max(0, num(r.advanceAmount)));
+    totalBooked += settled;
+
+    let balanceDue = 0;
+    if (r.paymentStatus === 'paid') {
+      received += settled;
+      paidCount++;
+    } else if (r.paymentStatus === 'advance') {
+      received += adv;
+      balanceDue = Math.max(0, settled - adv);
+      awaiting += balanceDue;
+      advanceCount++;
+    } else {
+      balanceDue = settled;
+      awaiting += balanceDue;
+      pendingCount++;
+    }
+
+    const payDate = r.expectedPaymentDate || r.bookingDate || '';
+    if (payDate) {
+      const mKey = payDate.slice(0, 7);
+      const mObj = byMonth.get(mKey) || { total: 0, received: 0, awaiting: 0, count: 0 };
+      mObj.total += settled;
+      mObj.received += (r.paymentStatus === 'paid' ? settled : adv);
+      mObj.awaiting += balanceDue;
+      mObj.count++;
+      byMonth.set(mKey, mObj);
+    }
+
+    upcomingSchedule.push({
+      id: r.id,
+      itemId: r.itemId,
+      itemName: r.itemName || 'Equipment',
+      clientName: r.clientName || 'Client',
+      bookingDate: r.bookingDate || '',
+      expectedPaymentDate: payDate,
+      hours: r.hours || 0,
+      settledAmount: settled,
+      advanceAmount: adv,
+      balanceDue: balanceDue,
+      paymentStatus: r.paymentStatus || 'pending',
+      status: r.status || 'booked',
+      notes: r.notes || ''
+    });
+  }
+
+  upcomingSchedule.sort((a, b) => {
+    const da = a.expectedPaymentDate || a.bookingDate || '9999';
+    const db = b.expectedPaymentDate || b.bookingDate || '9999';
+    return da.localeCompare(db);
+  });
+
+  return {
+    totalBookings: rentals.filter(r => r.status !== 'cancelled').length,
+    totalBooked,
+    received,
+    awaiting,
+    paidCount,
+    pendingCount,
+    advanceCount,
+    byMonth,
+    upcomingSchedule
+  };
+}
+
+function parseRentalDateInput(str) {
+  if (!str) return today();
+  const s = String(str).trim().toLowerCase();
+  const t = new Date();
+  if (s === 'today') return today();
+  if (s === 'tomorrow') {
+    const tom = new Date(t.getTime() + 86400000);
+    return `${tom.getFullYear()}-${String(tom.getMonth()+1).padStart(2,'0')}-${String(tom.getDate()).padStart(2,'0')}`;
+  }
+  if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return s;
+  
+  const months = ['jan','feb','mar','apr','may','jun','jul','aug','sep','oct','nov','dec'];
+  let match = s.match(/^(\d{1,2})(?:st|nd|rd|th)?\s+([a-z]+)(?:\s+(\d{4}))?$/);
+  if (match) {
+    const day = parseInt(match[1], 10);
+    const mStr = match[2];
+    const yr = match[3] ? parseInt(match[3], 10) : t.getFullYear();
+    let mIdx = months.findIndex(m => mStr.startsWith(m));
+    if (mIdx !== -1) {
+      return `${yr}-${String(mIdx + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+    }
+  }
+  match = s.match(/^([a-z]+)\s+(\d{1,2})(?:st|nd|rd|th)?(?:\s+(\d{4}))?$/);
+  if (match) {
+    const mStr = match[1];
+    const day = parseInt(match[2], 10);
+    const yr = match[3] ? parseInt(match[3], 10) : t.getFullYear();
+    let mIdx = months.findIndex(m => mStr.startsWith(m));
+    if (mIdx !== -1) {
+      return `${yr}-${String(mIdx + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+    }
+  }
+
+  const parsed = new Date(str);
+  if (!isNaN(parsed.getTime())) {
+    return `${parsed.getFullYear()}-${String(parsed.getMonth()+1).padStart(2,'0')}-${String(parsed.getDate()).padStart(2,'0')}`;
+  }
+  return str;
+}
+
+function checkDateAvailability(targetDate) {
+  ensureDefaultRentalItems();
+  const normalized = parseRentalDateInput(targetDate);
+  const rentals = Array.isArray(data.rentals) ? data.rentals : [];
+  const catalog = Array.isArray(data.rentalItems) ? data.rentalItems : [];
+  
+  const blockedRentals = rentals.filter(r => {
+    if (r.status === 'cancelled') return false;
+    const start = r.bookingDate;
+    const end = r.endDate || r.bookingDate;
+    return normalized >= start && normalized <= end;
+  });
+
+  const blockedItemIds = new Set(blockedRentals.map(r => r.itemId).filter(Boolean));
+  const blockedItemNames = new Set(blockedRentals.map(r => (r.itemName || '').trim().toLowerCase()));
+
+  const availableItems = catalog.filter(it => !blockedItemIds.has(it.id) && !blockedItemNames.has((it.name || '').trim().toLowerCase()));
+
+  return {
+    date: normalized,
+    isBlocked: blockedRentals.length > 0,
+    blockedRentals,
+    blockedItemIds,
+    availableItems,
+    totalCatalogCount: catalog.length
+  };
+}
+
+function checkItemBookingConflict(itemId, itemName, targetDate, excludeBookingId = null) {
+  if (!targetDate) return null;
+  const rentals = Array.isArray(data.rentals) ? data.rentals : [];
+  const normDate = parseRentalDateInput(targetDate);
+  const lowerName = (itemName || '').trim().toLowerCase();
+
+  for (const r of rentals) {
+    if (excludeBookingId && r.id === excludeBookingId) continue;
+    if (r.status === 'cancelled') continue;
+    const start = r.bookingDate;
+    const end = r.endDate || r.bookingDate;
+    if (normDate >= start && normDate <= end) {
+      const matchId = itemId && r.itemId && r.itemId === itemId;
+      const matchName = lowerName && (r.itemName || '').trim().toLowerCase() === lowerName;
+      if (matchId || matchName) {
+        return {
+          conflictRental: r,
+          message: `⚠️ Warning: "${r.itemName}" is already booked on ${fmtDate(normDate)} by "${r.clientName}" (${r.hours ? r.hours + ' hrs' : 'full day'})!`
+        };
+      }
+    }
+  }
+  return null;
+}
+
+function syncRentalsToSeller() {
+  data.settings = data.settings || {};
+  data.settings.seller = data.settings.seller || {};
+  data.settings.seller.rentals = data.rentals || [];
+  data.settings.seller.rental_items = data.rentalItems || [];
+}
+
+function saveRentalBooking(bookingData) {
+  ensureDefaultRentalItems();
+  data.rentals = data.rentals || [];
+  const now = new Date().toISOString();
+  if (bookingData.id) {
+    const idx = data.rentals.findIndex(r => r.id === bookingData.id);
+    if (idx !== -1) {
+      data.rentals[idx] = { ...data.rentals[idx], ...bookingData, updatedAt: now };
+    } else {
+      data.rentals.push({ ...bookingData, id: bookingData.id || uid(), createdAt: now, updatedAt: now });
+    }
+  } else {
+    data.rentals.push({ ...bookingData, id: uid(), createdAt: now, updatedAt: now });
+  }
+  syncRentalsToSeller();
+  save();
+  render();
+}
+
+function deleteRentalBooking(id, skipConfirm = false) {
+  if (!id) return;
+  const item = (data.rentals || []).find(r => r.id === id);
+  if (!item) return;
+  if (!skipConfirm && typeof window !== 'undefined' && window.confirm && !confirm(`Delete rental booking for "${item.itemName || 'Equipment'}" (${item.clientName || 'Client'})?`)) {
+    return;
+  }
+  data.rentals = (data.rentals || []).filter(r => r.id !== id);
+  syncRentalsToSeller();
+  save();
+  closeModal();
+  render();
+  toast(`Rental booking deleted 🗑️`);
+}
+
+function markRentalPaid(id) {
+  const r = (data.rentals || []).find(x => x.id === id);
+  if (!r) return;
+  r.paymentStatus = 'paid';
+  r.updatedAt = new Date().toISOString();
+  syncRentalsToSeller();
+  save();
+  render();
+  toast(`Rental payment marked as Paid! ✓ 💵`);
+}
+
+function rescheduleRental(rentalId, newDateStr) {
+  if (!rentalId || !newDateStr) return;
+  const r = (data.rentals || []).find(x => x.id === rentalId);
+  if (!r) return;
+  r.bookingDate = newDateStr;
+  r.expectedPaymentDate = newDateStr;
+  r.updatedAt = new Date().toISOString();
+  syncRentalsToSeller();
+  save();
+  render();
+  toast(`Rescheduled ${r.itemName} to ${fmtDate(newDateStr)} 📅`);
+}
+
+function saveRentalItem(itemData) {
+  ensureDefaultRentalItems();
+  data.rentalItems = data.rentalItems || [];
+  const now = new Date().toISOString();
+  if (itemData.id) {
+    const idx = data.rentalItems.findIndex(i => i.id === itemData.id);
+    if (idx !== -1) {
+      data.rentalItems[idx] = { ...data.rentalItems[idx], ...itemData, updatedAt: now };
+    } else {
+      data.rentalItems.push({ ...itemData, id: itemData.id || uid(), createdAt: now, updatedAt: now });
+    }
+  } else {
+    data.rentalItems.push({ ...itemData, id: uid(), createdAt: now, updatedAt: now });
+  }
+  syncRentalsToSeller();
+  save();
+}
+
+function deleteRentalItem(id) {
+  ensureDefaultRentalItems();
+  const item = (data.rentalItems || []).find(i => i.id === id);
+  if (!item) return;
+  if (typeof window !== 'undefined' && window.confirm && !confirm(`Delete "${item.name}" from equipment catalog?`)) {
+    return;
+  }
+  data.rentalItems = (data.rentalItems || []).filter(i => i.id !== id);
+  syncRentalsToSeller();
+  save();
+  render();
+  toast(`Removed "${item.name}" from catalog 🗑️`);
+}
+
+function renderRentals() {
+  ensureDefaultRentalItems();
+  const rf = typeof rentalFinancials === 'function' ? rentalFinancials() : { totalBookings: 0, received: 0, awaiting: 0, totalBooked: 0, upcomingSchedule: [], paidCount: 0, advanceCount: 0, pendingCount: 0 };
+  const catalog = data.rentalItems || [];
+
+  const topBarHtml = `
+    <div class="rentals-top-bar">
+      <div>
+        <h2>Equipment Rentals & Bookings</h2>
+        <p>Manage rental equipment, schedule blocked dates, check availability, and track incoming rental revenue.</p>
+      </div>
+      <div class="rentals-nav-actions">
+        <div class="rental-view-toggle">
+          <button type="button" class="${rentalViewMode === 'calendar' ? 'active' : ''}" id="rentalToggleCalBtn">📅 Calendar View</button>
+          <button type="button" class="${rentalViewMode === 'list' ? 'active' : ''}" id="rentalToggleListBtn">📋 Table List</button>
+        </div>
+        <button type="button" class="small-btn" id="rentalOpenCatalogBtn">📦 Equipment Catalog (${catalog.length})</button>
+        <button type="button" class="small-btn blue" id="rentalNewBookingBtn">＋ Book Rental</button>
+      </div>
+    </div>
+  `;
+
+  const statsHtml = `
+    <div class="cards">
+      <div class="card green">
+        <div class="card-label">Rentals Received</div>
+        <div class="card-value">${money(rf.received)}</div>
+        <div class="card-foot">${rf.paidCount} paid · ${rf.advanceCount} advance recorded</div>
+      </div>
+      <div class="card amber">
+        <div class="card-label">Expected Rental Inflow</div>
+        <div class="card-value">${money(rf.awaiting)}</div>
+        <div class="card-foot">Balances due on booked rentals</div>
+      </div>
+      <div class="card blue">
+        <div class="card-label">Total Rental Value</div>
+        <div class="card-value">${money(rf.totalBooked)}</div>
+        <div class="card-foot">${rf.totalBookings} total booked contracts</div>
+      </div>
+      <div class="card">
+        <div class="card-label">Catalog Inventory</div>
+        <div class="card-value">${catalog.length} items</div>
+        <div class="card-foot">Available equipment for rent</div>
+      </div>
+    </div>
+  `;
+
+  const targetAvailDate = rentalSearchDate || today();
+  const avail = checkDateAvailability(targetAvailDate);
+  const availHtml = `
+    <div class="rental-avail-checker-card">
+      <div class="rental-avail-header">
+        <div class="rental-avail-title">
+          <span class="rental-avail-icon">🔎</span>
+          <div>
+            <strong>Check Date Availability & Blocked Gear</strong>
+            <p class="muted font-11">Type or pick any date (e.g. "3 Nov", "15 Nov", "Tomorrow") to instantly see what gear is blocked and what is free.</p>
+          </div>
+        </div>
+        <div class="rental-avail-controls">
+          <input type="date" id="rentalAvailDatePick" value="${avail.date}">
+          <input type="text" id="rentalAvailSearchText" placeholder="Or type e.g. 15th Nov, today, lights..." value="${esc(rentalSearchQuery)}">
+          <button type="button" class="small-btn blue" id="rentalCheckAvailBtn">Check Availability</button>
+        </div>
+      </div>
+      <div class="rental-avail-results" id="rentalAvailResults">
+        ${renderAvailabilityResults(avail.date, rentalSearchQuery)}
+      </div>
+    </div>
+  `;
+
+  const contentHtml = rentalViewMode === 'calendar' ? renderRentalsCalendarView() : renderRentalsListView();
+
+  return `
+    <div class="rentals-wrap">
+      ${topBarHtml}
+      ${statsHtml}
+      ${availHtml}
+      ${contentHtml}
+    </div>
+  `;
+}
+
+function renderRentalsCalendarView() {
+  if (!rentalCalendarMonth) {
+    rentalCalendarMonth = today().slice(0, 7);
+  }
+  const [yearStr, monthStr] = rentalCalendarMonth.split('-');
+  const year = parseInt(yearStr, 10);
+  const month = parseInt(monthStr, 10) - 1;
+  const currentMonthDate = new Date(year, month, 1);
+  const monthTitle = currentMonthDate.toLocaleDateString('en-IN', { month: 'long', year: 'numeric' });
+
+  const firstDayIndex = currentMonthDate.getDay();
+  const daysInCurrentMonth = new Date(year, month + 1, 0).getDate();
+  const daysInPrevMonth = new Date(year, month, 0).getDate();
+
+  const prevMonthStr = month === 0 ? `${year - 1}-12` : `${year}-${String(month).padStart(2, '0')}`;
+  const nextMonthStr = month === 11 ? `${year + 1}-01` : `${year}-${String(month + 2).padStart(2, '0')}`;
+
+  const rentals = data.rentals || [];
+  const activeRentals = rentals.filter(r => r.status !== 'cancelled');
+
+  let daysGridHtml = '';
+  for (let i = firstDayIndex - 1; i >= 0; i--) {
+    const dNum = daysInPrevMonth - i;
+    const dStr = `${prevMonthStr}-${String(dNum).padStart(2, '0')}`;
+    daysGridHtml += renderCalendarCell(dStr, dNum, true, activeRentals);
+  }
+
+  for (let d = 1; d <= daysInCurrentMonth; d++) {
+    const dStr = `${rentalCalendarMonth}-${String(d).padStart(2, '0')}`;
+    daysGridHtml += renderCalendarCell(dStr, d, false, activeRentals);
+  }
+
+  const totalCellsSoFar = firstDayIndex + daysInCurrentMonth;
+  const trailingCount = (7 - (totalCellsSoFar % 7)) % 7;
+  for (let t = 1; t <= trailingCount; t++) {
+    const dStr = `${nextMonthStr}-${String(t).padStart(2, '0')}`;
+    daysGridHtml += renderCalendarCell(dStr, t, true, activeRentals);
+  }
+
+  return `
+    <div class="rental-cal-wrap">
+      <div class="rental-cal-header">
+        <button type="button" class="small-btn" id="rentalCalPrevBtn" data-month="${prevMonthStr}">◀ Prev Month</button>
+        <h3 class="rental-cal-title">${monthTitle}</h3>
+        <div style="display:flex;gap:6px;">
+          <button type="button" class="small-btn" id="rentalCalTodayBtn">Today</button>
+          <button type="button" class="small-btn" id="rentalCalNextBtn" data-month="${nextMonthStr}">Next Month ▶</button>
+        </div>
+      </div>
+      <div class="rental-cal-days-header">
+        <div class="rental-cal-day-col">Sun</div>
+        <div class="rental-cal-day-col">Mon</div>
+        <div class="rental-cal-day-col">Tue</div>
+        <div class="rental-cal-day-col">Wed</div>
+        <div class="rental-cal-day-col">Thu</div>
+        <div class="rental-cal-day-col">Fri</div>
+        <div class="rental-cal-day-col">Sat</div>
+      </div>
+      <div class="rental-cal-grid">
+        ${daysGridHtml}
+      </div>
+    </div>
+  `;
+}
+
+function renderCalendarCell(dateStr, dayNum, isOtherMonth, activeRentals) {
+  const isToday = dateStr === today();
+  const dayRentals = activeRentals.filter(r => {
+    const start = r.bookingDate;
+    const end = r.endDate || r.bookingDate;
+    return dateStr >= start && dateStr <= end;
+  });
+
+  const dayTotal = dayRentals.reduce((sum, r) => sum + num(r.settledAmount != null ? r.settledAmount : r.rate), 0);
+
+  return `
+    <div class="rental-cal-cell ${isOtherMonth ? 'other-month' : ''} ${isToday ? 'today' : ''}" data-cal-date="${dateStr}">
+      <div class="rental-cal-cell-header">
+        <span class="rental-cal-day-num">${dayNum}</span>
+        ${dayRentals.length ? `<span class="rental-cal-day-badge" title="${dayRentals.length} bookings, total ${money(dayTotal)}">${dayRentals.length} Blocked</span>` : ''}
+        <button type="button" class="rental-cal-add-btn" data-cal-add="${dateStr}" title="Add booking on this date">＋</button>
+      </div>
+      <div class="rental-cal-cards">
+        ${dayRentals.map(r => `
+          <div class="rental-cal-card ${r.paymentStatus}" draggable="true" data-rental-id="${r.id}" title="${esc(r.itemName)} · ${esc(r.clientName)} (${r.hours ? r.hours + ' hrs' : 'Full day'}) · ${money(r.settledAmount != null ? r.settledAmount : r.rate)} · Drag to reschedule">
+            <div class="rental-card-top">
+              <span class="rental-card-item-name">${esc(r.itemName)}</span>
+              <span class="pill ${r.paymentStatus === 'paid' ? 'paid' : r.paymentStatus === 'advance' ? 'working' : 'pending'}" style="font-size:9px;padding:1px 4px;">${r.paymentStatus === 'paid' ? 'Paid' : r.paymentStatus === 'advance' ? 'Adv' : 'Due'}</span>
+            </div>
+            <div class="rental-card-client">${esc(r.clientName)}</div>
+            <div class="rental-card-bottom">
+              <span class="rental-card-hours">${r.hours ? r.hours + 'h' : 'Day'}</span>
+              <span class="rental-card-amount">${money(r.settledAmount != null ? r.settledAmount : r.rate)}</span>
+            </div>
+          </div>
+        `).join('')}
+      </div>
+    </div>
+  `;
+}
+
+function renderRentalsListView() {
+  const rentals = data.rentals || [];
+  let filtered = rentals.filter(r => r.status !== 'cancelled');
+  if (rentalFilter === 'upcoming') {
+    filtered = filtered.filter(r => r.bookingDate >= today());
+  } else if (rentalFilter === 'paid') {
+    filtered = filtered.filter(r => r.paymentStatus === 'paid');
+  } else if (rentalFilter === 'pending') {
+    filtered = filtered.filter(r => r.paymentStatus !== 'paid');
+  }
+
+  filtered.sort((a, b) => (b.bookingDate || '').localeCompare(a.bookingDate || ''));
+
+  return `
+    <div class="panel">
+      <div class="panel-header-with-badge">
+        <div class="panel-title-wrap">
+          <span class="panel-icon">📋</span>
+          <div>
+            <h3>All Rental Bookings</h3>
+            <p class="muted">List of all scheduled equipment rentals with rates, payment statuses, and actions.</p>
+          </div>
+        </div>
+        <div class="rental-list-filters">
+          <button type="button" class="small-btn ${rentalFilter === 'all' ? 'blue' : ''}" data-rental-filter="all">All (${rentals.filter(r=>r.status!=='cancelled').length})</button>
+          <button type="button" class="small-btn ${rentalFilter === 'upcoming' ? 'blue' : ''}" data-rental-filter="upcoming">Upcoming</button>
+          <button type="button" class="small-btn ${rentalFilter === 'paid' ? 'blue' : ''}" data-rental-filter="paid">Paid</button>
+          <button type="button" class="small-btn ${rentalFilter === 'pending' ? 'blue' : ''}" data-rental-filter="pending">Pending Payment</button>
+        </div>
+      </div>
+      ${filtered.length ? `
+        <table class="table-list">
+          <thead>
+            <tr>
+              <th>BOOKING DATE</th>
+              <th>EQUIPMENT</th>
+              <th>CLIENT / EVENT</th>
+              <th>HOURS</th>
+              <th style="text-align:right">CATALOG RATE</th>
+              <th style="text-align:right">SETTLED AMOUNT</th>
+              <th>PAYMENT STATUS</th>
+              <th>EXPECTED INFLOW</th>
+              <th style="text-align:right">ACTIONS</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${filtered.map(r => {
+              const stdRate = num(r.standardRate || r.rate);
+              const settled = num(r.settledAmount != null ? r.settledAmount : r.rate);
+              const isBargained = settled < stdRate && stdRate > 0;
+              return `
+                <tr>
+                  <td><strong>${fmtDate(r.bookingDate)}</strong></td>
+                  <td><strong>${esc(r.itemName)}</strong></td>
+                  <td>${esc(r.clientName)}</td>
+                  <td>${r.hours ? r.hours + ' hrs' : 'Full day'}</td>
+                  <td style="text-align:right" class="muted">${stdRate ? money(stdRate) : '—'}</td>
+                  <td style="text-align:right">
+                    <strong>${money(settled)}</strong>
+                    ${isBargained ? `<small class="bargain-badge font-11" style="display:block;color:#f97316;">(Bargained -${money(stdRate - settled)})</small>` : ''}
+                  </td>
+                  <td>
+                    <span class="pill ${r.paymentStatus === 'paid' ? 'paid' : r.paymentStatus === 'advance' ? 'working' : 'pending'}">${r.paymentStatus === 'paid' ? 'Paid' : r.paymentStatus === 'advance' ? 'Advance Paid' : 'Pending'}</span>
+                    ${r.advanceAmount ? `<small class="muted font-11" style="display:block;">Adv: ${money(r.advanceAmount)}</small>` : ''}
+                  </td>
+                  <td>${fmtDate(r.expectedPaymentDate || r.bookingDate)}</td>
+                  <td style="text-align:right">
+                    <div style="display:inline-flex;gap:4px;">
+                      ${r.paymentStatus !== 'paid' ? `<button type="button" class="small-btn blue" data-rental-mark-paid="${r.id}" title="Mark Paid">✓ Paid</button>` : ''}
+                      <button type="button" class="small-btn" data-rental-edit="${r.id}" title="Edit Booking">✏️ Edit</button>
+                      <button type="button" class="small-btn danger" data-rental-delete="${r.id}" title="Delete Booking">🗑️ Delete</button>
+                    </div>
+                  </td>
+                </tr>
+              `;
+            }).join('')}
+          </tbody>
+        </table>
+      ` : `
+        <div class="empty">
+          <h3>No rental bookings found</h3>
+          <p>Click "+ Book Rental" to schedule a new rental.</p>
+        </div>
+      `}
+    </div>
+  `;
+}
+
+function renderAvailabilityResults(targetDate, searchQuery) {
+  const avail = checkDateAvailability(targetDate);
+  let availableItems = avail.availableItems;
+  let blockedRentals = avail.blockedRentals;
+
+  if (searchQuery) {
+    const q = searchQuery.toLowerCase().trim();
+    availableItems = availableItems.filter(i => (i.name || '').toLowerCase().includes(q) || (i.category || '').toLowerCase().includes(q));
+    blockedRentals = blockedRentals.filter(r => (r.itemName || '').toLowerCase().includes(q) || (r.clientName || '').toLowerCase().includes(q));
+  }
+
+  if (blockedRentals.length === 0) {
+    return `
+      <div class="rental-avail-banner available">
+        <span>🟢 All ${availableItems.length} Equipment Items Available on ${fmtDate(avail.date)}! (Zero Conflicts)</span>
+        <button type="button" class="small-btn green" data-cal-add="${avail.date}">＋ Book on ${fmtDate(avail.date)}</button>
+      </div>
+      <div class="rental-available-chips">
+        ${availableItems.map(it => `
+          <div class="rental-avail-chip">
+            <strong>${esc(it.name)}</strong>
+            <span class="muted font-11">(${esc(it.category)} · ₹${it.rate}/${it.rateType})</span>
+            <button type="button" class="small-btn blue" data-book-item="${it.id}" data-book-date="${avail.date}">+ Book</button>
+          </div>
+        `).join('')}
+      </div>
+    `;
+  }
+
+  return `
+    <div class="rental-avail-banner blocked">
+      <span>🔴 ${blockedRentals.length} Equipment Item${blockedRentals.length === 1 ? '' : 's'} BLOCKED on ${fmtDate(avail.date)}</span>
+      <span class="font-11">${availableItems.length} items still free to rent</span>
+    </div>
+    <div class="rental-blocked-grid">
+      ${blockedRentals.map(r => `
+        <div class="rental-blocked-card">
+          <div style="display:flex;justify-content:space-between;align-items:center;">
+            <strong>${esc(r.itemName)}</strong>
+            <span class="pill ${r.paymentStatus === 'paid' ? 'paid' : r.paymentStatus === 'advance' ? 'working' : 'pending'}" style="font-size:10px;">${r.paymentStatus === 'paid' ? 'Paid' : r.paymentStatus === 'advance' ? 'Advance' : 'Due'}</span>
+          </div>
+          <div class="muted font-11">Booked by: <strong>${esc(r.clientName)}</strong> (⏱ ${r.hours ? r.hours + ' hrs' : 'Full day'})</div>
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-top:4px;">
+            <span>Settled: <strong>${money(r.settledAmount != null ? r.settledAmount : r.rate)}</strong></span>
+            <div style="display:flex;gap:4px;">
+              <button type="button" class="small-btn" data-rental-edit="${r.id}">Edit</button>
+              <button type="button" class="small-btn danger" data-rental-delete="${r.id}">🗑 Delete</button>
+            </div>
+          </div>
+        </div>
+      `).join('')}
+    </div>
+    ${availableItems.length ? `
+      <div style="margin-top:10px;">
+        <h5 style="margin:0 0 6px 0;color:#166534;font-size:12px;">✅ Available Equipment on ${fmtDate(avail.date)}:</h5>
+        <div class="rental-available-chips">
+          ${availableItems.map(it => `
+            <div class="rental-avail-chip">
+              <strong>${esc(it.name)}</strong>
+              <span class="muted font-11">(₹${it.rate})</span>
+              <button type="button" class="small-btn blue" data-book-item="${it.id}" data-book-date="${avail.date}">+ Book</button>
+            </div>
+          `).join('')}
+        </div>
+      </div>
+    ` : ''}
+  `;
+}
+
+function bindRentals() {
+  $('#rentalToggleCalBtn')?.addEventListener('click', () => { rentalViewMode = 'calendar'; render(); });
+  $('#rentalToggleListBtn')?.addEventListener('click', () => { rentalViewMode = 'list'; render(); });
+  $('#rentalOpenCatalogBtn')?.addEventListener('click', () => openRentalCatalogModal());
+  $('#rentalNewBookingBtn')?.addEventListener('click', () => openRentalBookingModal());
+
+  $('#rentalCalPrevBtn')?.addEventListener('click', e => {
+    rentalCalendarMonth = e.currentTarget.dataset.month;
+    render();
+  });
+  $('#rentalCalNextBtn')?.addEventListener('click', e => {
+    rentalCalendarMonth = e.currentTarget.dataset.month;
+    render();
+  });
+  $('#rentalCalTodayBtn')?.addEventListener('click', () => {
+    rentalCalendarMonth = today().slice(0, 7);
+    rentalSearchDate = today();
+    render();
+  });
+
+  const datePick = $('#rentalAvailDatePick');
+  if (datePick) {
+    datePick.onchange = e => {
+      rentalSearchDate = e.target.value;
+      const res = $('#rentalAvailResults');
+      if (res) res.innerHTML = renderAvailabilityResults(rentalSearchDate, rentalSearchQuery);
+      bindRentalQuickBookButtons();
+    };
+  }
+
+  const searchInp = $('#rentalAvailSearchText');
+  if (searchInp) {
+    searchInp.oninput = e => {
+      rentalSearchQuery = e.target.value;
+      const parsedDate = parseRentalDateInput(e.target.value);
+      if (parsedDate && parsedDate !== e.target.value) {
+        rentalSearchDate = parsedDate;
+        if (datePick) datePick.value = parsedDate;
+      }
+      const res = $('#rentalAvailResults');
+      if (res) res.innerHTML = renderAvailabilityResults(rentalSearchDate || today(), rentalSearchQuery);
+      bindRentalQuickBookButtons();
+    };
+  }
+
+  $('#rentalCheckAvailBtn')?.addEventListener('click', () => {
+    const rawVal = $('#rentalAvailSearchText')?.value || $('#rentalAvailDatePick')?.value;
+    const norm = parseRentalDateInput(rawVal);
+    if (norm) {
+      rentalSearchDate = norm;
+      if (datePick) datePick.value = norm;
+    }
+    const res = $('#rentalAvailResults');
+    if (res) res.innerHTML = renderAvailabilityResults(rentalSearchDate || today(), rentalSearchQuery);
+    bindRentalQuickBookButtons();
+  });
+
+  $$('[data-rental-filter]').forEach(btn => {
+    btn.onclick = () => {
+      rentalFilter = btn.dataset.rentalFilter;
+      render();
+    };
+  });
+
+  bindRentalQuickBookButtons();
+
+  $$('.rental-cal-card[draggable="true"]').forEach(card => {
+    card.ondragstart = e => {
+      rentalDraggedId = card.dataset.rentalId;
+      card.classList.add('dragging');
+      if (e.dataTransfer) {
+        e.dataTransfer.setData('text/plain', card.dataset.rentalId);
+        e.dataTransfer.effectAllowed = 'move';
+      }
+    };
+    card.ondragend = () => {
+      card.classList.remove('dragging');
+      $$('.rental-cal-cell').forEach(c => c.classList.remove('drag-over-date'));
+    };
+    card.onclick = e => {
+      e.stopPropagation();
+      openRentalBookingModal(card.dataset.rentalId);
+    };
+  });
+
+  $$('.rental-cal-cell').forEach(cell => {
+    cell.ondragover = e => {
+      e.preventDefault();
+      if (e.dataTransfer) e.dataTransfer.dropEffect = 'move';
+      cell.classList.add('drag-over-date');
+    };
+    cell.ondragleave = () => {
+      cell.classList.remove('drag-over-date');
+    };
+    cell.ondrop = e => {
+      e.preventDefault();
+      cell.classList.remove('drag-over-date');
+      const rId = e.dataTransfer?.getData('text/plain') || rentalDraggedId;
+      const targetDate = cell.dataset.calDate;
+      if (rId && targetDate) {
+        rescheduleRental(rId, targetDate);
+      }
+    };
+    cell.onclick = e => {
+      if (e.target.closest('.rental-cal-card') || e.target.closest('.rental-cal-add-btn')) return;
+      const targetDate = cell.dataset.calDate;
+      if (targetDate) {
+        openRentalBookingModal(null, targetDate);
+      }
+    };
+  });
+
+  $$('[data-rental-mark-paid]').forEach(b => b.onclick = () => markRentalPaid(b.dataset.rentalMarkPaid));
+  $$('[data-rental-edit]').forEach(b => b.onclick = () => openRentalBookingModal(b.dataset.rentalEdit));
+  $$('[data-rental-delete]').forEach(b => b.onclick = () => deleteRentalBooking(b.dataset.rentalDelete));
+}
+
+function bindRentalQuickBookButtons() {
+  $$('[data-cal-add]').forEach(b => b.onclick = e => {
+    e.stopPropagation();
+    openRentalBookingModal(null, b.dataset.calAdd);
+  });
+  $$('[data-book-item]').forEach(b => b.onclick = e => {
+    e.stopPropagation();
+    openRentalBookingModal(null, b.dataset.bookDate, b.dataset.bookItem);
+  });
+}
+
+function openRentalBookingModal(rentalId = null, prefilledDate = null, prefilledItemId = null) {
+  ensureDefaultRentalItems();
+  const rental = rentalId ? (data.rentals || []).find(r => r.id === rentalId) : null;
+  const isEdit = !!rental;
+  const catalog = data.rentalItems || [];
+  
+  const defaultDate = rental ? rental.bookingDate : (prefilledDate || today());
+  const selectedItemId = rental ? rental.itemId : (prefilledItemId || (catalog[0]?.id || ''));
+  const selItem = catalog.find(i => i.id === selectedItemId);
+  const defaultRate = rental ? (rental.standardRate || selItem?.rate || 0) : (selItem?.rate || 0);
+  const defaultSettled = rental ? (rental.settledAmount != null ? rental.settledAmount : defaultRate) : defaultRate;
+  const defaultClient = rental ? rental.clientName : '';
+  const defaultHours = rental ? (rental.hours || 8) : 8;
+  const defaultPaymentStatus = rental ? (rental.paymentStatus || 'pending') : 'pending';
+  const defaultAdvance = rental ? (rental.advanceAmount || 0) : 0;
+  const defaultExpectedDate = rental ? (rental.expectedPaymentDate || defaultDate) : defaultDate;
+  const defaultNotes = rental ? (rental.notes || '') : '';
+  const defaultStatus = rental ? (rental.status || 'booked') : 'booked';
+
+  const modalHtml = `
+    <form id="rentalBookingForm" class="rental-modal-form">
+      <input type="hidden" id="rentalId" value="${rental ? rental.id : ''}">
+      
+      <div class="form-row">
+        <label>
+          <span>Equipment / Rented Item <strong class="req">*</strong></span>
+          <select id="rentalItemSelect" required>
+            ${catalog.map(it => `<option value="${it.id}" data-rate="${it.rate}" data-name="${esc(it.name)}" ${it.id === selectedItemId ? 'selected' : ''}>${esc(it.name)} (${esc(it.category || 'Rental')} · ₹${it.rate}/${it.rateType || 'day'})</option>`).join('')}
+            <option value="custom" ${rental && !rental.itemId ? 'selected' : ''}>＋ Other / Custom Equipment...</option>
+          </select>
+        </label>
+      </div>
+
+      <div class="form-row" id="customItemNameRow" style="${(rental && !rental.itemId) ? '' : 'display:none;'}">
+        <label>
+          <span>Custom Equipment Name</span>
+          <input type="text" id="rentalCustomItemName" placeholder="Enter equipment name" value="${rental && !rental.itemId ? esc(rental.itemName) : ''}">
+        </label>
+      </div>
+
+      <div class="form-grid-2">
+        <label>
+          <span>Client / Event Name <strong class="req">*</strong></span>
+          <input type="text" id="rentalClientName" placeholder="e.g. Junoon by the Sea, Kapoor Sangeet" value="${esc(defaultClient)}" required list="rentalClientList">
+          <datalist id="rentalClientList">
+            ${data.clients.map(c => `<option value="${esc(c.name)}">`).join('')}
+          </datalist>
+        </label>
+
+        <label>
+          <span>Booking Date <strong class="req">*</strong></span>
+          <input type="date" id="rentalBookingDate" value="${defaultDate}" required>
+        </label>
+      </div>
+
+      <div class="form-grid-2">
+        <label>
+          <span>Hours Booked</span>
+          <div class="input-with-suffix">
+            <input type="number" id="rentalHours" min="1" max="168" value="${defaultHours}" placeholder="8">
+            <span class="suffix">hours</span>
+          </div>
+        </label>
+
+        <label>
+          <span>Standard Catalog Rate</span>
+          <div class="input-with-prefix">
+            <span class="prefix">₹</span>
+            <input type="number" id="rentalStandardRate" value="${defaultRate}" step="1" readonly class="input-readonly">
+          </div>
+        </label>
+      </div>
+
+      <div class="form-grid-2">
+        <label>
+          <span>Agreed / Settled Amount <strong class="req">*</strong> <small class="muted font-11">(if bargained, adjust here)</small></span>
+          <div class="input-with-prefix">
+            <span class="prefix">₹</span>
+            <input type="number" id="rentalSettledAmount" value="${defaultSettled}" min="0" step="1" required>
+          </div>
+        </label>
+
+        <label>
+          <span>Booking Status</span>
+          <select id="rentalBookingStatus">
+            <option value="booked" ${defaultStatus === 'booked' ? 'selected' : ''}>📅 Booked / Scheduled</option>
+            <option value="active" ${defaultStatus === 'active' ? 'selected' : ''}>⚡ Active / Out on Rent</option>
+            <option value="completed" ${defaultStatus === 'completed' ? 'selected' : ''}>✓ Completed & Returned</option>
+            <option value="cancelled" ${defaultStatus === 'cancelled' ? 'selected' : ''}>✕ Cancelled</option>
+          </select>
+        </label>
+      </div>
+
+      <div class="form-grid-2">
+        <label>
+          <span>Payment Status</span>
+          <select id="rentalPaymentStatus">
+            <option value="pending" ${defaultPaymentStatus === 'pending' ? 'selected' : ''}>⏳ Pending Payment</option>
+            <option value="advance" ${defaultPaymentStatus === 'advance' ? 'selected' : ''}>⚡ Advance Received</option>
+            <option value="paid" ${defaultPaymentStatus === 'paid' ? 'selected' : ''}>✓ Fully Paid</option>
+          </select>
+        </label>
+
+        <label id="rentalAdvanceGroup" style="${defaultPaymentStatus === 'advance' ? '' : 'display:none;'}">
+          <span>Advance Amount Received</span>
+          <div class="input-with-prefix">
+            <span class="prefix">₹</span>
+            <input type="number" id="rentalAdvanceAmount" value="${defaultAdvance}" min="0" step="1">
+          </div>
+        </label>
+      </div>
+
+      <div class="form-grid-2">
+        <label>
+          <span>Expected Payment Date <small class="muted font-11">(When money will come in)</small></span>
+          <input type="date" id="rentalExpectedPayDate" value="${defaultExpectedDate}">
+        </label>
+
+        <label>
+          <span>Notes / Location / Venue</span>
+          <input type="text" id="rentalNotes" placeholder="Setup location, contact person, pickup time..." value="${esc(defaultNotes)}">
+        </label>
+      </div>
+
+      <div id="rentalConflictNotice" class="rental-conflict-banner" style="display:none;"></div>
+    </form>
+  `;
+
+  const footerHtml = `
+    <div class="modal-actions-spread">
+      <div>
+        ${isEdit ? `<button type="button" class="small-btn danger" id="deleteRentalModalBtn" title="Delete this booking">🗑️ Delete Booking</button>` : ''}
+      </div>
+      <div class="modal-actions-right">
+        <button type="button" class="small-btn" id="cancelRentalModalBtn">Cancel</button>
+        <button type="button" class="small-btn blue" id="saveRentalModalBtn">💾 ${isEdit ? 'Save Changes' : 'Confirm Booking'}</button>
+      </div>
+    </div>
+  `;
+
+  modal(isEdit ? 'Edit Rental Booking' : 'New Rental Booking', modalHtml, footerHtml, true);
+  bindRentalBookingModalEvents(rental);
+}
+
+function bindRentalBookingModalEvents(rental) {
+  const itemSelect = $('#rentalItemSelect');
+  const customRow = $('#customItemNameRow');
+  const customInput = $('#rentalCustomItemName');
+  const rateInput = $('#rentalStandardRate');
+  const settledInput = $('#rentalSettledAmount');
+  const dateInput = $('#rentalBookingDate');
+  const conflictNotice = $('#rentalConflictNotice');
+  const payStatusSelect = $('#rentalPaymentStatus');
+  const advanceGroup = $('#rentalAdvanceGroup');
+  const advanceInput = $('#rentalAdvanceAmount');
+  const catalog = data.rentalItems || [];
+
+  function updateItemRate() {
+    if (itemSelect.value === 'custom') {
+      if (customRow) customRow.style.display = '';
+      if (!rental) {
+        rateInput.value = 0;
+        settledInput.value = 0;
+      }
+    } else {
+      if (customRow) customRow.style.display = 'none';
+      const sel = catalog.find(i => i.id === itemSelect.value);
+      if (sel) {
+        rateInput.value = sel.rate;
+        if (!rental) {
+          settledInput.value = sel.rate;
+        }
+      }
+    }
+    checkConflictLive();
+  }
+
+  function checkConflictLive() {
+    if (!conflictNotice) return;
+    const selVal = itemSelect.value;
+    const isCustom = selVal === 'custom';
+    const itName = isCustom ? (customInput?.value || '') : (catalog.find(i => i.id === selVal)?.name || '');
+    const dateVal = dateInput.value;
+    const conflict = checkItemBookingConflict(isCustom ? null : selVal, itName, dateVal, rental ? rental.id : null);
+    if (conflict) {
+      conflictNotice.style.display = '';
+      conflictNotice.innerHTML = conflict.message;
+    } else {
+      conflictNotice.style.display = 'none';
+    }
+  }
+
+  if (itemSelect) itemSelect.onchange = updateItemRate;
+  if (customInput) customInput.oninput = checkConflictLive;
+  if (dateInput) dateInput.onchange = checkConflictLive;
+
+  if (payStatusSelect) {
+    payStatusSelect.onchange = () => {
+      if (payStatusSelect.value === 'advance') {
+        if (advanceGroup) advanceGroup.style.display = '';
+      } else {
+        if (advanceGroup) advanceGroup.style.display = 'none';
+        if (payStatusSelect.value === 'paid' && advanceInput) {
+          advanceInput.value = settledInput.value;
+        }
+      }
+    };
+  }
+
+  checkConflictLive();
+
+  $('#cancelRentalModalBtn')?.addEventListener('click', closeModal);
+
+  $('#deleteRentalModalBtn')?.addEventListener('click', () => {
+    if (rental) deleteRentalBooking(rental.id);
+  });
+
+  $('#saveRentalModalBtn')?.addEventListener('click', () => {
+    const isCustom = itemSelect.value === 'custom';
+    const selItem = catalog.find(i => i.id === itemSelect.value);
+    const itemName = isCustom ? (customInput?.value.trim() || 'Custom Equipment') : (selItem?.name || 'Equipment');
+    const clientName = $('#rentalClientName')?.value.trim();
+    const bDate = dateInput?.value;
+    const hours = num($('#rentalHours')?.value) || 8;
+    const stdRate = num(rateInput?.value) || 0;
+    const settledAmount = num(settledInput?.value) || 0;
+    const bookingStatus = $('#rentalBookingStatus')?.value || 'booked';
+    const paymentStatus = payStatusSelect?.value || 'pending';
+    const advanceAmount = paymentStatus === 'advance' ? num(advanceInput?.value) : (paymentStatus === 'paid' ? settledAmount : 0);
+    const expectedPayDate = $('#rentalExpectedPayDate')?.value || bDate;
+    const notes = $('#rentalNotes')?.value.trim() || '';
+
+    if (!clientName) {
+      toast('Please enter a client or event name');
+      $('#rentalClientName')?.focus();
+      return;
+    }
+    if (!bDate) {
+      toast('Please select a booking date');
+      dateInput?.focus();
+      return;
+    }
+
+    saveRentalBooking({
+      id: rental ? rental.id : uid(),
+      itemId: isCustom ? null : selItem?.id,
+      itemName,
+      clientName,
+      bookingDate: bDate,
+      endDate: bDate,
+      hours,
+      standardRate: stdRate,
+      settledAmount,
+      status: bookingStatus,
+      paymentStatus,
+      advanceAmount,
+      expectedPaymentDate: expectedPayDate,
+      notes
+    });
+
+    closeModal();
+    toast(rental ? `Rental booking updated! 💾` : `Rental booked for ${itemName}! 🎉`);
+  });
+}
+
+function openRentalCatalogModal() {
+  ensureDefaultRentalItems();
+  const catalog = data.rentalItems || [];
+
+  const modalHtml = `
+    <div class="rental-catalog-manager">
+      <div class="catalog-add-form-card">
+        <h4>＋ Add New Equipment to Catalog</h4>
+        <div class="catalog-add-grid">
+          <input type="text" id="newEquipName" placeholder="Equipment Name (e.g. Nanlite Forza 500)" required>
+          <input type="text" id="newEquipCategory" placeholder="Category (e.g. Lighting, Sound, Stage)" value="Lighting">
+          <div class="input-with-prefix">
+            <span class="prefix">₹</span>
+            <input type="number" id="newEquipRate" placeholder="Standard Rate" min="0" step="1">
+          </div>
+          <select id="newEquipRateType">
+            <option value="day">per day / event</option>
+            <option value="hour">per hour</option>
+          </select>
+          <input type="text" id="newEquipDesc" placeholder="Brief Specs / Included Accessories (optional)">
+          <button type="button" class="small-btn blue" id="addNewEquipBtn">Add Equipment</button>
+        </div>
+      </div>
+
+      <div class="catalog-items-list-wrap">
+        <h4>Current Equipment Inventory (${catalog.length} items)</h4>
+        <div class="catalog-items-grid">
+          ${catalog.map(it => `
+            <div class="catalog-item-card" data-catalog-item-id="${it.id}">
+              <div class="catalog-item-top">
+                <span class="catalog-category-tag">${esc(it.category || 'Rental')}</span>
+                <span class="catalog-rate-tag">₹${Number(it.rate || 0).toLocaleString('en-IN')}/${esc(it.rateType || 'day')}</span>
+              </div>
+              <strong class="catalog-item-name">${esc(it.name)}</strong>
+              <p class="catalog-item-desc muted font-11">${esc(it.description || 'No description added')}</p>
+              <div class="catalog-item-actions">
+                <button type="button" class="small-btn" data-catalog-book="${it.id}">+ Book</button>
+                <button type="button" class="small-btn danger" data-catalog-delete="${it.id}">🗑 Delete</button>
+              </div>
+            </div>
+          `).join('')}
+        </div>
+      </div>
+    </div>
+  `;
+
+  modal('Equipment Catalog & Rental Inventory', modalHtml, `<div class="modal-actions"><button type="button" class="small-btn" id="closeCatalogModalBtn">Close</button></div>`, true);
+  bindRentalCatalogModalEvents();
+}
+
+function bindRentalCatalogModalEvents() {
+  $('#closeCatalogModalBtn')?.addEventListener('click', closeModal);
+
+  $('#addNewEquipBtn')?.addEventListener('click', () => {
+    const name = $('#newEquipName')?.value.trim();
+    const category = $('#newEquipCategory')?.value.trim() || 'Equipment';
+    const rate = num($('#newEquipRate')?.value) || 0;
+    const rateType = $('#newEquipRateType')?.value || 'day';
+    const description = $('#newEquipDesc')?.value.trim() || '';
+
+    if (!name) {
+      toast('Please enter equipment name');
+      $('#newEquipName')?.focus();
+      return;
+    }
+
+    saveRentalItem({
+      id: 'equip-' + uid().slice(0, 8),
+      name,
+      category,
+      rate,
+      rateType,
+      description
+    });
+
+    toast(`Added "${name}" to equipment catalog! 📦`);
+    openRentalCatalogModal();
+  });
+
+  $$('[data-catalog-book]').forEach(b => {
+    b.onclick = () => {
+      closeModal();
+      openRentalBookingModal(null, today(), b.dataset.catalogBook);
+    };
+  });
+
+  $$('[data-catalog-delete]').forEach(b => {
+    b.onclick = () => {
+      deleteRentalItem(b.dataset.catalogDelete);
+      openRentalCatalogModal();
+    };
+  });
+}
+
 function renderPayments() {
   const f=financials(), issued=data.invoices.filter(i=>i.status==='issued'), byClient=new Map();
   for(const item of f.sentItems){const entry=byClient.get(item.clientId)||{count:0,balance:0};entry.count++;entry.balance+=item.balance;byClient.set(item.clientId,entry);}
@@ -3515,6 +4757,10 @@ function bindMain() {
     };
   }
   $$('[data-billing-edit]').forEach(b=>b.onclick=()=>billingDialog(b.dataset.billingEdit));
+  $$('[data-jump-rentals]').forEach(b => b.onclick = () => { tab = 'rentals'; render(); });
+  if (tab === 'rentals') {
+    bindRentals();
+  }
   $$('[data-open-notice-board]').forEach(b => b.onclick = () => { tab = 'tasks'; render(); });
   $$('[data-dashboard-add-task]').forEach(b => b.onclick = () => { openTaskModal(); });
   $$('[data-task-jump]').forEach(b => b.onclick = () => {
@@ -8369,6 +9615,26 @@ async function pullRemote(){
   if (Array.isArray(w.data?.business?.activity_log)) {
     mergeRemoteActivityLog(w.data.business.activity_log);
   }
+  if (Array.isArray(w.data?.business?.rentals)) {
+    data.rentals = data.rentals || [];
+    const knownR = new Set(data.rentals.map(r => r.id));
+    for (const r of w.data.business.rentals) {
+      if (!knownR.has(r.id)) {
+        data.rentals.push(r);
+        knownR.add(r.id);
+      }
+    }
+  }
+  if (Array.isArray(w.data?.business?.rental_items)) {
+    data.rentalItems = data.rentalItems || [];
+    const knownI = new Set(data.rentalItems.map(i => i.id));
+    for (const i of w.data.business.rental_items) {
+      if (!knownI.has(i.id)) {
+        data.rentalItems.push(i);
+        knownI.add(i.id);
+      }
+    }
+  }
   ['clients','groups','projectGroups','items','invoices','receipts'].forEach((table,k)=>{
     const pending=new Set(data.pending.filter(p=>p.table===table).map(p=>p.id));
     const pendingDeletes=new Set((data.pendingDeletes||[]).filter(p=>p.table===table).map(p=>p.id));
@@ -8758,4 +10024,4 @@ document.addEventListener('paste',e=>{
   if(value.includes('\t')||value.includes('\n'))pasteGrid(e,{dataset:{id:selectionCell.id,cell:selectionCell.key}});
   else{e.preventDefault();editCell(selectionCell.id,selectionCell.key,value);}
 });
-(async()=>{try{const saved=await window.desk.read();if(saved)data={...structuredClone(defaults),...saved,settings:{...structuredClone(defaults.settings),...(saved.settings||{}),seller:{...defaults.settings.seller,...(saved.settings?.seller||{})}}};(data.items||[]).forEach(i=>{if(i.serial)i.serial=cleanSerial(i.serial);});consolidateAllReceipts();ensureBankAccounts();syncActiveBankDetails();const topClient=sortedClients()[0]?.id;if(topClient)activeClient=topClient;render();setupSupabase();}catch(e){render();toast('Could not load local data: '+e.message);}})();
+(async()=>{try{const saved=await window.desk.read();if(saved)data={...structuredClone(defaults),...saved,rentals:saved.rentals||[],rentalItems:saved.rentalItems||[],settings:{...structuredClone(defaults.settings),...(saved.settings||{}),seller:{...defaults.settings.seller,...(saved.settings?.seller||{})}}};ensureDefaultRentalItems();(data.items||[]).forEach(i=>{if(i.serial)i.serial=cleanSerial(i.serial);});consolidateAllReceipts();ensureBankAccounts();syncActiveBankDetails();const topClient=sortedClients()[0]?.id;if(topClient)activeClient=topClient;render();setupSupabase();}catch(e){render();toast('Could not load local data: '+e.message);}})();
