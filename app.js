@@ -3289,106 +3289,118 @@ function openRentalBookingModal(rentalId = null, prefilledDate = null, prefilled
     <form id="rentalBookingForm" class="rental-modal-form">
       <input type="hidden" id="rentalId" value="${rental ? rental.id : ''}">
       
-      <div class="form-row">
-        <label>
-          <span>Equipment / Rented Item <strong class="req">*</strong></span>
-          <select id="rentalItemSelect" required>
-            ${catalog.map(it => `<option value="${it.id}" data-rate="${it.rate}" data-name="${esc(it.name)}" ${it.id === selectedItemId ? 'selected' : ''}>${esc(it.name)} (${esc(it.category || 'Rental')} · ₹${it.rate}/${it.rateType || 'day'})</option>`).join('')}
-            <option value="custom" ${rental && !rental.itemId ? 'selected' : ''}>＋ Other / Custom Equipment...</option>
-          </select>
-        </label>
+      <div class="rental-form-section">
+        <div class="rental-form-section-title">📦 Equipment & Renter Information</div>
+        
+        <div class="form-row">
+          <label class="form-group">
+            <span class="form-label">Equipment / Rented Item <strong class="req">*</strong></span>
+            <select id="rentalItemSelect" class="form-control" required>
+              ${catalog.map(it => `<option value="${it.id}" data-rate="${it.rate}" data-name="${esc(it.name)}" ${it.id === selectedItemId ? 'selected' : ''}>${esc(it.name)} (${esc(it.category || 'Rental')} · ₹${it.rate}/${it.rateType || 'day'})</option>`).join('')}
+              <option value="custom" ${rental && !rental.itemId ? 'selected' : ''}>＋ Other / Custom Equipment...</option>
+            </select>
+          </label>
+        </div>
+
+        <div class="form-row" id="customItemNameRow" style="${(rental && !rental.itemId) ? '' : 'display:none;'}">
+          <label class="form-group">
+            <span class="form-label">Custom Equipment Name</span>
+            <input type="text" id="rentalCustomItemName" class="form-control" placeholder="Enter custom equipment name" value="${rental && !rental.itemId ? esc(rental.itemName) : ''}">
+          </label>
+        </div>
+
+        <div class="form-grid-2">
+          <label class="form-group">
+            <span class="form-label">Client / Individual Customer Name <strong class="req">*</strong></span>
+            <input type="text" id="rentalClientName" class="form-control" placeholder="e.g. Rahul Sharma or Event Company" value="${esc(defaultClient)}" required list="rentalClientList" autocomplete="off">
+            <datalist id="rentalClientList">
+              ${data.clients.map(c => `<option value="${esc(c.name)}">`).join('')}
+            </datalist>
+            <span class="form-hint">Type any individual person or pick a client (won't affect worksheet tabs)</span>
+          </label>
+
+          <label class="form-group">
+            <span class="form-label">Booking Date <strong class="req">*</strong></span>
+            <input type="date" id="rentalBookingDate" class="form-control" value="${defaultDate}" required>
+          </label>
+        </div>
       </div>
 
-      <div class="form-row" id="customItemNameRow" style="${(rental && !rental.itemId) ? '' : 'display:none;'}">
-        <label>
-          <span>Custom Equipment Name</span>
-          <input type="text" id="rentalCustomItemName" placeholder="Enter equipment name" value="${rental && !rental.itemId ? esc(rental.itemName) : ''}">
-        </label>
+      <div class="rental-form-section">
+        <div class="rental-form-section-title">💰 Pricing, Duration & Status</div>
+
+        <div class="form-grid-2">
+          <label class="form-group">
+            <span class="form-label">Standard Catalog Rate</span>
+            <div class="input-with-prefix">
+              <span class="prefix">₹</span>
+              <input type="number" id="rentalStandardRate" class="form-control-nested input-readonly" value="${defaultRate}" step="1" readonly>
+            </div>
+          </label>
+
+          <label class="form-group">
+            <span class="form-label">Hours Booked</span>
+            <div class="input-with-suffix">
+              <input type="number" id="rentalHours" class="form-control-nested" min="1" max="168" value="${defaultHours}" placeholder="8">
+              <span class="suffix">hours</span>
+            </div>
+          </label>
+        </div>
+
+        <div class="form-grid-2">
+          <label class="form-group">
+            <span class="form-label">Agreed / Settled Amount <strong class="req">*</strong> <small class="form-sublabel">(if bargained, adjust here)</small></span>
+            <div class="input-with-prefix">
+              <span class="prefix">₹</span>
+              <input type="number" id="rentalSettledAmount" class="form-control-nested" value="${defaultSettled}" min="0" step="1" required>
+            </div>
+          </label>
+
+          <label class="form-group">
+            <span class="form-label">Booking Status</span>
+            <select id="rentalBookingStatus" class="form-control">
+              <option value="booked" ${defaultStatus === 'booked' ? 'selected' : ''}>📅 Booked / Scheduled</option>
+              <option value="active" ${defaultStatus === 'active' ? 'selected' : ''}>⚡ Active / Out on Rent</option>
+              <option value="completed" ${defaultStatus === 'completed' ? 'selected' : ''}>✓ Completed & Returned</option>
+              <option value="cancelled" ${defaultStatus === 'cancelled' ? 'selected' : ''}>✕ Cancelled</option>
+            </select>
+          </label>
+        </div>
+
+        <div class="form-grid-2">
+          <label class="form-group">
+            <span class="form-label">Payment Status</span>
+            <select id="rentalPaymentStatus" class="form-control">
+              <option value="pending" ${defaultPaymentStatus === 'pending' ? 'selected' : ''}>⏳ Pending Payment</option>
+              <option value="advance" ${defaultPaymentStatus === 'advance' ? 'selected' : ''}>⚡ Advance Received</option>
+              <option value="paid" ${defaultPaymentStatus === 'paid' ? 'selected' : ''}>✓ Fully Paid</option>
+            </select>
+          </label>
+
+          <label class="form-group" id="rentalAdvanceGroup" style="${defaultPaymentStatus === 'advance' ? '' : 'display:none;'}">
+            <span class="form-label">Advance Amount Received</span>
+            <div class="input-with-prefix">
+              <span class="prefix">₹</span>
+              <input type="number" id="rentalAdvanceAmount" class="form-control-nested" value="${defaultAdvance}" min="0" step="1">
+            </div>
+          </label>
+        </div>
       </div>
 
-      <div class="form-grid-2">
-        <label>
-          <span>Client / Individual Customer Name <strong class="req">*</strong></span>
-          <input type="text" id="rentalClientName" placeholder="e.g. Rahul Sharma (Individual) or Junoon (Client)" value="${esc(defaultClient)}" required list="rentalClientList" autocomplete="off">
-          <datalist id="rentalClientList">
-            ${data.clients.map(c => `<option value="${esc(c.name)}">`).join('')}
-          </datalist>
-          <small class="muted font-11">Enter any individual person or pick a client (individual renters will not create worksheet tabs)</small>
-        </label>
+      <div class="rental-form-section">
+        <div class="rental-form-section-title">📍 Logistics & Expected Cashflow</div>
 
-        <label>
-          <span>Booking Date <strong class="req">*</strong></span>
-          <input type="date" id="rentalBookingDate" value="${defaultDate}" required>
-        </label>
-      </div>
+        <div class="form-grid-2">
+          <label class="form-group">
+            <span class="form-label">Expected Payment Date <small class="form-sublabel">(When money will come in)</small></span>
+            <input type="date" id="rentalExpectedPayDate" class="form-control" value="${defaultExpectedDate}">
+          </label>
 
-      <div class="form-grid-2">
-        <label>
-          <span>Hours Booked</span>
-          <div class="input-with-suffix">
-            <input type="number" id="rentalHours" min="1" max="168" value="${defaultHours}" placeholder="8">
-            <span class="suffix">hours</span>
-          </div>
-        </label>
-
-        <label>
-          <span>Standard Catalog Rate</span>
-          <div class="input-with-prefix">
-            <span class="prefix">₹</span>
-            <input type="number" id="rentalStandardRate" value="${defaultRate}" step="1" readonly class="input-readonly">
-          </div>
-        </label>
-      </div>
-
-      <div class="form-grid-2">
-        <label>
-          <span>Agreed / Settled Amount <strong class="req">*</strong> <small class="muted font-11">(if bargained, adjust here)</small></span>
-          <div class="input-with-prefix">
-            <span class="prefix">₹</span>
-            <input type="number" id="rentalSettledAmount" value="${defaultSettled}" min="0" step="1" required>
-          </div>
-        </label>
-
-        <label>
-          <span>Booking Status</span>
-          <select id="rentalBookingStatus">
-            <option value="booked" ${defaultStatus === 'booked' ? 'selected' : ''}>📅 Booked / Scheduled</option>
-            <option value="active" ${defaultStatus === 'active' ? 'selected' : ''}>⚡ Active / Out on Rent</option>
-            <option value="completed" ${defaultStatus === 'completed' ? 'selected' : ''}>✓ Completed & Returned</option>
-            <option value="cancelled" ${defaultStatus === 'cancelled' ? 'selected' : ''}>✕ Cancelled</option>
-          </select>
-        </label>
-      </div>
-
-      <div class="form-grid-2">
-        <label>
-          <span>Payment Status</span>
-          <select id="rentalPaymentStatus">
-            <option value="pending" ${defaultPaymentStatus === 'pending' ? 'selected' : ''}>⏳ Pending Payment</option>
-            <option value="advance" ${defaultPaymentStatus === 'advance' ? 'selected' : ''}>⚡ Advance Received</option>
-            <option value="paid" ${defaultPaymentStatus === 'paid' ? 'selected' : ''}>✓ Fully Paid</option>
-          </select>
-        </label>
-
-        <label id="rentalAdvanceGroup" style="${defaultPaymentStatus === 'advance' ? '' : 'display:none;'}">
-          <span>Advance Amount Received</span>
-          <div class="input-with-prefix">
-            <span class="prefix">₹</span>
-            <input type="number" id="rentalAdvanceAmount" value="${defaultAdvance}" min="0" step="1">
-          </div>
-        </label>
-      </div>
-
-      <div class="form-grid-2">
-        <label>
-          <span>Expected Payment Date <small class="muted font-11">(When money will come in)</small></span>
-          <input type="date" id="rentalExpectedPayDate" value="${defaultExpectedDate}">
-        </label>
-
-        <label>
-          <span>Notes / Location / Venue</span>
-          <input type="text" id="rentalNotes" placeholder="Setup location, contact person, pickup time..." value="${esc(defaultNotes)}">
-        </label>
+          <label class="form-group">
+            <span class="form-label">Notes / Venue / Location</span>
+            <input type="text" id="rentalNotes" class="form-control" placeholder="Setup location, contact person, pickup time..." value="${esc(defaultNotes)}">
+          </label>
+        </div>
       </div>
 
       <div id="rentalConflictNotice" class="rental-conflict-banner" style="display:none;"></div>
@@ -3547,18 +3559,23 @@ function openRentalCatalogModal() {
     <div class="rental-catalog-manager">
       <div class="catalog-add-box">
         <div class="catalog-add-box-header">
-          <h4 style="margin:0 0 2px 0;">＋ Add New Equipment to Catalog</h4>
-          <span class="muted font-11">Add lights, sound, cameras, projectors, or any gear to your rental inventory</span>
+          <div style="display:flex;align-items:center;gap:8px;">
+            <span style="font-size:18px;">✨</span>
+            <div>
+              <h4 style="margin:0;font-size:14px;font-weight:700;">Add New Equipment to Catalog</h4>
+              <span class="muted font-11">Register gear, lights, sound systems, or cameras into your reusable inventory</span>
+            </div>
+          </div>
         </div>
         <div class="catalog-add-form">
           <div class="form-grid-2">
-            <label>
-              <span>Equipment Name <strong class="req">*</strong></span>
-              <input type="text" id="newEquipName" placeholder="e.g. Nanlite Forza 500, Sony FX3, Smoke Machine" required>
+            <label class="form-group">
+              <span class="form-label">Equipment Name <strong class="req">*</strong></span>
+              <input type="text" id="newEquipName" class="form-control" placeholder="e.g. Nanlite Forza 500, Sony FX3, Fog Machine" required>
             </label>
-            <label>
-              <span>Category</span>
-              <select id="newEquipCategory">
+            <label class="form-group">
+              <span class="form-label">Category</span>
+              <select id="newEquipCategory" class="form-control">
                 <option value="Lighting">Lighting</option>
                 <option value="Sound">Sound / Audio</option>
                 <option value="Video & Projection">Video & Projection</option>
@@ -3573,29 +3590,31 @@ function openRentalCatalogModal() {
           </div>
 
           <div class="form-grid-3">
-            <label>
-              <span>Standard Rate <strong class="req">*</strong></span>
+            <label class="form-group">
+              <span class="form-label">Standard Rate <strong class="req">*</strong></span>
               <div class="input-with-prefix">
                 <span class="prefix">₹</span>
-                <input type="number" id="newEquipRate" placeholder="e.g. 4500" min="0" step="1" required>
+                <input type="number" id="newEquipRate" class="form-control-nested" placeholder="e.g. 4500" min="0" step="1" required>
               </div>
             </label>
-            <label>
-              <span>Rate Billing Unit</span>
-              <select id="newEquipRateType">
+            <label class="form-group">
+              <span class="form-label">Rate Billing Unit</span>
+              <select id="newEquipRateType" class="form-control">
                 <option value="day">per day / event</option>
                 <option value="hour">per hour</option>
                 <option value="event">per event</option>
               </select>
             </label>
-            <label>
-              <span>Specs / Notes</span>
-              <input type="text" id="newEquipDesc" placeholder="e.g. Included case, 2 batteries, stands">
+            <label class="form-group">
+              <span class="form-label">Specs / Included Accessories</span>
+              <input type="text" id="newEquipDesc" class="form-control" placeholder="e.g. Flight case, 2 batteries, clamps">
             </label>
           </div>
 
-          <div style="display:flex;justify-content:flex-end;margin-top:6px;">
-            <button type="button" class="small-btn green" id="addNewEquipBtn" style="font-weight:700;padding:6px 16px;">＋ Add Equipment to Inventory</button>
+          <div style="display:flex;justify-content:flex-end;margin-top:10px;">
+            <button type="button" class="small-btn green" id="addNewEquipBtn" style="font-weight:700;padding:8px 18px;font-size:12.5px;display:inline-flex;align-items:center;gap:6px;">
+              <span>＋</span> Add Equipment to Inventory
+            </button>
           </div>
         </div>
       </div>
