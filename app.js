@@ -2740,7 +2740,7 @@ function saveRentalItem(itemData) {
   save();
 }
 
-function deleteRentalItem(id) {
+function deleteRentalItem(id, fromModal = false) {
   ensureDefaultRentalItems();
   const item = (data.rentalItems || []).find(i => i.id === id);
   if (!item) return;
@@ -2751,88 +2751,50 @@ function deleteRentalItem(id) {
   syncRentalsToSeller();
   save();
   render();
+  if (fromModal || (typeof document !== 'undefined' && document.querySelector('.rental-catalog-manager'))) {
+    openRentalCatalogModal();
+  }
   toast(`Removed "${item.name}" from catalog 🗑️`);
+}
+
+function fmtDayName(dStr) {
+  if (!dStr) return '';
+  try {
+    const d = new Date(dStr + 'T00:00:00');
+    return d.toLocaleDateString('en-IN', { weekday: 'short' });
+  } catch (e) {
+    return '';
+  }
+}
+
+function fmtDayAndMonth(dStr) {
+  if (!dStr) return '—';
+  try {
+    const d = new Date(dStr + 'T00:00:00');
+    return d.toLocaleDateString('en-IN', { day: 'numeric', month: 'short' });
+  } catch (e) {
+    return dStr;
+  }
+}
+
+function getBookingsOnDate(targetDate, excludeBookingId = null) {
+  if (!targetDate) return [];
+  const rentals = Array.isArray(data.rentals) ? data.rentals : [];
+  const normDate = parseRentalDateInput(targetDate);
+  return rentals.filter(r => {
+    if (excludeBookingId && r.id === excludeBookingId) return false;
+    if (r.status === 'cancelled') return false;
+    const start = r.bookingDate;
+    const end = r.endDate || r.bookingDate;
+    return normDate >= start && normDate <= end;
+  });
 }
 
 function renderRentals() {
   ensureDefaultRentalItems();
-  const rf = typeof rentalFinancials === 'function' ? rentalFinancials() : { totalBookings: 0, received: 0, awaiting: 0, totalBooked: 0, upcomingSchedule: [], paidCount: 0, advanceCount: 0, pendingCount: 0 };
-  const catalog = data.rentalItems || [];
-
-  const topBarHtml = `
-    <div class="rentals-top-bar">
-      <div>
-        <h2>Equipment Rentals & Bookings</h2>
-        <p>Manage rental equipment, schedule blocked dates, check availability, and track incoming rental revenue.</p>
-      </div>
-      <div class="rentals-nav-actions">
-        <div class="rental-view-toggle">
-          <button type="button" class="${rentalViewMode === 'calendar' ? 'active' : ''}" id="rentalToggleCalBtn">📅 Calendar View</button>
-          <button type="button" class="${rentalViewMode === 'list' ? 'active' : ''}" id="rentalToggleListBtn">📋 Table List</button>
-        </div>
-        <button type="button" class="small-btn" id="rentalOpenCatalogBtn">📦 Equipment Catalog (${catalog.length})</button>
-        <button type="button" class="small-btn blue" id="rentalNewBookingBtn">＋ Book Rental</button>
-      </div>
-    </div>
-  `;
-
-  const statsHtml = `
-    <div class="cards">
-      <div class="card green">
-        <div class="card-label">Rentals Received</div>
-        <div class="card-value">${money(rf.received)}</div>
-        <div class="card-foot">${rf.paidCount} paid · ${rf.advanceCount} advance recorded</div>
-      </div>
-      <div class="card amber">
-        <div class="card-label">Expected Rental Inflow</div>
-        <div class="card-value">${money(rf.awaiting)}</div>
-        <div class="card-foot">Balances due on booked rentals</div>
-      </div>
-      <div class="card blue">
-        <div class="card-label">Total Rental Value</div>
-        <div class="card-value">${money(rf.totalBooked)}</div>
-        <div class="card-foot">${rf.totalBookings} total booked contracts</div>
-      </div>
-      <div class="card">
-        <div class="card-label">Catalog Inventory</div>
-        <div class="card-value">${catalog.length} items</div>
-        <div class="card-foot">Available equipment for rent</div>
-      </div>
-    </div>
-  `;
-
-  const targetAvailDate = rentalSearchDate || today();
-  const avail = checkDateAvailability(targetAvailDate);
-  const availHtml = `
-    <div class="rental-avail-checker-card">
-      <div class="rental-avail-header">
-        <div class="rental-avail-title">
-          <span class="rental-avail-icon">🔎</span>
-          <div>
-            <strong>Check Date Availability & Blocked Gear</strong>
-            <p class="muted font-11">Type or pick any date (e.g. "3 Nov", "15 Nov", "Tomorrow") to instantly see what gear is blocked and what is free.</p>
-          </div>
-        </div>
-        <div class="rental-avail-controls">
-          <input type="date" id="rentalAvailDatePick" value="${avail.date}">
-          <input type="text" id="rentalAvailSearchText" placeholder="Or type e.g. 15th Nov, today, lights..." value="${esc(rentalSearchQuery)}">
-          <button type="button" class="small-btn blue" id="rentalCheckAvailBtn">Check Availability</button>
-        </div>
-      </div>
-      <div class="rental-avail-results" id="rentalAvailResults">
-        ${renderAvailabilityResults(avail.date, rentalSearchQuery)}
-      </div>
-    </div>
-  `;
-
-  const contentHtml = rentalViewMode === 'calendar' ? renderRentalsCalendarView() : renderRentalsListView();
-
   return `
     <div class="rentals-wrap">
-      ${topBarHtml}
-      ${statsHtml}
-      ${availHtml}
-      ${contentHtml}
+      ${rentalViewMode === 'schedule' ? renderRentalsScheduleView() : renderRentalsCalendarView()}
     </div>
   `;
 }
@@ -2857,6 +2819,15 @@ function renderRentalsCalendarView() {
   const rentals = data.rentals || [];
   const activeRentals = rentals.filter(r => r.status !== 'cancelled');
 
+  // Month bookings count for the green badge
+  const monthPrefix = rentalCalendarMonth;
+  const monthRentals = activeRentals.filter(r => (r.bookingDate || '').startsWith(monthPrefix));
+  const monthBookingsCount = monthRentals.length;
+  const monthTotalRents = monthRentals.reduce((sum, r) => sum + num(r.settledAmount != null ? r.settledAmount : r.rate), 0);
+
+  const rf = typeof rentalFinancials === 'function' ? rentalFinancials() : { totalBookings: 0, received: 0, awaiting: 0, totalBooked: 0 };
+  const catalog = data.rentalItems || [];
+
   let daysGridHtml = '';
   for (let i = firstDayIndex - 1; i >= 0; i--) {
     const dNum = daysInPrevMonth - i;
@@ -2878,14 +2849,41 @@ function renderRentalsCalendarView() {
 
   return `
     <div class="rental-cal-wrap">
-      <div class="rental-cal-header">
-        <button type="button" class="small-btn" id="rentalCalPrevBtn" data-month="${prevMonthStr}">◀ Prev Month</button>
-        <h3 class="rental-cal-title">${monthTitle}</h3>
-        <div style="display:flex;gap:6px;">
+      <div class="rental-cal-top-bar">
+        <div class="rental-cal-nav-left">
+          <button type="button" class="small-btn" id="rentalCalPrevBtn" data-month="${prevMonthStr}" title="Previous Month">◀</button>
           <button type="button" class="small-btn" id="rentalCalTodayBtn">Today</button>
-          <button type="button" class="small-btn" id="rentalCalNextBtn" data-month="${nextMonthStr}">Next Month ▶</button>
+          <button type="button" class="small-btn" id="rentalCalNextBtn" data-month="${nextMonthStr}" title="Next Month">▶</button>
+          <h3 class="rental-cal-title">
+            ${monthTitle}
+            ${monthBookingsCount > 0 ? `<span class="rental-month-badge" title="${monthBookingsCount} booking${monthBookingsCount === 1 ? '' : 's'} in ${monthTitle}">${monthBookingsCount}</span>` : ''}
+          </h3>
+        </div>
+
+        <div class="rental-cal-stats-strip">
+          <span class="rental-stat-pill green" title="Total amount of all booked rentals">
+            <span class="stat-lbl">Total Rents:</span>
+            <strong>${money(rf.totalBooked)}</strong>
+          </span>
+          <span class="rental-stat-pill blue" title="Total active booked rentals">
+            <span class="stat-lbl">Bookings:</span>
+            <strong>${rf.totalBookings}</strong>
+          </span>
+          ${monthBookingsCount > 0 ? `
+            <span class="rental-stat-pill emerald" title="Bookings in ${monthTitle}">
+              <span class="stat-lbl">${monthTitle.split(' ')[0]}:</span>
+              <strong>${money(monthTotalRents)}</strong>
+            </span>
+          ` : ''}
+        </div>
+
+        <div class="rental-cal-actions-right">
+          <button type="button" class="small-btn" id="rentalOpenCatalogBtn" title="View & manage equipment items">📦 Items (${catalog.length})</button>
+          <button type="button" class="small-btn" id="rentalToggleScheduleBtn" title="View all bookings in chronological order">📋 All Bookings</button>
+          <button type="button" class="small-btn green" id="rentalNewBookingBtn" style="font-weight:700;">＋ Rent an Item</button>
         </div>
       </div>
+
       <div class="rental-cal-days-header">
         <div class="rental-cal-day-col">Sun</div>
         <div class="rental-cal-day-col">Mon</div>
@@ -2895,6 +2893,7 @@ function renderRentalsCalendarView() {
         <div class="rental-cal-day-col">Fri</div>
         <div class="rental-cal-day-col">Sat</div>
       </div>
+
       <div class="rental-cal-grid">
         ${daysGridHtml}
       </div>
@@ -2916,12 +2915,16 @@ function renderCalendarCell(dateStr, dayNum, isOtherMonth, activeRentals) {
     <div class="rental-cal-cell ${isOtherMonth ? 'other-month' : ''} ${isToday ? 'today' : ''}" data-cal-date="${dateStr}">
       <div class="rental-cal-cell-header">
         <span class="rental-cal-day-num">${dayNum}</span>
-        ${dayRentals.length ? `<span class="rental-cal-day-badge" title="${dayRentals.length} bookings, total ${money(dayTotal)}">${dayRentals.length} Blocked</span>` : ''}
-        <button type="button" class="rental-cal-add-btn" data-cal-add="${dateStr}" title="Add booking on this date">＋</button>
+        ${dayRentals.length > 0 ? `
+          <span class="rental-cal-day-badge ${dayRentals.length > 1 ? 'multi' : ''}" title="${dayRentals.length} bookings on ${fmtDate(dateStr)}, total ${money(dayTotal)}">
+            ${dayRentals.length === 1 ? '1 Booked' : `${dayRentals.length} Bookings`}
+          </span>
+        ` : ''}
+        <button type="button" class="rental-cal-add-btn" data-cal-add="${dateStr}" title="Add booking on ${fmtDate(dateStr)}">＋</button>
       </div>
       <div class="rental-cal-cards">
         ${dayRentals.map(r => `
-          <div class="rental-cal-card ${r.paymentStatus}" draggable="true" data-rental-id="${r.id}" title="${esc(r.itemName)} · ${esc(r.clientName)} (${r.hours ? r.hours + ' hrs' : 'Full day'}) · ${money(r.settledAmount != null ? r.settledAmount : r.rate)} · Drag to reschedule">
+          <div class="rental-cal-card ${r.paymentStatus}" draggable="true" data-rental-id="${r.id}" title="${esc(r.itemName)} · ${esc(r.clientName)} (${r.hours ? r.hours + ' hrs' : 'Full day'}) · ${money(r.settledAmount != null ? r.settledAmount : r.rate)} · Click for details, drag to reschedule">
             <div class="rental-card-top">
               <span class="rental-card-item-name">${esc(r.itemName)}</span>
               <span class="pill ${r.paymentStatus === 'paid' ? 'paid' : r.paymentStatus === 'advance' ? 'working' : 'pending'}" style="font-size:9px;padding:1px 4px;">${r.paymentStatus === 'paid' ? 'Paid' : r.paymentStatus === 'advance' ? 'Adv' : 'Due'}</span>
@@ -2938,92 +2941,114 @@ function renderCalendarCell(dateStr, dayNum, isOtherMonth, activeRentals) {
   `;
 }
 
-function renderRentalsListView() {
+function renderRentalsScheduleView() {
   const rentals = data.rentals || [];
-  let filtered = rentals.filter(r => r.status !== 'cancelled');
+  const activeRentals = rentals.filter(r => r.status !== 'cancelled');
+  const todayStr = today();
+
+  let filtered = [...activeRentals];
   if (rentalFilter === 'upcoming') {
-    filtered = filtered.filter(r => r.bookingDate >= today());
+    filtered = filtered.filter(r => (r.bookingDate || '') >= todayStr);
+  } else if (rentalFilter === 'past') {
+    filtered = filtered.filter(r => (r.bookingDate || '') < todayStr);
   } else if (rentalFilter === 'paid') {
     filtered = filtered.filter(r => r.paymentStatus === 'paid');
   } else if (rentalFilter === 'pending') {
     filtered = filtered.filter(r => r.paymentStatus !== 'paid');
   }
 
-  filtered.sort((a, b) => (b.bookingDate || '').localeCompare(a.bookingDate || ''));
+  // Ordered chronologically from nearest upcoming to later dates
+  filtered.sort((a, b) => (a.bookingDate || '').localeCompare(b.bookingDate || ''));
+
+  const rf = typeof rentalFinancials === 'function' ? rentalFinancials() : { totalBookings: 0, received: 0, awaiting: 0, totalBooked: 0 };
+  const catalog = data.rentalItems || [];
 
   return `
-    <div class="panel">
-      <div class="panel-header-with-badge">
-        <div class="panel-title-wrap">
-          <span class="panel-icon">📋</span>
+    <div class="rental-schedule-wrap">
+      <div class="rental-schedule-top-bar">
+        <div class="rental-schedule-left">
+          <button type="button" class="small-btn blue" id="rentalBackToCalBtn">◀ Back to Calendar</button>
           <div>
-            <h3>All Rental Bookings</h3>
-            <p class="muted">List of all scheduled equipment rentals with rates, payment statuses, and actions.</p>
+            <h3 style="margin:0;">Rental Bookings Schedule</h3>
+            <span class="muted font-11">Ordered chronologically from sooner to later dates</span>
           </div>
         </div>
-        <div class="rental-list-filters">
-          <button type="button" class="small-btn ${rentalFilter === 'all' ? 'blue' : ''}" data-rental-filter="all">All (${rentals.filter(r=>r.status!=='cancelled').length})</button>
-          <button type="button" class="small-btn ${rentalFilter === 'upcoming' ? 'blue' : ''}" data-rental-filter="upcoming">Upcoming</button>
-          <button type="button" class="small-btn ${rentalFilter === 'paid' ? 'blue' : ''}" data-rental-filter="paid">Paid</button>
-          <button type="button" class="small-btn ${rentalFilter === 'pending' ? 'blue' : ''}" data-rental-filter="pending">Pending Payment</button>
+
+        <div class="rental-schedule-filters">
+          <button type="button" class="small-btn ${rentalFilter === 'all' ? 'active-filter' : ''}" data-rental-filter="all">All (${activeRentals.length})</button>
+          <button type="button" class="small-btn ${rentalFilter === 'upcoming' ? 'active-filter' : ''}" data-rental-filter="upcoming">Upcoming</button>
+          <button type="button" class="small-btn ${rentalFilter === 'past' ? 'active-filter' : ''}" data-rental-filter="past">Past</button>
+          <button type="button" class="small-btn ${rentalFilter === 'pending' ? 'active-filter' : ''}" data-rental-filter="pending">Pending Payment</button>
+          <button type="button" class="small-btn ${rentalFilter === 'paid' ? 'active-filter' : ''}" data-rental-filter="paid">Paid</button>
+        </div>
+
+        <div class="rental-cal-actions-right">
+          <button type="button" class="small-btn" id="rentalOpenCatalogBtn">📦 Items (${catalog.length})</button>
+          <button type="button" class="small-btn green" id="rentalNewBookingBtn" style="font-weight:700;">＋ Rent an Item</button>
         </div>
       </div>
-      ${filtered.length ? `
-        <table class="table-list">
-          <thead>
-            <tr>
-              <th>BOOKING DATE</th>
-              <th>EQUIPMENT</th>
-              <th>CLIENT / EVENT</th>
-              <th>HOURS</th>
-              <th style="text-align:right">CATALOG RATE</th>
-              <th style="text-align:right">SETTLED AMOUNT</th>
-              <th>PAYMENT STATUS</th>
-              <th>EXPECTED INFLOW</th>
-              <th style="text-align:right">ACTIONS</th>
-            </tr>
-          </thead>
-          <tbody>
-            ${filtered.map(r => {
-              const stdRate = num(r.standardRate || r.rate);
-              const settled = num(r.settledAmount != null ? r.settledAmount : r.rate);
-              const isBargained = settled < stdRate && stdRate > 0;
-              return `
-                <tr>
-                  <td><strong>${fmtDate(r.bookingDate)}</strong></td>
-                  <td><strong>${esc(r.itemName)}</strong></td>
-                  <td>${esc(r.clientName)}</td>
-                  <td>${r.hours ? r.hours + ' hrs' : 'Full day'}</td>
-                  <td style="text-align:right" class="muted">${stdRate ? money(stdRate) : '—'}</td>
-                  <td style="text-align:right">
-                    <strong>${money(settled)}</strong>
-                    ${isBargained ? `<small class="bargain-badge font-11" style="display:block;color:#f97316;">(Bargained -${money(stdRate - settled)})</small>` : ''}
-                  </td>
-                  <td>
-                    <span class="pill ${r.paymentStatus === 'paid' ? 'paid' : r.paymentStatus === 'advance' ? 'working' : 'pending'}">${r.paymentStatus === 'paid' ? 'Paid' : r.paymentStatus === 'advance' ? 'Advance Paid' : 'Pending'}</span>
-                    ${r.advanceAmount ? `<small class="muted font-11" style="display:block;">Adv: ${money(r.advanceAmount)}</small>` : ''}
-                  </td>
-                  <td>${fmtDate(r.expectedPaymentDate || r.bookingDate)}</td>
-                  <td style="text-align:right">
-                    <div style="display:inline-flex;gap:4px;">
-                      ${r.paymentStatus !== 'paid' ? `<button type="button" class="small-btn blue" data-rental-mark-paid="${r.id}" title="Mark Paid">✓ Paid</button>` : ''}
-                      <button type="button" class="small-btn" data-rental-edit="${r.id}" title="Edit Booking">✏️ Edit</button>
-                      <button type="button" class="small-btn danger" data-rental-delete="${r.id}" title="Delete Booking">🗑️ Delete</button>
-                    </div>
-                  </td>
-                </tr>
-              `;
-            }).join('')}
-          </tbody>
-        </table>
-      ` : `
-        <div class="empty">
-          <h3>No rental bookings found</h3>
-          <p>Click "+ Book Rental" to schedule a new rental.</p>
-        </div>
-      `}
+
+      <div class="rental-schedule-cards-list">
+        ${filtered.length ? filtered.map(r => {
+          const stdRate = num(r.standardRate || r.rate);
+          const settled = num(r.settledAmount != null ? r.settledAmount : r.rate);
+          const isBargained = settled < stdRate && stdRate > 0;
+          const advance = num(r.advanceAmount) || 0;
+          const balance = Math.max(0, settled - advance);
+          const isUpcoming = (r.bookingDate || '') >= todayStr;
+          const isTodayDate = r.bookingDate === todayStr;
+
+          return `
+            <div class="rental-schedule-card ${r.paymentStatus} ${isTodayDate ? 'is-today' : ''}" data-rental-id="${r.id}">
+              <div class="schedule-card-date-col">
+                <span class="schedule-card-day-name">${fmtDayName(r.bookingDate)}</span>
+                <span class="schedule-card-day-num">${fmtDayAndMonth(r.bookingDate)}</span>
+                <span class="schedule-card-rel-pill ${isTodayDate ? 'today' : isUpcoming ? 'upcoming' : 'past'}">
+                  ${isTodayDate ? 'Today!' : isUpcoming ? 'Upcoming' : 'Past'}
+                </span>
+              </div>
+
+              <div class="schedule-card-main-col">
+                <div class="schedule-card-title-row">
+                  <div style="display:flex;align-items:center;gap:8px;">
+                    <strong class="schedule-card-item-name">${esc(r.itemName)}</strong>
+                    <span class="pill ${r.paymentStatus === 'paid' ? 'paid' : r.paymentStatus === 'advance' ? 'working' : 'pending'}">${r.paymentStatus === 'paid' ? 'Paid' : r.paymentStatus === 'advance' ? 'Advance' : 'Due'}</span>
+                  </div>
+                  <div class="schedule-card-amount-box">
+                    <strong class="schedule-card-amount">${money(settled)}</strong>
+                    ${isBargained ? `<span class="bargain-badge font-10">(-${money(stdRate - settled)})</span>` : ''}
+                  </div>
+                </div>
+
+                <div class="schedule-card-details-row">
+                  <span class="schedule-detail-chip">👤 <strong>${esc(r.clientName)}</strong></span>
+                  <span class="schedule-detail-chip">⏱️ ${r.hours ? r.hours + ' hrs' : 'Full Day'}</span>
+                  ${advance > 0 && r.paymentStatus !== 'paid' ? `<span class="schedule-detail-chip advance">Adv: ${money(advance)} · Due: ${money(balance)}</span>` : ''}
+                  ${r.notes ? `<span class="schedule-detail-chip muted font-11">📍 ${esc(r.notes)}</span>` : ''}
+                </div>
+              </div>
+
+              <div class="schedule-card-actions-col">
+                <button type="button" class="small-btn" data-rental-details="${r.id}" title="View Details">👁️ Details</button>
+                <button type="button" class="small-btn" data-rental-edit="${r.id}" title="Edit Booking">✏️ Edit</button>
+                ${r.paymentStatus !== 'paid' ? `<button type="button" class="small-btn green" data-rental-mark-paid="${r.id}" title="Mark as fully paid">✓ Paid</button>` : ''}
+                <button type="button" class="small-btn danger" data-rental-delete="${r.id}" title="Delete booking">🗑️</button>
+              </div>
+            </div>
+          `;
+        }).join('') : `
+          <div class="empty">
+            <h3>No rental bookings found</h3>
+            <p>Click "＋ Rent an Item" to schedule a rental.</p>
+          </div>
+        `}
+      </div>
     </div>
   `;
+}
+
+function renderRentalsListView() {
+  return renderRentalsScheduleView();
 }
 
 function renderAvailabilityResults(targetDate, searchQuery) {
@@ -3043,15 +3068,6 @@ function renderAvailabilityResults(targetDate, searchQuery) {
         <span>🟢 All ${availableItems.length} Equipment Items Available on ${fmtDate(avail.date)}! (Zero Conflicts)</span>
         <button type="button" class="small-btn green" data-cal-add="${avail.date}">＋ Book on ${fmtDate(avail.date)}</button>
       </div>
-      <div class="rental-available-chips">
-        ${availableItems.map(it => `
-          <div class="rental-avail-chip">
-            <strong>${esc(it.name)}</strong>
-            <span class="muted font-11">(${esc(it.category)} · ₹${it.rate}/${it.rateType})</span>
-            <button type="button" class="small-btn blue" data-book-item="${it.id}" data-book-date="${avail.date}">+ Book</button>
-          </div>
-        `).join('')}
-      </div>
     `;
   }
 
@@ -3060,44 +3076,12 @@ function renderAvailabilityResults(targetDate, searchQuery) {
       <span>🔴 ${blockedRentals.length} Equipment Item${blockedRentals.length === 1 ? '' : 's'} BLOCKED on ${fmtDate(avail.date)}</span>
       <span class="font-11">${availableItems.length} items still free to rent</span>
     </div>
-    <div class="rental-blocked-grid">
-      ${blockedRentals.map(r => `
-        <div class="rental-blocked-card">
-          <div style="display:flex;justify-content:space-between;align-items:center;">
-            <strong>${esc(r.itemName)}</strong>
-            <span class="pill ${r.paymentStatus === 'paid' ? 'paid' : r.paymentStatus === 'advance' ? 'working' : 'pending'}" style="font-size:10px;">${r.paymentStatus === 'paid' ? 'Paid' : r.paymentStatus === 'advance' ? 'Advance' : 'Due'}</span>
-          </div>
-          <div class="muted font-11">Booked by: <strong>${esc(r.clientName)}</strong> (⏱ ${r.hours ? r.hours + ' hrs' : 'Full day'})</div>
-          <div style="display:flex;justify-content:space-between;align-items:center;margin-top:4px;">
-            <span>Settled: <strong>${money(r.settledAmount != null ? r.settledAmount : r.rate)}</strong></span>
-            <div style="display:flex;gap:4px;">
-              <button type="button" class="small-btn" data-rental-edit="${r.id}">Edit</button>
-              <button type="button" class="small-btn danger" data-rental-delete="${r.id}">🗑 Delete</button>
-            </div>
-          </div>
-        </div>
-      `).join('')}
-    </div>
-    ${availableItems.length ? `
-      <div style="margin-top:10px;">
-        <h5 style="margin:0 0 6px 0;color:#166534;font-size:12px;">✅ Available Equipment on ${fmtDate(avail.date)}:</h5>
-        <div class="rental-available-chips">
-          ${availableItems.map(it => `
-            <div class="rental-avail-chip">
-              <strong>${esc(it.name)}</strong>
-              <span class="muted font-11">(₹${it.rate})</span>
-              <button type="button" class="small-btn blue" data-book-item="${it.id}" data-book-date="${avail.date}">+ Book</button>
-            </div>
-          `).join('')}
-        </div>
-      </div>
-    ` : ''}
   `;
 }
 
 function bindRentals() {
-  $('#rentalToggleCalBtn')?.addEventListener('click', () => { rentalViewMode = 'calendar'; render(); });
-  $('#rentalToggleListBtn')?.addEventListener('click', () => { rentalViewMode = 'list'; render(); });
+  $('#rentalBackToCalBtn')?.addEventListener('click', () => { rentalViewMode = 'calendar'; render(); });
+  $('#rentalToggleScheduleBtn')?.addEventListener('click', () => { rentalViewMode = 'schedule'; render(); });
   $('#rentalOpenCatalogBtn')?.addEventListener('click', () => openRentalCatalogModal());
   $('#rentalNewBookingBtn')?.addEventListener('click', () => openRentalBookingModal());
 
@@ -3111,45 +3095,7 @@ function bindRentals() {
   });
   $('#rentalCalTodayBtn')?.addEventListener('click', () => {
     rentalCalendarMonth = today().slice(0, 7);
-    rentalSearchDate = today();
     render();
-  });
-
-  const datePick = $('#rentalAvailDatePick');
-  if (datePick) {
-    datePick.onchange = e => {
-      rentalSearchDate = e.target.value;
-      const res = $('#rentalAvailResults');
-      if (res) res.innerHTML = renderAvailabilityResults(rentalSearchDate, rentalSearchQuery);
-      bindRentalQuickBookButtons();
-    };
-  }
-
-  const searchInp = $('#rentalAvailSearchText');
-  if (searchInp) {
-    searchInp.oninput = e => {
-      rentalSearchQuery = e.target.value;
-      const parsedDate = parseRentalDateInput(e.target.value);
-      if (parsedDate && parsedDate !== e.target.value) {
-        rentalSearchDate = parsedDate;
-        if (datePick) datePick.value = parsedDate;
-      }
-      const res = $('#rentalAvailResults');
-      if (res) res.innerHTML = renderAvailabilityResults(rentalSearchDate || today(), rentalSearchQuery);
-      bindRentalQuickBookButtons();
-    };
-  }
-
-  $('#rentalCheckAvailBtn')?.addEventListener('click', () => {
-    const rawVal = $('#rentalAvailSearchText')?.value || $('#rentalAvailDatePick')?.value;
-    const norm = parseRentalDateInput(rawVal);
-    if (norm) {
-      rentalSearchDate = norm;
-      if (datePick) datePick.value = norm;
-    }
-    const res = $('#rentalAvailResults');
-    if (res) res.innerHTML = renderAvailabilityResults(rentalSearchDate || today(), rentalSearchQuery);
-    bindRentalQuickBookButtons();
   });
 
   $$('[data-rental-filter]').forEach(btn => {
@@ -3158,8 +3104,6 @@ function bindRentals() {
       render();
     };
   });
-
-  bindRentalQuickBookButtons();
 
   $$('.rental-cal-card[draggable="true"]').forEach(card => {
     card.ondragstart = e => {
@@ -3176,7 +3120,7 @@ function bindRentals() {
     };
     card.onclick = e => {
       e.stopPropagation();
-      openRentalBookingModal(card.dataset.rentalId);
+      openRentalDetailsModal(card.dataset.rentalId);
     };
   });
 
@@ -3207,20 +3151,119 @@ function bindRentals() {
     };
   });
 
-  $$('[data-rental-mark-paid]').forEach(b => b.onclick = () => markRentalPaid(b.dataset.rentalMarkPaid));
-  $$('[data-rental-edit]').forEach(b => b.onclick = () => openRentalBookingModal(b.dataset.rentalEdit));
-  $$('[data-rental-delete]').forEach(b => b.onclick = () => deleteRentalBooking(b.dataset.rentalDelete));
-}
-
-function bindRentalQuickBookButtons() {
   $$('[data-cal-add]').forEach(b => b.onclick = e => {
     e.stopPropagation();
     openRentalBookingModal(null, b.dataset.calAdd);
   });
-  $$('[data-book-item]').forEach(b => b.onclick = e => {
+
+  $$('[data-rental-details]').forEach(b => b.onclick = e => {
     e.stopPropagation();
-    openRentalBookingModal(null, b.dataset.bookDate, b.dataset.bookItem);
+    openRentalDetailsModal(b.dataset.rentalDetails);
   });
+  $$('[data-rental-mark-paid]').forEach(b => b.onclick = e => {
+    e.stopPropagation();
+    markRentalPaid(b.dataset.rentalMarkPaid);
+  });
+  $$('[data-rental-edit]').forEach(b => b.onclick = e => {
+    e.stopPropagation();
+    openRentalBookingModal(b.dataset.rentalEdit);
+  });
+  $$('[data-rental-delete]').forEach(b => b.onclick = e => {
+    e.stopPropagation();
+    deleteRentalBooking(b.dataset.rentalDelete);
+  });
+}
+
+function openRentalDetailsModal(rentalId) {
+  const rental = (data.rentals || []).find(r => r.id === rentalId);
+  if (!rental) return;
+  const stdRate = num(rental.standardRate || rental.rate);
+  const settled = num(rental.settledAmount != null ? rental.settledAmount : rental.rate);
+  const isBargained = settled < stdRate && stdRate > 0;
+  const advance = num(rental.advanceAmount) || 0;
+  const balanceDue = Math.max(0, settled - advance);
+
+  const modalHtml = `
+    <div class="rental-detail-modal">
+      <div class="rental-detail-hero">
+        <div class="rental-detail-item-title">
+          <span class="rental-detail-icon">📦</span>
+          <div>
+            <h3>${esc(rental.itemName)}</h3>
+            <span class="muted font-12">${fmtDate(rental.bookingDate)} · ${rental.hours ? rental.hours + ' hrs' : 'Full Day'}</span>
+          </div>
+        </div>
+        <div class="rental-detail-badges">
+          <span class="pill ${rental.paymentStatus === 'paid' ? 'paid' : rental.paymentStatus === 'advance' ? 'working' : 'pending'}">${rental.paymentStatus === 'paid' ? '✓ Fully Paid' : rental.paymentStatus === 'advance' ? '⚡ Advance Paid' : '⏳ Pending Payment'}</span>
+          <span class="pill ${rental.status === 'booked' ? 'pending' : rental.status === 'active' ? 'working' : 'paid'}">${rental.status === 'booked' ? '📅 Scheduled' : rental.status === 'active' ? '⚡ Out on Rent' : '✓ Completed'}</span>
+        </div>
+      </div>
+
+      <div class="rental-detail-grid">
+        <div class="rental-detail-field">
+          <span class="rental-detail-label">Client / Renter</span>
+          <strong class="rental-detail-value">${esc(rental.clientName)}</strong>
+        </div>
+        <div class="rental-detail-field">
+          <span class="rental-detail-label">Booking Date</span>
+          <strong class="rental-detail-value">${fmtDate(rental.bookingDate)}</strong>
+        </div>
+        <div class="rental-detail-field">
+          <span class="rental-detail-label">Standard Rate</span>
+          <span class="rental-detail-value muted">${stdRate ? money(stdRate) : '—'}</span>
+        </div>
+        <div class="rental-detail-field">
+          <span class="rental-detail-label">Agreed / Settled Rate</span>
+          <strong class="rental-detail-value" style="color:#16a34a;font-size:15px;">${money(settled)}</strong>
+          ${isBargained ? `<small class="font-11" style="color:#f97316;">(Bargained -${money(stdRate - settled)})</small>` : ''}
+        </div>
+        <div class="rental-detail-field">
+          <span class="rental-detail-label">Advance Received</span>
+          <span class="rental-detail-value">${advance ? money(advance) : '₹0'}</span>
+        </div>
+        <div class="rental-detail-field">
+          <span class="rental-detail-label">Balance Outstanding</span>
+          <strong class="rental-detail-value" style="color:${balanceDue > 0 ? '#ef4444' : '#16a34a'};">${balanceDue > 0 ? money(balanceDue) : 'Cleared ✓'}</strong>
+        </div>
+        <div class="rental-detail-field">
+          <span class="rental-detail-label">Expected Payment Inflow</span>
+          <span class="rental-detail-value">${fmtDate(rental.expectedPaymentDate || rental.bookingDate)}</span>
+        </div>
+        <div class="rental-detail-field">
+          <span class="rental-detail-label">Venue / Setup Notes</span>
+          <span class="rental-detail-value">${esc(rental.notes || 'No venue or notes recorded')}</span>
+        </div>
+      </div>
+    </div>
+  `;
+
+  const footerHtml = `
+    <div class="modal-actions-spread">
+      <div>
+        <button type="button" class="small-btn danger" id="rentalDetailDeleteBtn">🗑️ Delete Booking</button>
+      </div>
+      <div class="modal-actions-right">
+        ${rental.paymentStatus !== 'paid' ? `<button type="button" class="small-btn green" id="rentalDetailPaidBtn">✓ Mark as Paid</button>` : ''}
+        <button type="button" class="small-btn blue" id="rentalDetailEditBtn">✏️ Edit Booking</button>
+        <button type="button" class="small-btn" id="rentalDetailCloseBtn">Close</button>
+      </div>
+    </div>
+  `;
+
+  modal(`Rental Booking · ${rental.itemName}`, modalHtml, footerHtml, true);
+
+  $('#rentalDetailDeleteBtn')?.addEventListener('click', () => {
+    deleteRentalBooking(rental.id);
+  });
+  $('#rentalDetailPaidBtn')?.addEventListener('click', () => {
+    markRentalPaid(rental.id);
+    closeModal();
+  });
+  $('#rentalDetailEditBtn')?.addEventListener('click', () => {
+    closeModal();
+    openRentalBookingModal(rental.id);
+  });
+  $('#rentalDetailCloseBtn')?.addEventListener('click', closeModal);
 }
 
 function openRentalBookingModal(rentalId = null, prefilledDate = null, prefilledItemId = null) {
@@ -3265,11 +3308,12 @@ function openRentalBookingModal(rentalId = null, prefilledDate = null, prefilled
 
       <div class="form-grid-2">
         <label>
-          <span>Client / Event Name <strong class="req">*</strong></span>
-          <input type="text" id="rentalClientName" placeholder="e.g. Junoon by the Sea, Kapoor Sangeet" value="${esc(defaultClient)}" required list="rentalClientList">
+          <span>Client / Individual Customer Name <strong class="req">*</strong></span>
+          <input type="text" id="rentalClientName" placeholder="e.g. Rahul Sharma (Individual) or Junoon (Client)" value="${esc(defaultClient)}" required list="rentalClientList" autocomplete="off">
           <datalist id="rentalClientList">
             ${data.clients.map(c => `<option value="${esc(c.name)}">`).join('')}
           </datalist>
+          <small class="muted font-11">Enter any individual person or pick a client (individual renters will not create worksheet tabs)</small>
         </label>
 
         <label>
@@ -3358,7 +3402,7 @@ function openRentalBookingModal(rentalId = null, prefilledDate = null, prefilled
       </div>
       <div class="modal-actions-right">
         <button type="button" class="small-btn" id="cancelRentalModalBtn">Cancel</button>
-        <button type="button" class="small-btn blue" id="saveRentalModalBtn">💾 ${isEdit ? 'Save Changes' : 'Confirm Booking'}</button>
+        <button type="button" class="small-btn green" id="saveRentalModalBtn" style="font-weight:700;">💾 ${isEdit ? 'Save Changes' : 'Confirm Booking'}</button>
       </div>
     </div>
   `;
@@ -3407,9 +3451,16 @@ function bindRentalBookingModalEvents(rental) {
     const itName = isCustom ? (customInput?.value || '') : (catalog.find(i => i.id === selVal)?.name || '');
     const dateVal = dateInput.value;
     const conflict = checkItemBookingConflict(isCustom ? null : selVal, itName, dateVal, rental ? rental.id : null);
+    const sameDay = getBookingsOnDate(dateVal, rental ? rental.id : null);
+
     if (conflict) {
+      conflictNotice.className = 'rental-conflict-banner warning';
       conflictNotice.style.display = '';
       conflictNotice.innerHTML = conflict.message;
+    } else if (sameDay.length > 0) {
+      conflictNotice.className = 'rental-conflict-banner info';
+      conflictNotice.style.display = '';
+      conflictNotice.innerHTML = `ℹ️ <strong>${sameDay.length} other booking(s)</strong> already scheduled on ${fmtDate(dateVal)}: ${sameDay.map(s => `<strong>${esc(s.itemName)}</strong> (${esc(s.clientName)})`).join(', ')}`;
     } else {
       conflictNotice.style.display = 'none';
     }
@@ -3456,7 +3507,7 @@ function bindRentalBookingModalEvents(rental) {
     const notes = $('#rentalNotes')?.value.trim() || '';
 
     if (!clientName) {
-      toast('Please enter a client or event name');
+      toast('Please enter a client or customer name');
       $('#rentalClientName')?.focus();
       return;
     }
@@ -3494,47 +3545,106 @@ function openRentalCatalogModal() {
 
   const modalHtml = `
     <div class="rental-catalog-manager">
-      <div class="catalog-add-form-card">
-        <h4>＋ Add New Equipment to Catalog</h4>
-        <div class="catalog-add-grid">
-          <input type="text" id="newEquipName" placeholder="Equipment Name (e.g. Nanlite Forza 500)" required>
-          <input type="text" id="newEquipCategory" placeholder="Category (e.g. Lighting, Sound, Stage)" value="Lighting">
-          <div class="input-with-prefix">
-            <span class="prefix">₹</span>
-            <input type="number" id="newEquipRate" placeholder="Standard Rate" min="0" step="1">
+      <div class="catalog-add-box">
+        <div class="catalog-add-box-header">
+          <h4 style="margin:0 0 2px 0;">＋ Add New Equipment to Catalog</h4>
+          <span class="muted font-11">Add lights, sound, cameras, projectors, or any gear to your rental inventory</span>
+        </div>
+        <div class="catalog-add-form">
+          <div class="form-grid-2">
+            <label>
+              <span>Equipment Name <strong class="req">*</strong></span>
+              <input type="text" id="newEquipName" placeholder="e.g. Nanlite Forza 500, Sony FX3, Smoke Machine" required>
+            </label>
+            <label>
+              <span>Category</span>
+              <select id="newEquipCategory">
+                <option value="Lighting">Lighting</option>
+                <option value="Sound">Sound / Audio</option>
+                <option value="Video & Projection">Video & Projection</option>
+                <option value="Grip & Stands">Grip & Stands</option>
+                <option value="Cameras & Lenses">Cameras & Lenses</option>
+                <option value="Effects & Atmosphere">Effects & Atmosphere</option>
+                <option value="Stage & Truss">Stage & Truss</option>
+                <option value="Power & Cables">Power & Cables</option>
+                <option value="Other">Other Equipment</option>
+              </select>
+            </label>
           </div>
-          <select id="newEquipRateType">
-            <option value="day">per day / event</option>
-            <option value="hour">per hour</option>
-          </select>
-          <input type="text" id="newEquipDesc" placeholder="Brief Specs / Included Accessories (optional)">
-          <button type="button" class="small-btn blue" id="addNewEquipBtn">Add Equipment</button>
+
+          <div class="form-grid-3">
+            <label>
+              <span>Standard Rate <strong class="req">*</strong></span>
+              <div class="input-with-prefix">
+                <span class="prefix">₹</span>
+                <input type="number" id="newEquipRate" placeholder="e.g. 4500" min="0" step="1" required>
+              </div>
+            </label>
+            <label>
+              <span>Rate Billing Unit</span>
+              <select id="newEquipRateType">
+                <option value="day">per day / event</option>
+                <option value="hour">per hour</option>
+                <option value="event">per event</option>
+              </select>
+            </label>
+            <label>
+              <span>Specs / Notes</span>
+              <input type="text" id="newEquipDesc" placeholder="e.g. Included case, 2 batteries, stands">
+            </label>
+          </div>
+
+          <div style="display:flex;justify-content:flex-end;margin-top:6px;">
+            <button type="button" class="small-btn green" id="addNewEquipBtn" style="font-weight:700;padding:6px 16px;">＋ Add Equipment to Inventory</button>
+          </div>
         </div>
       </div>
 
-      <div class="catalog-items-list-wrap">
-        <h4>Current Equipment Inventory (${catalog.length} items)</h4>
-        <div class="catalog-items-grid">
-          ${catalog.map(it => `
-            <div class="catalog-item-card" data-catalog-item-id="${it.id}">
-              <div class="catalog-item-top">
-                <span class="catalog-category-tag">${esc(it.category || 'Rental')}</span>
-                <span class="catalog-rate-tag">₹${Number(it.rate || 0).toLocaleString('en-IN')}/${esc(it.rateType || 'day')}</span>
-              </div>
-              <strong class="catalog-item-name">${esc(it.name)}</strong>
-              <p class="catalog-item-desc muted font-11">${esc(it.description || 'No description added')}</p>
-              <div class="catalog-item-actions">
-                <button type="button" class="small-btn" data-catalog-book="${it.id}">+ Book</button>
-                <button type="button" class="small-btn danger" data-catalog-delete="${it.id}">🗑 Delete</button>
-              </div>
-            </div>
-          `).join('')}
+      <div class="catalog-items-section">
+        <div class="catalog-items-section-header">
+          <h4 style="margin:0;">Equipment Inventory (${catalog.length} items)</h4>
+          <span class="muted font-11">All items in your catalog available for bookings</span>
+        </div>
+
+        <div class="catalog-table-wrap">
+          <table class="catalog-table">
+            <thead>
+              <tr>
+                <th>EQUIPMENT NAME</th>
+                <th>CATEGORY</th>
+                <th>STANDARD RATE</th>
+                <th>SPECS / NOTES</th>
+                <th>BOOKINGS</th>
+                <th style="text-align:right">ACTIONS</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${catalog.map(it => {
+                const activeBookingsCount = (data.rentals || []).filter(r => r.itemId === it.id && r.status !== 'cancelled').length;
+                return `
+                  <tr data-catalog-row="${it.id}">
+                    <td><strong>${esc(it.name)}</strong></td>
+                    <td><span class="catalog-cat-badge">${esc(it.category || 'Rental')}</span></td>
+                    <td><strong class="catalog-rate-value">₹${Number(it.rate || 0).toLocaleString('en-IN')}</strong> <span class="muted font-11">/${esc(it.rateType || 'day')}</span></td>
+                    <td class="muted font-11">${esc(it.description || '—')}</td>
+                    <td><span class="pill ${activeBookingsCount > 0 ? 'working' : 'pending'}" style="font-size:10px;">${activeBookingsCount} booked</span></td>
+                    <td style="text-align:right">
+                      <div style="display:inline-flex;gap:6px;">
+                        <button type="button" class="small-btn blue" data-catalog-book="${it.id}" title="Book this item">＋ Rent</button>
+                        <button type="button" class="small-btn danger" data-catalog-delete="${it.id}" title="Delete this item from inventory">🗑️ Delete</button>
+                      </div>
+                    </td>
+                  </tr>
+                `;
+              }).join('')}
+            </tbody>
+          </table>
         </div>
       </div>
     </div>
   `;
 
-  modal('Equipment Catalog & Rental Inventory', modalHtml, `<div class="modal-actions"><button type="button" class="small-btn" id="closeCatalogModalBtn">Close</button></div>`, true);
+  modal(`📦 Equipment Catalog & Items (${catalog.length})`, modalHtml, `<div class="modal-actions"><button type="button" class="small-btn" id="closeCatalogModalBtn">Close</button></div>`, true);
   bindRentalCatalogModalEvents();
 }
 
@@ -3576,8 +3686,7 @@ function bindRentalCatalogModalEvents() {
 
   $$('[data-catalog-delete]').forEach(b => {
     b.onclick = () => {
-      deleteRentalItem(b.dataset.catalogDelete);
-      openRentalCatalogModal();
+      deleteRentalItem(b.dataset.catalogDelete, true);
     };
   });
 }

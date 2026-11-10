@@ -259,4 +259,35 @@ updatedCatalog = vm.runInContext('data.rentalItems', context);
 assert(!updatedCatalog.some(i => i.id === 'equip-smoke-1'), 'Deleted equipment must be removed from catalog');
 console.log('✓ Test 11: Adding and deleting items in equipment catalog verified');
 
-console.log('\nALL 11 RENTALS MANAGEMENT TESTS PASSED SUCCESSFULLY! 🎉📦📅');
+// Test 12: Individual Customer Booking (Zero Client Tab Pollution)
+console.log('--- Test 12: Individual Customer Rental (Zero Worksheet Contamination) ---');
+const clientsBefore = vm.runInContext('data.clients.length', context);
+const indBooking = {
+  itemId: initialItems[0].id,
+  itemName: initialItems[0].name,
+  clientName: 'Sanjay Deshmukh (One-off individual renter)',
+  bookingDate: '2026-11-25',
+  hours: 6,
+  standardRate: 4500,
+  settledAmount: 4500,
+  paymentStatus: 'pending',
+  status: 'booked'
+};
+vm.runInContext(`saveRentalBooking(${JSON.stringify(indBooking)})`, context);
+const clientsAfter = vm.runInContext('data.clients.length', context);
+assert.equal(clientsAfter, clientsBefore, 'Individual rental customer must NOT add a client worksheet tab');
+const recordedRental = vm.runInContext('data.rentals.find(r => r.clientName.includes("Sanjay Deshmukh"))', context);
+assert(recordedRental != null, 'Rental record with individual name must be saved in data.rentals');
+console.log('✓ Test 12: Individual customer booking safely recorded without creating worksheet tabs');
+
+// Test 13: CSS Verification for Month Badge and Schedule View
+console.log('--- Test 13: CSS Verification for Green Month Badge & Schedule ---');
+assert(extrasCss.includes('.rental-month-badge'), 'extras.css must include .rental-month-badge');
+assert(extrasCss.includes('background-color: #16a34a') || extrasCss.includes('background: #16a34a'), 'Month badge must have green circle background');
+assert(extrasCss.includes('.rental-schedule-wrap'), 'extras.css must include .rental-schedule-wrap');
+assert(extrasCss.includes('.rental-schedule-card'), 'extras.css must include .rental-schedule-card');
+assert(extrasCss.includes('.rental-detail-modal'), 'extras.css must include .rental-detail-modal');
+assert(extrasCss.includes('.catalog-table'), 'extras.css must include .catalog-table');
+console.log('✓ Test 13: Green month badge and schedule CSS classes verified');
+
+console.log('\nALL 13 RENTALS MANAGEMENT TESTS PASSED SUCCESSFULLY! 🎉📦📅');
