@@ -982,7 +982,8 @@ function renderSheet() {
     }
   }
 
-  for(const i of items){
+  for(let idx=0; idx<items.length; idx++){
+    const i=items[idx];
     const project = i.projectGroupId ? projectGroupMap.get(i.projectGroupId) : null;
     if(project&&!projectsSeen.has(project.id)){
       projectsSeen.add(project.id);
@@ -998,8 +999,13 @@ function renderSheet() {
     if(deal&&collapsedGroups.has('deal:'+deal.id))continue;
     const own=['working','changes'].includes(i.status)&&i.assigneeId===currentUserId();
     const other=['working','changes'].includes(i.status)&&i.assigneeId&&i.assigneeId!==currentUserId();
+    const nextItem = items[idx + 1];
+    const isLastOfProject = i.projectGroupId && (!nextItem || nextItem.projectGroupId !== i.projectGroupId);
+    const isLastOfDeal = i.groupId && (!nextItem || nextItem.groupId !== i.groupId);
+    const lastRowClass = isLastOfProject ? 'project-group-last' : isLastOfDeal ? 'deal-group-last' : '';
+    const projClass = i.projectGroupId ? 'project-grouped' : '';
     const value=(key,v,extra='')=>`<td><input data-cell="${key}" data-id="${i.id}" value="${esc(v??'')}" title="${esc(v??'')}" ${extra} readonly></td>`;
-    rows+=`<tr data-row="${i.id}" class="${selected.has(i.id)?'selected':''} ${i.groupId?'grouped':''} ${i.status==='paid'&&i.groupId?'paid-group':''} ${i.status==='discarded'?'discarded-row':''} ${own?'working-own':''} ${other?'working-other':''} ${i.service?'has-entry':''}">
+    rows+=`<tr data-row="${i.id}" class="${selected.has(i.id)?'selected':''} ${i.groupId?'grouped':''} ${projClass} ${lastRowClass} ${i.status==='paid'&&i.groupId?'paid-group':''} ${i.status==='discarded'?'discarded-row':''} ${own?'working-own':''} ${other?'working-other':''} ${i.service?'has-entry':''}">
       <td class="row-selector"><input type="checkbox" data-check="${i.id}" ${selected.has(i.id)?'checked':''}></td>
       ${value('serial',cleanSerial(i.serial??(i.sortOrder+1)))}${value('workDate',i.workDate||'')}${value('service',i.service)}${value('quantity',i.quantity)}${value('rate',i.rate)}${value('quotedTotal',i.quotedTotal,'class="money-cell"')}
       <td class="status-cell ${i.status}"><button type="button" class="status-trigger" data-status-menu="${i.id}" aria-label="Change status from ${esc(displayStatus(i))}" aria-haspopup="listbox" aria-expanded="false"><span class="status-dot"></span><span>${esc(displayStatus(i))}</span><svg class="status-chevron" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="m4.5 6 3.5 3.5L11.5 6" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg></button></td>
@@ -1008,7 +1014,7 @@ function renderSheet() {
       ${value('remarks',i.remarks||'')}</tr>`;
   }
   if(filter==='all')rows+=Array.from({length:blankRows},(_,n)=>blankRowHtml(all.length+n)).join('');
-  return `<div class="sheet-shell"><div class="sheet-toolbar"><div class="actions"><button type="button" class="small-btn icon-btn" data-action="undo" title="Undo (Ctrl+Z)" ${undoStack.length?'':'disabled'} aria-label="Undo"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7v6h6"/><path d="M21 17a9 9 0 0 0-9-9 9 9 0 0 0-6 2.3L3 13"/></svg></button><button type="button" class="small-btn icon-btn" data-action="redo" title="Redo (Ctrl+Y)" ${redoStack.length?'':'disabled'} aria-label="Redo"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round"><path d="M21 7v6h-6"/><path d="M3 17a9 9 0 0 1 9-9 9 9 0 0 1 6 2.3L21 13"/></svg></button><button class="small-btn green" data-action="add-multiples" title="Add multiple rows from formatted WhatsApp/text">➕ Add Multiples</button><button class="small-btn purple" data-action="smart-update" title="Find words and bulk update rate or status across rows">⚡ Smart Update</button><button class="small-btn blue" data-action="assign" ${selected.size?'':'disabled'}>● Start work</button><button class="small-btn" data-action="complete" ${selected.size?'':'disabled'}>✓ Mark sent</button><button class="small-btn" data-action="invoice" ${selected.size?'':'disabled'}>▣ Create invoice</button><button class="small-btn" data-action="share-chat" ${selected.size?'':'disabled'} title="Share selected row(s) in Team Chat">💬 Share in chat</button><button class="small-btn danger" data-action="delete" title="Delete selected row(s) (Del)" ${selected.size?'':'disabled'}>🗑 Delete row</button><button type="button" class="small-btn" data-action="insert-above" title="Insert row above selected (Ctrl+Shift+Enter)" ${selected.size===1?'':'disabled'}>⬆ Row Above</button><button type="button" class="small-btn" data-action="insert-below" title="Insert row below selected (Ctrl+Alt+Enter)" ${selected.size===1?'':'disabled'}>⬇ Row Below</button><button class="small-btn" data-action="group" ${selected.size>1?'':'disabled'}>Group deal</button><button class="small-btn" data-action="project-group" ${selected.size?'':'disabled'}>Group project</button><select id="bulkStatus" aria-label="Set selected rows status" ${selected.size?'':'disabled'}><option value="">Set status…</option>${['pending','working','changes','sent','paid','discarded'].map(s=>`<option value="${s}">${s[0].toUpperCase()+s.slice(1)}</option>`).join('')}<option value="paid-date">Paid on date…</option></select><select id="workFilter" aria-label="Filter work">${['all','pending','working','changes','sent','paid','discarded'].map(s=>`<option value="${s}" ${filter===s?'selected':''}>${s==='all'?'All work':s[0].toUpperCase()+s.slice(1)}</option>`).join('')}</select><span class="hint" id="selectedCount">${selectionLabelHtml()}</span></div></div>
+  return `<div class="sheet-shell"><div class="sheet-toolbar"><div class="actions"><button type="button" class="small-btn icon-btn" data-action="undo" title="Undo (Ctrl+Z)" ${undoStack.length?'':'disabled'} aria-label="Undo"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7v6h6"/><path d="M21 17a9 9 0 0 0-9-9 9 9 0 0 0-6 2.3L3 13"/></svg></button><button type="button" class="small-btn icon-btn" data-action="redo" title="Redo (Ctrl+Y)" ${redoStack.length?'':'disabled'} aria-label="Redo"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round"><path d="M21 7v6h-6"/><path d="M3 17a9 9 0 0 1 9-9 9 9 0 0 1 6 2.3L21 13"/></svg></button><button class="small-btn green" data-action="add-multiples" title="Add multiple rows from formatted WhatsApp/text">➕ Add Multiples</button><button class="small-btn purple" data-action="smart-update" title="Find words and bulk update rate or status across rows">⚡ Smart Update</button><button class="small-btn blue" data-action="assign" ${selected.size?'':'disabled'}>● Start work</button><button class="small-btn" data-action="complete" ${selected.size?'':'disabled'}>✓ Mark sent</button><button class="small-btn" data-action="invoice" ${selected.size?'':'disabled'}>▣ Create invoice</button><button class="small-btn" data-action="share-chat" ${selected.size?'':'disabled'} title="Share selected row(s) in Team Chat">💬 Share in chat</button><button class="small-btn danger" data-action="delete" title="Delete selected row(s) (Del)" ${selected.size?'':'disabled'}>🗑 Delete row</button><button type="button" class="small-btn" data-action="insert-above" title="Insert row above selected (Ctrl+Shift+Enter)" ${selected.size===1?'':'disabled'}>⬆ Row Above</button><button type="button" class="small-btn" data-action="insert-below" title="Insert row below selected (Ctrl+Alt+Enter)" ${selected.size===1?'':'disabled'}>⬇ Row Below</button><button class="small-btn" data-action="group" ${selected.size>1?'':'disabled'}>Group deal</button><button class="small-btn" data-action="project-group" ${selected.size?'':'disabled'}>Group project</button><button class="small-btn" data-action="add-to-group" ${selected.size?'':'disabled'} title="Add selected row(s) to an existing project or deal group">Add to group</button><select id="bulkStatus" aria-label="Set selected rows status" ${selected.size?'':'disabled'}><option value="">Set status…</option>${['pending','working','changes','sent','paid','discarded'].map(s=>`<option value="${s}">${s[0].toUpperCase()+s.slice(1)}</option>`).join('')}<option value="paid-date">Paid on date…</option></select><select id="workFilter" aria-label="Filter work">${['all','pending','working','changes','sent','paid','discarded'].map(s=>`<option value="${s}" ${filter===s?'selected':''}>${s==='all'?'All work':s[0].toUpperCase()+s.slice(1)}</option>`).join('')}</select><span class="hint" id="selectedCount">${selectionLabelHtml()}</span></div></div>
     <div class="sheet-viewport"><table class="sheet"><thead><tr><th class="row-selector"><input type="checkbox" id="selectAll" aria-label="Select visible rows"></th><th>SR</th><th>DATE</th><th>SERVICE PROVIDED</th><th>QTY</th><th>RATE</th><th>TOTAL</th><th>STATUS</th><th>ADVANCE</th><th>ASSIGNED</th><th>REMARKS</th></tr></thead><tbody>${rows}</tbody></table></div></div>`;
 }
 
@@ -4717,6 +4723,7 @@ function bindMain() {
         `<button id="contextUndo" ${undoStack.length?'':'disabled'}><span class="context-icon">↶</span><span>Undo</span><kbd>Ctrl+Z</kbd></button>`+
         `<button id="contextRedo" ${redoStack.length?'':'disabled'}><span class="context-icon">↷</span><span>Redo</span><kbd>Ctrl+Y</kbd></button>`+
         `<div class="context-divider"></div>`+
+        `<button id="contextAddToGroup"><span class="context-icon">📁</span><span>Add to existing group…</span></button>`+
         `<button id="contextUngroup" ${hasGrouped?'':'disabled'}><span class="context-icon">⎘</span><span>Ungroup rows</span></button>`+
         `<button id="contextMoveSerial"><span class="context-icon">⇄</span><span>Move to serial #…</span></button>`+
         `<button id="contextMoveUp"><span class="context-icon">↑</span><span>Move row up</span><kbd>Alt+↑</kbd></button>`+
@@ -4737,6 +4744,7 @@ function bindMain() {
       $('#contextDelete').onclick=()=>{menu.remove();deleteSelectedRows([...selected]);};
       if($('#contextUndo'))$('#contextUndo').onclick=()=>{menu.remove();undo();};
       if($('#contextRedo'))$('#contextRedo').onclick=()=>{menu.remove();redo();};
+      if($('#contextAddToGroup'))$('#contextAddToGroup').onclick=()=>{menu.remove();addToExistingGroupDialog([...selected]);};
       if($('#contextUngroup'))$('#contextUngroup').onclick=()=>{menu.remove();ungroupSelectedRows();};
       $('#contextMoveSerial').onclick=()=>{menu.remove();moveRowDialog(rowId);};
       $('#contextMoveUp').onclick=()=>{menu.remove();moveRowByDelta(rowId,-1);};
@@ -5029,6 +5037,7 @@ function refreshSelection() {
   for(const action of ['assign','complete','invoice','share-chat','delete']){const button=$(`[data-action="${action}"]`);if(button)button.disabled=!selected.size;}
   const group=$('[data-action="group"]');if(group)group.disabled=selected.size<2;
   const project=$('[data-action="project-group"]');if(project)project.disabled=!selected.size;
+  const addToGroup=$('[data-action="add-to-group"]');if(addToGroup)addToGroup.disabled=!selected.size;
   const ungroup=$('[data-action="ungroup"]');if(ungroup)ungroup.disabled=!hasGroupedSelected();
   const insertAbove=$('[data-action="insert-above"]');if(insertAbove)insertAbove.disabled=selected.size!==1;
   const insertBelow=$('[data-action="insert-below"]');if(insertBelow)insertBelow.disabled=selected.size!==1;
@@ -8568,6 +8577,7 @@ function actions(action) {
   if(action==='smart-update')return smartUpdateDialog();
   if(action==='assign')return assign([...selected]); if(action==='complete')return markSent([...selected]); if(action==='invoice')return invoiceDialog(); if(action==='group')return groupDialog();
   if(action==='project-group')return projectGroupDialog();
+  if(action==='add-to-group')return addToExistingGroupDialog([...selected]);
   if(action==='ungroup')return ungroupSelectedRows();
   if(action==='share-chat')return shareSelectedRowsInChat();
   if(action==='cat-quick-ping')return openCatReactionPicker();
@@ -8616,6 +8626,146 @@ function projectGroupDialog() {
   if(new Set(chosen.map(i=>i.clientId)).size!==1){toast('Select rows from one client');return;}
   modal('Group project',`<p>Organize ${chosen.length} selected rows under one collapsible project heading.</p><div class="field"><label>Project group name</label><input id="projectGroupName" placeholder="For example, Sheena and Royston" autofocus></div>`,`<div class="modal-actions"><button class="small-btn blue" id="saveProjectGroup">Create group</button></div>`);
   $('#saveProjectGroup').onclick=()=>{const name=inputValue('projectGroupName');if(!name){toast('Enter a group name');return;}pushUndo('Group project');const group={id:uid(),clientId:chosen[0].clientId,label:name};for(const item of chosen){item.projectGroupId=group.id;queue('items',item.id);}mutate('projectGroups',group);syncProjectReceipt(group.id);selected.clear();closeModal();toast('Project group created');};
+}
+function addToExistingGroupDialog(rowIds) {
+  const ids = Array.isArray(rowIds) ? rowIds : (selected.size ? [...selected] : []);
+  if (!ids.length) return;
+  const chosen = (data.items || []).filter(i => ids.includes(i.id));
+  if (!chosen.length) return;
+
+  const clientId = chosen[0].clientId || activeClient;
+  if (chosen.some(i => i.clientId !== clientId)) {
+    toast('Select rows from one client');
+    return;
+  }
+
+  const projectGroups = (data.projectGroups || []).filter(g => g.clientId === clientId);
+  const dealGroups = (data.groups || []).filter(g => g.clientId === clientId);
+
+  if (!projectGroups.length && !dealGroups.length) {
+    toast('No existing groups found for this client');
+    return;
+  }
+
+  let optionsHtml = '';
+  if (projectGroups.length) {
+    optionsHtml += `<optgroup label="Project Groups">`;
+    projectGroups.forEach(g => {
+      const count = (data.items || []).filter(i => i.projectGroupId === g.id && i.status !== 'discarded').length;
+      optionsHtml += `<option value="project:${g.id}">📁 Project: ${esc(g.label)} (${count} items)</option>`;
+    });
+    optionsHtml += `</optgroup>`;
+  }
+  if (dealGroups.length) {
+    optionsHtml += `<optgroup label="Deal Groups">`;
+    dealGroups.forEach(g => {
+      const count = (data.items || []).filter(i => i.groupId === g.id && i.status !== 'discarded').length;
+      optionsHtml += `<option value="deal:${g.id}">💼 Deal: ${esc(g.label)} (${count} items)</option>`;
+    });
+    optionsHtml += `</optgroup>`;
+  }
+
+  const rowSummary = chosen.length === 1
+    ? `row <strong>#${esc(cleanSerial(chosen[0].serial))} – ${esc(chosen[0].service || 'Untitled row')}</strong>`
+    : `<strong>${chosen.length} selected rows</strong>`;
+
+  modal('Add to Existing Group', `
+    <div style="display:flex;flex-direction:column;gap:12px;">
+      <p style="margin:0;font-size:13px;color:#283e30;">
+        Add ${rowSummary} into an existing group:
+      </p>
+      <div class="field">
+        <label for="existingGroupSelect">Choose group:</label>
+        <select id="existingGroupSelect" style="height:36px;font-size:13px;" autofocus>
+          ${optionsHtml}
+        </select>
+      </div>
+      <label style="display:flex;align-items:center;gap:8px;font-size:12px;color:#475569;cursor:pointer;user-select:none;margin-top:2px;">
+        <input type="checkbox" id="moveAdjacentToGroup" checked>
+        <span>Move row position in worksheet to the end of that group</span>
+      </label>
+    </div>
+  `, `
+    <div class="modal-actions">
+      <button type="button" class="small-btn" id="cancelAddToGroup">Cancel</button>
+      <button type="button" class="small-btn blue" id="confirmAddToGroup">Add to Group</button>
+    </div>
+  `);
+
+  $('#cancelAddToGroup').onclick = closeModal;
+  $('#confirmAddToGroup').onclick = () => {
+    const val = $('#existingGroupSelect')?.value;
+    if (!val) {
+      toast('Please choose a group');
+      return;
+    }
+    const [kind, groupId] = val.split(':');
+    const table = kind === 'project' ? 'projectGroups' : 'groups';
+    const targetGroup = (data[table] || []).find(g => g.id === groupId);
+    if (!targetGroup) {
+      toast('Selected group not found');
+      return;
+    }
+
+    const shouldMove = !!$('#moveAdjacentToGroup')?.checked;
+    closeModal();
+    pushUndo(`Add to group "${targetGroup.label}"`);
+
+    for (const item of chosen) {
+      if (kind === 'project') {
+        item.projectGroupId = groupId;
+      } else {
+        item.groupId = groupId;
+      }
+      enqueue('items', item.id);
+    }
+
+    if (shouldMove) {
+      const all = clientItems(clientId);
+      const chosenSet = new Set(chosen.map(c => c.id));
+      const remaining = all.filter(it => !chosenSet.has(it.id));
+      
+      let targetIndex = -1;
+      for (let idx = 0; idx < remaining.length; idx++) {
+        const it = remaining[idx];
+        if ((kind === 'project' ? it.projectGroupId : it.groupId) === groupId) {
+          targetIndex = idx;
+        }
+      }
+
+      if (targetIndex >= 0) {
+        remaining.splice(targetIndex + 1, 0, ...chosen);
+        remaining.forEach((it, idx) => {
+          it.sortOrder = idx;
+          it.serial = cleanSerial(String(idx + 1));
+          it.updatedAt = new Date().toISOString();
+          enqueue('items', it.id);
+        });
+      }
+    }
+
+    if (kind === 'project') {
+      syncProjectReceipt(groupId);
+    } else {
+      syncDealReceipt(groupId);
+    }
+
+    consolidateAllReceipts();
+    save();
+    scheduleSync();
+    render();
+
+    setTimeout(() => {
+      const firstChosen = chosen[0];
+      if (firstChosen) {
+        const el = document.querySelector(`[data-row="${firstChosen.id}"]`);
+        el?.scrollIntoView({ block: 'center', behavior: 'smooth' });
+        selectSheetRow(firstChosen.id, false, false);
+      }
+    }, 60);
+
+    toast(`Added ${chosen.length > 1 ? `${chosen.length} rows` : 'row'} to "${targetGroup.label}"`);
+  };
 }
 function openGroupDealDialog(kind, id) {
   const isProj = kind === 'project';

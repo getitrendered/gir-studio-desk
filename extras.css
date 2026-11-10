@@ -7265,6 +7265,37 @@ table.sheet input[data-blank-cell="advanceAmount"] {
   color: #94a3b8;
 }
 
+/* --- Group Visual Indicators & End Boundaries --- */
+.sheet tr.project-grouped td.row-selector {
+  border-left: 3.5px solid #10b981 !important;
+}
+.sheet tr.grouped td.row-selector {
+  border-left: 3.5px solid #f59e0b !important;
+}
+.sheet tr.project-grouped.grouped td.row-selector {
+  border-left: 3.5px solid #059669 !important;
+}
+
+.sheet tr.project-group-last td {
+  border-bottom: 2px solid #86c49e !important;
+}
+.sheet tr.deal-group-last td {
+  border-bottom: 2px solid #f59e0b !important;
+}
+
+[data-theme="dark"] .sheet tr.project-grouped td.row-selector {
+  border-left: 3.5px solid #059669 !important;
+}
+[data-theme="dark"] .sheet tr.grouped td.row-selector {
+  border-left: 3.5px solid #d97706 !important;
+}
+[data-theme="dark"] .sheet tr.project-group-last td {
+  border-bottom: 2px solid #166534 !important;
+}
+[data-theme="dark"] .sheet tr.deal-group-last td {
+  border-bottom: 2px solid #854d0e !important;
+}
+
 
 
 
