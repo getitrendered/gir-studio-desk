@@ -135,11 +135,13 @@ function setupTestEnvironment() {
 
 console.log('Testing Goals Dashboard, Paid Group Badges, Chat Self Badge Removal, and Paste Safety...');
 
-// Test 1: Navigation tab exists in index.html
+// Test 1: Navigation tabs cleaned up (Goals, Payments, Activity tabs removed from header)
 {
   const { html } = setupTestEnvironment();
-  assert(html.includes('<button data-tab="goals">Goals</button>'), 'index.html must include Goals navigation button');
-  console.log('✓ Test 1: Goals tab button exists in index.html');
+  assert(!html.includes('<button data-tab="goals">Goals</button>'), 'index.html must NOT include Goals navigation button');
+  assert(!html.includes('<button data-tab="payments">Payments</button>'), 'index.html must NOT include Payments navigation button');
+  assert(!html.includes('<button data-tab="activity">Activity</button>'), 'index.html must NOT include Activity navigation button');
+  console.log('✓ Test 1: Goals, Payments, and Activity tab buttons cleanly removed from index.html navigation');
 }
 
 // Test 2: Goals dashboard calculations and SVG progress ring
