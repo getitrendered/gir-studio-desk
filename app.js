@@ -2133,26 +2133,93 @@ function renderGroups() {
     const rows=data.items.filter(i=>(g.kind==='project'?i.projectGroupId:i.groupId)===g.id);
     const active=rows.filter(i=>i.status!=='discarded');
     const done=active.filter(i=>['sent','paid'].includes(i.status)).length;
+    const left=active.length - done;
+    const pct=active.length ? Math.round((done / active.length) * 100) : 0;
     const gVal=groupTotalValue(g.kind,g,rows);
     let amount='';
     if(gVal.agreed){
-      amount=`<span>Agreed ${money(gVal.total)}</span>`;
+      amount=`<div class="group-card-amount"><span>Agreed ${money(gVal.total)}</span></div>`;
     } else if(gVal.total>0){
       if(gVal.paid>0 && gVal.paid<gVal.total){
-        amount=`<span>Total ${money(gVal.total)} (${money(gVal.paid)} paid)</span>`;
+        amount=`<div class="group-card-amount"><span>Total ${money(gVal.total)} (${money(gVal.paid)} paid)</span></div>`;
       } else {
-        amount=`<span>Total ${money(gVal.total)}</span>`;
+        amount=`<div class="group-card-amount"><span>Total ${money(gVal.total)}</span></div>`;
       }
+    } else {
+      amount=`<div class="group-card-amount"><span class="amount-muted muted">Total ₹0</span></div>`;
     }
     const status=groupStatus(rows);
     const isPaid = active.length > 0 && status === 'Paid';
     const paidSeal = isPaid ? `<span class="group-paid-seal"><svg viewBox="0 0 16 16" width="12" height="12" fill="currentColor"><path d="M13.78 4.22a.75.75 0 0 1 0 1.06l-7.25 7.25a.75.75 0 0 1-1.06 0L2.22 9.28a.75.75 0 0 1 1.06 0z"/></svg> Paid in full</span>` : '';
-    const actions = isPaid ? `
-      <div class="group-card-actions"><button class="group-quick" data-group-paid-date="${g.kind}:${g.id}">Paid date</button></div>
-    ` : `
-      <div class="group-card-actions"><button class="group-quick" data-group-status="${g.kind}:${g.id}:sent">Mark sent</button><button class="group-quick" data-group-status="${g.kind}:${g.id}:paid">Mark paid</button><button class="group-quick" data-group-deal-card="${g.kind}:${g.id}">Group deal</button><button class="group-quick" data-group-paid-date="${g.kind}:${g.id}">Paid date</button></div>
+    const statusClass = status === 'Paid' ? 'paid' : status === 'Sent' ? 'sent' : status === 'Discarded' ? 'discarded' : 'pending';
+    const statusBadge = isPaid ? paidSeal : `<span class="pill ${statusClass}">${status}</span>`;
+
+    let workLeftHtml = '';
+    if (active.length === 0) {
+      workLeftHtml = `<span class="group-work-left-badge empty">0 tasks</span>`;
+    } else if (left > 0) {
+      workLeftHtml = `<span class="group-work-left-badge remaining"><span class="badge-icon">⏳</span> <strong>${left} left</strong> <span class="badge-out-of">out of ${active.length}</span></span>`;
+    } else {
+      workLeftHtml = `<span class="group-work-left-badge completed"><span class="badge-icon">✓</span> <strong>0 left</strong> <span class="badge-out-of">All ${active.length} done</span></span>`;
+    }
+
+    const progressHtml = `
+      <div class="group-progress-box">
+        <div class="group-progress-header">
+          <span class="group-progress-label">Task Progress</span>
+          <strong class="group-progress-pct ${pct === 100 ? 'done' : ''}">${pct}%</strong>
+        </div>
+        <div class="bar group-progress-track">
+          <span class="group-progress-fill ${pct === 100 ? 'done' : ''}" style="width:${pct}%"></span>
+        </div>
+      </div>
     `;
-    return `<div class="group-card ${isPaid ? 'is-paid-group' : ''}"><button class="group-card-open" data-open-group="${g.kind}:${g.id}"><div class="group-card-top-row"><span class="group-badge">${g.kind==='project'?'PROJECT GROUP':'DEAL GROUP'}</span>${paidSeal}</div><strong>${esc(g.label)}</strong><small>${esc(data.clients.find(c=>c.id===g.clientId)?.name)} · ${done}/${active.length} complete · ${active.length-done} left · ${status}</small>${amount}<div class="bar"><span style="width:${active.length?done/active.length*100:0}%"></span></div></button>${actions}<div class="group-card-top-actions"><button class="group-card-rename" data-rename-card="${g.kind}:${g.id}" title="Rename group">Rename</button><button class="group-card-ungroup" data-ungroup-card="${g.kind}:${g.id}" title="Ungroup group">Ungroup</button></div><div class="group-card-editor" hidden><label>Group name<input value="${esc(g.label)}" aria-label="Group name"></label><div><button type="button" data-save-card="${g.kind}:${g.id}">Save</button><button type="button" data-cancel-card>Cancel</button></div></div></div>`;
+
+    const actions = isPaid ? `
+      <div class="group-card-actions">
+        <button class="group-quick view-sheet-btn" data-open-group="${g.kind}:${g.id}">View in sheet →</button>
+        <button class="group-quick" data-group-paid-date="${g.kind}:${g.id}">Paid date</button>
+      </div>
+    ` : `
+      <div class="group-card-actions">
+        <button class="group-quick" data-group-status="${g.kind}:${g.id}:sent">Mark sent</button>
+        <button class="group-quick" data-group-status="${g.kind}:${g.id}:paid">Mark paid</button>
+        <button class="group-quick" data-group-deal-card="${g.kind}:${g.id}">Group deal</button>
+        <button class="group-quick" data-group-paid-date="${g.kind}:${g.id}">Paid date</button>
+      </div>
+    `;
+
+    const clientName = esc(data.clients.find(c=>c.id===g.clientId)?.name || 'Client');
+
+    return `<div class="group-card ${isPaid ? 'is-paid-group' : ''}">
+      <button class="group-card-open" data-open-group="${g.kind}:${g.id}">
+        <div class="group-card-top-row">
+          <span class="group-badge">${g.kind==='project'?'PROJECT GROUP':'DEAL GROUP'}</span>
+        </div>
+        <div class="group-card-title-row">
+          <strong class="group-card-title">${esc(g.label)}</strong>
+          <span class="group-card-client">${clientName}</span>
+        </div>
+        <div class="group-work-summary">
+          ${workLeftHtml}
+          ${statusBadge}
+        </div>
+        ${amount}
+        ${progressHtml}
+      </button>
+      ${actions}
+      <div class="group-card-top-actions">
+        <button class="group-card-rename" data-rename-card="${g.kind}:${g.id}" title="Rename group">Rename</button>
+        <button class="group-card-ungroup" data-ungroup-card="${g.kind}:${g.id}" title="Ungroup group">Ungroup</button>
+      </div>
+      <div class="group-card-editor" hidden>
+        <label>Group name<input value="${esc(g.label)}" aria-label="Group name"></label>
+        <div>
+          <button type="button" data-save-card="${g.kind}:${g.id}">Save</button>
+          <button type="button" data-cancel-card>Cancel</button>
+        </div>
+      </div>
+    </div>`;
   }).join('');
   return `<div class="section-top"><div><h2>Groups</h2><p>Project folders and negotiated deals across clients.</p></div></div>${groups.length?`<div class="group-grid">${cards}</div>`:'<div class="empty"><h3>No groups yet</h3><p>Select rows on a worksheet to create a project group or grouped deal.</p></div>'}`;
 }
