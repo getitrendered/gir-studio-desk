@@ -513,7 +513,7 @@ function renderClients() {
     const badges = [];
     if(act.pending > 0) badges.push(`<small class="pending-badge" title="${act.pending} pending tasks">${act.pending}</small>`);
     if(act.sent > 0) badges.push(`<small class="sent-badge" title="${act.sent} sent awaiting payment">${act.sent} sent</small>`);
-    return `<button class="client-tab ${activeClient===c.id && tab==='sheet'?'active':''}" data-client="${c.id}" title="${act.pending} pending, ${act.sent} sent awaiting payment">${esc(c.name)}${badges.join('')}</button>`;
+    return `<button class="client-tab ${activeClient===c.id && tab==='sheet'?'active':''}" data-client="${c.id}" title="${act.pending} pending, ${act.sent} sent awaiting payment (right-click to edit/rename)">${esc(c.name)}${badges.join('')}</button>`;
   }).join('');
   nav.scrollLeft=position;
   const active=nav.querySelector('.client-tab.active');
@@ -522,7 +522,10 @@ function renderClients() {
     if(left<nav.scrollLeft)nav.scrollLeft=left;
     else if(right>nav.scrollLeft+nav.clientWidth)nav.scrollLeft=right-nav.clientWidth;
   }
-  $$('#clientList [data-client]').forEach(b => b.onclick = () => { activeClient = b.dataset.client; selected.clear();selectionAnchor=null;selectionCell=null;blankRows=60; tab='sheet'; render(); });
+  $$('#clientList [data-client]').forEach(b => {
+    b.onclick = () => { activeClient = b.dataset.client; selected.clear();selectionAnchor=null;selectionCell=null;blankRows=60; tab='sheet'; render(); };
+    b.oncontextmenu = e => { e.preventDefault(); billingDialog(b.dataset.client); };
+  });
 }
 function renderTeam() {
   const members = data.members.length ? data.members : [{ userId:'local-me', displayName:data.settings.displayName }, { userId:'local-partner', displayName:data.settings.localPartner }];
@@ -861,8 +864,12 @@ function groupHeader(kind,group,items) {
   const isPaid = active.length > 0 && status === 'Paid';
   const paidSeal = isPaid ? `<span class="group-paid-seal"><svg viewBox="0 0 16 16" width="11" height="11" fill="currentColor"><path d="M13.78 4.22a.75.75 0 0 1 0 1.06l-7.25 7.25a.75.75 0 0 1-1.06 0L2.22 9.28a.75.75 0 0 1 1.06 0z"/></svg> Paid in full</span>` : '';
   const actionButtons = isPaid ? `
+    <button class="group-quick select-btn" data-group-select="${kind}:${group.id}" title="Select all rows in this group">Select all</button>
+    <button class="group-quick invoice-btn" data-group-invoice="${kind}:${group.id}" title="Create invoice for this group">Create invoice</button>
     <button class="group-date-btn" data-group-paid-date="${kind}:${group.id}" title="Set or modify payment date for this group">Paid date</button>
   ` : `
+    <button class="group-quick select-btn" data-group-select="${kind}:${group.id}" title="Select all rows in this group">Select all</button>
+    <button class="group-quick invoice-btn" data-group-invoice="${kind}:${group.id}" title="Create invoice for this group">Create invoice</button>
     <button class="group-quick" data-group-status="${kind}:${group.id}:sent" ${!active.length?'disabled':''}>Mark sent</button>
     <button class="group-quick" data-group-status="${kind}:${group.id}:paid" ${!active.length?'disabled':''}>Mark paid</button>
     <button class="group-deal-btn" data-group-deal="${kind}:${group.id}" title="Make or edit group deal">Group deal</button>
@@ -2184,10 +2191,12 @@ function renderGroups() {
     const actions = isPaid ? `
       <div class="group-card-actions">
         <button class="group-quick view-sheet-btn" data-open-group="${g.kind}:${g.id}">View in sheet →</button>
+        <button class="group-quick invoice-btn" data-group-card-invoice="${g.kind}:${g.id}" title="Create invoice for this group">Create invoice</button>
         <button class="group-quick" data-group-paid-date="${g.kind}:${g.id}">Paid date</button>
       </div>
     ` : `
       <div class="group-card-actions">
+        <button class="group-quick invoice-btn" data-group-card-invoice="${g.kind}:${g.id}" title="Create invoice for this group">Create invoice</button>
         <button class="group-quick" data-group-status="${g.kind}:${g.id}:sent">Mark sent</button>
         <button class="group-quick" data-group-status="${g.kind}:${g.id}:paid">Mark paid</button>
         <button class="group-quick" data-group-deal-card="${g.kind}:${g.id}">Group deal</button>
@@ -2421,7 +2430,7 @@ function renderGoals() {
     </div>
   `;
 }function renderClientDetails() {
-  return `<div class="section-top"><div><h2>Client Details</h2><p>Billing information used on invoices.</p></div></div><div class="panel">${data.clients.length?data.clients.map(c=>`<div class="list-row"><div><strong>${esc(c.name)}</strong><small>${esc(c.billing?.name||'No billing name')} · ${esc(c.billing?.email||'No email')}</small></div><button class="small-btn" data-billing-edit="${c.id}">Edit details</button></div>`).join(''):'<p class="muted">Add a client using the + button in the bottom tab bar.</p>'}</div>`;
+  return `<div class="section-top"><div><h2>Client Details</h2><p>Client names and billing information used on worksheets and invoices.</p></div></div><div class="panel">${data.clients.length?data.clients.map(c=>`<div class="list-row"><div><strong>${esc(c.name)}</strong><small>${c.billing?.name && c.billing.name !== c.name ? `Billing: ${esc(c.billing.name)} · ` : ''}${esc(c.billing?.email||'No email')}${c.billing?.phone ? ` · ${esc(c.billing.phone)}` : ''}</small></div><button class="small-btn" data-billing-edit="${c.id}">Edit details</button></div>`).join(''):'<p class="muted">Add a client using the + button in the bottom tab bar.</p>'}</div>`;
 }
 function renderRevenue() {
   const f=financials(), receipts=[...(data.receipts||[])].sort((a,b)=>(b.receivedMonth||'').localeCompare(a.receivedMonth||'')||(b.receivedOn||'').localeCompare(a.receivedOn||''));
@@ -4836,6 +4845,9 @@ function bindMain() {
   $$('[data-group-deal-card]').forEach(b=>b.onclick=()=>{const [kind,id]=b.dataset.groupDealCard.split(':');openGroupDealDialog(kind,id);});
   $$('[data-group-ungroup]').forEach(b=>b.onclick=()=>{const [kind,id]=b.dataset.groupUngroup.split(':');ungroupDialog(kind,id);});
   $$('[data-ungroup-card]').forEach(b=>b.onclick=()=>{const [kind,id]=b.dataset.ungroupCard.split(':');ungroupDialog(kind,id);});
+  $$('[data-group-select]').forEach(b=>b.onclick=e=>{e.stopPropagation();const [kind,id]=b.dataset.groupSelect.split(':');selectGroupRows(kind,id);});
+  $$('[data-group-invoice]').forEach(b=>b.onclick=e=>{e.stopPropagation();const [kind,id]=b.dataset.groupInvoice.split(':');invoiceGroup(kind,id);});
+  $$('[data-group-card-invoice]').forEach(b=>b.onclick=e=>{e.stopPropagation();const [kind,id]=b.dataset.groupCardInvoice.split(':');invoiceGroup(kind,id);});
   $$('.sheet-group-header').forEach(headerRow => {
     headerRow.oncontextmenu = e => {
       e.preventDefault();
@@ -4855,6 +4867,9 @@ function bindMain() {
       menu.id = 'contextMenu';
       menu.className = 'context-menu';
       menu.innerHTML = `
+        <button id="contextGroupSelectAll"><span class="context-icon">☑</span><span>Select all rows</span></button>
+        <button id="contextGroupInvoice"><span class="context-icon">▣</span><span>Create invoice for group</span></button>
+        <div class="context-divider"></div>
         <button id="contextGroupUngroup"><span class="context-icon">⎘</span><span>Ungroup ${kind === 'project' ? 'project' : 'deal'}</span></button>
         ${isGroupPaid ? '' : `<button id="contextGroupDeal"><span class="context-icon">🏷️</span><span>Group deal…</span></button>`}
         <button id="contextGroupRename"><span class="context-icon">✏️</span><span>Rename group</span></button>
@@ -4866,6 +4881,8 @@ function bindMain() {
       `;
       positionContextMenu(menu, e.clientX, e.clientY);
 
+      if ($('#contextGroupSelectAll')) $('#contextGroupSelectAll').onclick = () => { menu.remove(); selectGroupRows(kind, id); };
+      if ($('#contextGroupInvoice')) $('#contextGroupInvoice').onclick = () => { menu.remove(); invoiceGroup(kind, id); };
       $('#contextGroupUngroup').onclick = () => { menu.remove(); ungroupDialog(kind, id); };
       if ($('#contextGroupDeal')) $('#contextGroupDeal').onclick = () => { menu.remove(); openGroupDealDialog(kind, id); };
       $('#contextGroupRename').onclick = () => { menu.remove(); renameGroup(kind, id); };
@@ -8619,7 +8636,82 @@ async function migrateImport() {
   finally{migrating=false;render();}
 }
 function newClientDialog(){modal('New client','<div class="field"><label>Client name</label><input id="newClientName" autofocus></div>','<div class="modal-actions"><button class="small-btn" id="cancelClient">Cancel</button><button class="small-btn blue" id="saveClient">Create client</button></div>');$('#cancelClient').onclick=closeModal;$('#saveClient').onclick=()=>{const name=inputValue('newClientName');if(!name)return;const c={id:uid(),name,billing:{name,address:'',email:'',phone:'',taxId:''},sortOrder:data.clients.length};mutate('clients',c);activeClient=c.id;tab='sheet';closeModal();render();};}
-function billingDialog(id=activeClient){const c=data.clients.find(client=>client.id===id);if(!c)return;const b=c.billing||{};modal('Client billing details',`<p>Shown on invoices for ${esc(c.name)}.</p><div class="field"><label>Billing name</label><input id="billName" value="${esc(b.name||c.name)}"></div><div class="field"><label>Address</label><textarea id="billAddress" rows="3">${esc(b.address||'')}</textarea></div><div class="field-grid"><div class="field"><label>Email</label><input id="billEmail" value="${esc(b.email||'')}"></div><div class="field"><label>Phone</label><input id="billPhone" value="${esc(b.phone||'')}"></div></div><div class="field"><label>Tax / GST ID</label><input id="billTax" value="${esc(b.taxId||'')}"></div>`,`<div class="modal-actions"><button class="small-btn blue" id="saveBilling">Save</button></div>`);$('#saveBilling').onclick=()=>{c.billing={name:inputValue('billName'),address:inputValue('billAddress'),email:inputValue('billEmail'),phone:inputValue('billPhone'),taxId:inputValue('billTax')};mutate('clients',c);closeModal();};}
+function billingDialog(id=activeClient){
+  const c=data.clients.find(client=>client.id===id);
+  if(!c)return;
+  const b=c.billing||{};
+  modal('Client & billing details',`
+    <div class="field">
+      <label>Client name (shown in bottom tabs & worksheets)</label>
+      <input id="clientMainName" value="${esc(c.name)}" autofocus required placeholder="e.g. TN or TN once">
+    </div>
+    <div class="field">
+      <label>Billing name (legal / company name shown on invoices)</label>
+      <input id="billName" value="${esc(b.name||c.name)}" placeholder="e.g. TN Pvt Ltd">
+    </div>
+    <div class="field">
+      <label>Address</label>
+      <textarea id="billAddress" rows="3" placeholder="Billing address">${esc(b.address||'')}</textarea>
+    </div>
+    <div class="field-grid">
+      <div class="field">
+        <label>Email</label>
+        <input id="billEmail" value="${esc(b.email||'')}" placeholder="billing@client.com">
+      </div>
+      <div class="field">
+        <label>Phone</label>
+        <input id="billPhone" value="${esc(b.phone||'')}" placeholder="+91 98765 43210">
+      </div>
+    </div>
+    <div class="field">
+      <label>Tax / GST ID</label>
+      <input id="billTax" value="${esc(b.taxId||'')}" placeholder="e.g. 29AAAAA0000A1Z5">
+    </div>
+  `,`<div class="modal-actions"><button class="small-btn" id="cancelBilling">Cancel</button><button class="small-btn blue" id="saveBilling">Save details</button></div>`);
+
+  const mainInput = $('#clientMainName');
+  const billInput = $('#billName');
+  let syncBilling = !b.name || b.name === c.name;
+  if (mainInput && billInput) {
+    mainInput.oninput = () => {
+      if (syncBilling) billInput.value = mainInput.value;
+    };
+    billInput.oninput = () => {
+      syncBilling = false;
+    };
+  }
+
+  if ($('#cancelBilling')) $('#cancelBilling').onclick = closeModal;
+  if ($('#saveBilling')) $('#saveBilling').onclick = () => {
+    const newClientName = inputValue('clientMainName')?.trim();
+    if (!newClientName) {
+      toast('Client name cannot be empty');
+      return;
+    }
+    const oldClientName = c.name;
+    c.name = newClientName;
+    const newBillName = inputValue('billName')?.trim() || newClientName;
+    c.billing = {
+      name: newBillName,
+      address: inputValue('billAddress'),
+      email: inputValue('billEmail'),
+      phone: inputValue('billPhone'),
+      taxId: inputValue('billTax')
+    };
+    if (oldClientName !== newClientName && Array.isArray(data.receipts)) {
+      for (const r of data.receipts) {
+        if (r.clientId === c.id) {
+          r.clientName = newClientName;
+          queue('receipts', r.id);
+        }
+      }
+    }
+    mutate('clients', c);
+    closeModal();
+    render();
+    toast('Client details updated');
+  };
+}
 function groupDialog(id){const chosen=id?data.items.filter(i=>i.groupId===id):data.items.filter(i=>selected.has(i.id));if(!chosen.length)return;const existing=id?data.groups.find(g=>g.id===id):null;const quote=chosen.reduce((n,i)=>n+num(i.quotedTotal),0);modal(existing?'Edit grouped deal':'Group selected rows',`<p>${chosen.length} rows · Original quote ${money(quote)}</p><div class="field"><label>Group name</label><input id="groupLabel" value="${esc(existing?.label||'Agreed deal')}"></div><div class="field"><label>Agreed final amount</label><input id="groupAmount" type="number" min="0" step="0.01" placeholder="Enter negotiated amount" value="${existing?.agreedAmount??''}"></div><div class="notice">This amount replaces the sum of row totals in revenue and payment estimates. Individual rows stay visible for work tracking.</div>`,`<div class="modal-actions"><button class="small-btn blue" id="saveGroup">Save group</button></div>`);$('#saveGroup').onclick=()=>{pushUndo(existing?'Edit deal group':'Group deal');const value=inputValue('groupAmount');const g=existing||{id:uid(),clientId:activeClient};g.label=inputValue('groupLabel')||'Agreed deal';g.agreedAmount=value===''?null:num(value);if(!existing)chosen.forEach(i=>{i.groupId=g.id;queue('items',i.id);});mutate('groups',g);syncDealReceipt(g.id);selected.clear();closeModal();toast('Deal group saved');};}
 function projectGroupDialog() {
   const chosen=data.items.filter(i=>selected.has(i.id));if(!chosen.length)return;
@@ -9159,6 +9251,73 @@ function setGroupPaidDateDialog(kind, id) {
 }
 
 function renameGroup(kind,id){const table=kind==='project'?'projectGroups':'groups',group=data[table].find(g=>g.id===id);if(!group)return;modal('Rename group',`<div class="field"><label>Group name</label><input id="renameGroupName" value="${esc(group.label)}" autofocus></div>`,`<div class="modal-actions"><button class="small-btn blue" id="saveGroupName">Save name</button></div>`);const saveName=()=>{const label=inputValue('renameGroupName');if(!label){toast('Enter a group name');return;}group.label=label;mutate(table,group);closeModal();toast('Group renamed');};$('#saveGroupName').onclick=saveName;$('#renameGroupName').onkeydown=e=>{if(e.key==='Enter')saveName();};}
+
+function selectGroupRows(kind, groupId) {
+  const items = (data.items || []).filter(i => (kind === 'project' ? i.projectGroupId : i.groupId) === groupId && i.status !== 'discarded');
+  if (!items.length) {
+    toast('No active rows in this group');
+    return;
+  }
+  const allSelected = items.every(i => selected.has(i.id));
+  if (allSelected) {
+    items.forEach(i => selected.delete(i.id));
+    toast(`Deselected ${items.length} rows`);
+  } else {
+    const clientMismatch = [...selected].some(id => {
+      const it = data.items.find(x => x.id === id);
+      return it && it.clientId !== items[0].clientId;
+    });
+    if (clientMismatch) selected.clear();
+    items.forEach(i => selected.add(i.id));
+    toast(`Selected ${items.length} rows`);
+  }
+  refreshSelection();
+}
+
+function invoiceGroup(kind, groupId) {
+  const table = kind === 'project' ? 'projectGroups' : 'groups';
+  const group = (data[table] || []).find(g => g.id === groupId);
+  if (!group) return;
+  const items = (data.items || []).filter(i => (kind === 'project' ? i.projectGroupId : i.groupId) === groupId && i.status !== 'discarded');
+  if (!items.length) {
+    toast('No active rows in this group');
+    return;
+  }
+  if (group.clientId) {
+    activeClient = group.clientId;
+  }
+
+  const bIds = billedIds();
+  const unbilled = items.filter(i => !bIds.has(i.id));
+  if (!unbilled.length) {
+    toast('All rows in this group are already invoiced');
+    return;
+  }
+
+  const ready = unbilled.filter(i => ['sent', 'paid'].includes(i.status));
+  if (!ready.length) {
+    selected.clear();
+    items.forEach(i => selected.add(i.id));
+    refreshSelection();
+    toast(`Selected ${items.length} rows. Mark rows Sent or Paid to create invoice.`);
+    return;
+  }
+
+  selected.clear();
+  ready.forEach(i => selected.add(i.id));
+  refreshSelection();
+
+  if (ready.length < unbilled.length) {
+    toast(`Invoicing ${ready.length} ready rows (${unbilled.length - ready.length} pending skipped)`);
+  }
+
+  if (tab !== 'sheet') {
+    tab = 'sheet';
+    render();
+  }
+  invoiceDialog();
+}
+
 function ungroupDialog(kind, id) {
   const table = kind === 'project' ? 'projectGroups' : 'groups';
   const group = (data[table] || []).find(g => g.id === id);
@@ -9309,8 +9468,8 @@ function ungroupSelectedRows() {
 function invoiceDialog() {
   const items = data.items.filter(i => selected.has(i.id));
   if (!items.length) return;
-  const notReady = items.filter(i => i.status !== 'sent');
-  if (notReady.length) { toast('Select rows marked Sent for a new invoice'); return; }
+  const notReady = items.filter(i => !['sent', 'paid'].includes(i.status));
+  if (notReady.length) { toast('Select rows marked Sent or Paid for a new invoice'); return; }
   if (items.some(i => billedIds().has(i.id))) { toast('One or more rows are already invoiced'); return; }
   if (new Set(items.map(i => i.clientId)).size !== 1) { toast('Choose rows from one client'); return; }
 
@@ -9326,9 +9485,17 @@ function invoiceDialog() {
     initialDeal = (data.groups || []).find(g => g.id === firstDealId);
   }
 
+  // Check if any selected items belong to a project group
+  const projectGroupIds = new Set(items.map(i => i.projectGroupId).filter(Boolean));
+  let initialProject = null;
+  if (projectGroupIds.size > 0) {
+    const firstProjId = [...projectGroupIds][0];
+    initialProject = (data.projectGroups || []).find(g => g.id === firstProjId);
+  }
+
   // By default: if group deal -> Show as Lump Sum; otherwise -> Show Breakup
   let isLumpSum = hasGroupDeal;
-  let lumpSumDescription = (initialDeal && initialDeal.label) || `${currentClient()?.name || 'Project'} Services`;
+  let lumpSumDescription = (initialDeal && initialDeal.label) || (initialProject && initialProject.label) || `${currentClient()?.name || 'Project'} Services`;
   let lumpSumAmount = (initialDeal && initialDeal.agreedAmount != null && initialDeal.agreedAmount !== '') 
     ? num(initialDeal.agreedAmount) 
     : subtotal;

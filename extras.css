@@ -406,6 +406,10 @@ button:disabled,select:disabled,[role="button"][aria-disabled="true"],[role="opt
 .revenue-month[open] summary{color:#087641}
 .group-heading .group-quick{flex:none;width:auto;height:auto;display:inline-flex;gap:0;border:1px solid #b9d5c0;background:#fff;color:#176b3b;border-radius:5px;padding:5px 8px;margin-left:5px;font-size:10px;font-weight:750}
 .group-heading .group-quick:hover,.group-card-actions .group-quick:hover{background:#e3f3e8}
+.group-heading .group-quick.select-btn, .group-card-actions .group-quick.select-btn{background:#f8fafc;border-color:#cbd5e1;color:#334155}
+.group-heading .group-quick.select-btn:hover, .group-card-actions .group-quick.select-btn:hover{background:#f1f5f9;border-color:#94a3b8;color:#0f172a}
+.group-heading .group-quick.invoice-btn, .group-card-actions .group-quick.invoice-btn{background:#f0fdf4!important;border-color:#86efac!important;color:#166534!important;font-weight:800!important}
+.group-heading .group-quick.invoice-btn:hover, .group-card-actions .group-quick.invoice-btn:hover{background:#dcfce7!important;border-color:#22c55e!important;color:#14532d!important}
 .sheet-group-header .group-status{flex:none;margin:0 6px;padding:3px 7px;border-radius:5px;background:#fff9e7;color:#8b6716;font-size:10px;font-weight:800}
 .group-status.paid{background:#daf1df;color:#11723e}.group-status.sent{background:#fff0d2;color:#916515}.group-status.working{background:#dceeff;color:#27669e}
 .group-card-actions{display:flex!important;align-items:center!important;gap:6px!important;flex-wrap:wrap!important;margin-top:auto!important;padding:12px 0 0 0!important;border-top:1px solid var(--line,#edf2ee)!important;width:100%!important;min-height:44px!important;box-sizing:border-box!important}
@@ -5408,6 +5412,18 @@ table.sheet input[data-blank-cell="advanceAmount"] {
 [data-theme="dark"] .group-card-actions .group-quick.view-sheet-btn:hover {
   background: #1e3a8a55 !important;
   border-color: #60a5fa !important;
+}
+[data-theme="dark"] .group-heading .group-quick.select-btn,
+[data-theme="dark"] .group-card-actions .group-quick.select-btn {
+  background: #1e293b !important;
+  border-color: #334155 !important;
+  color: #cbd5e1 !important;
+}
+[data-theme="dark"] .group-heading .group-quick.invoice-btn,
+[data-theme="dark"] .group-card-actions .group-quick.invoice-btn {
+  background: #064e3b44 !important;
+  border-color: #059669 !important;
+  color: #6ee7b7 !important;
 }
 [data-theme="dark"] .sheet-group-header.is-paid-group-row {
   background: #042416 !important;
