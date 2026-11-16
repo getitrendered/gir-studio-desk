@@ -9253,7 +9253,21 @@ function setGroupPaidDateDialog(kind, id) {
 function renameGroup(kind,id){const table=kind==='project'?'projectGroups':'groups',group=data[table].find(g=>g.id===id);if(!group)return;modal('Rename group',`<div class="field"><label>Group name</label><input id="renameGroupName" value="${esc(group.label)}" autofocus></div>`,`<div class="modal-actions"><button class="small-btn blue" id="saveGroupName">Save name</button></div>`);const saveName=()=>{const label=inputValue('renameGroupName');if(!label){toast('Enter a group name');return;}group.label=label;mutate(table,group);closeModal();toast('Group renamed');};$('#saveGroupName').onclick=saveName;$('#renameGroupName').onkeydown=e=>{if(e.key==='Enter')saveName();};}
 
 function selectGroupRows(kind, groupId) {
-  const items = (data.items || []).filter(i => (kind === 'project' ? i.projectGroupId : i.groupId) === groupId && i.status !== 'discarded');
+  const table = kind === 'project' ? 'projectGroups' : 'groups';
+  const group = (data[table] || []).find(g => g.id === groupId);
+  const clientId = group?.clientId || activeClient;
+
+  let allSheetItems = null;
+  if (typeof groupedSheetItems === 'function' && typeof clientItems === 'function') {
+    try {
+      allSheetItems = groupedSheetItems(clientItems(clientId));
+    } catch {}
+  }
+  const pool = allSheetItems && allSheetItems.length
+    ? allSheetItems
+    : (data.items || []).filter(i => i.clientId === clientId).sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0));
+  const items = pool.filter(i => (kind === 'project' ? i.projectGroupId : i.groupId) === groupId && i.status !== 'discarded');
+
   if (!items.length) {
     toast('No active rows in this group');
     return;
@@ -9278,13 +9292,25 @@ function invoiceGroup(kind, groupId) {
   const table = kind === 'project' ? 'projectGroups' : 'groups';
   const group = (data[table] || []).find(g => g.id === groupId);
   if (!group) return;
-  const items = (data.items || []).filter(i => (kind === 'project' ? i.projectGroupId : i.groupId) === groupId && i.status !== 'discarded');
+  const clientId = group.clientId || activeClient;
+  if (group.clientId) {
+    activeClient = group.clientId;
+  }
+
+  let allSheetItems = null;
+  if (typeof groupedSheetItems === 'function' && typeof clientItems === 'function') {
+    try {
+      allSheetItems = groupedSheetItems(clientItems(clientId));
+    } catch {}
+  }
+  const pool = allSheetItems && allSheetItems.length
+    ? allSheetItems
+    : (data.items || []).filter(i => i.clientId === clientId).sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0));
+  const items = pool.filter(i => (kind === 'project' ? i.projectGroupId : i.groupId) === groupId && i.status !== 'discarded');
+
   if (!items.length) {
     toast('No active rows in this group');
     return;
-  }
-  if (group.clientId) {
-    activeClient = group.clientId;
   }
 
   const bIds = billedIds();
@@ -9465,8 +9491,61 @@ function ungroupSelectedRows() {
     performUngroup({ deal: hasDeal, project: hasProj });
   }
 }
+
 function invoiceDialog() {
-  const items = data.items.filter(i => selected.has(i.id));
+  function getOrderedInvoiceItems() {
+    const chosen = (data.items || []).filter(i => selected.has(i.id));
+    if (!chosen.length) return [];
+    const clientId = chosen[0].clientId || activeClient;
+
+    // 1. Check DOM row order if worksheet is currently rendered for this client
+    if (typeof $$ === 'function') {
+      try {
+        const domRows = $$('.sheet tr[data-row]');
+        if (domRows.length > 0 && clientId === activeClient) {
+          const domOrder = domRows.map(el => el.dataset?.row || el.getAttribute?.('data-row')).filter(Boolean);
+          if (domOrder.length > 0) {
+            const domIndexMap = new Map();
+            domOrder.forEach((id, idx) => domIndexMap.set(id, idx));
+
+            const res = [...chosen];
+            res.sort((a, b) => {
+              const idxA = domIndexMap.has(a.id) ? domIndexMap.get(a.id) : 999999 + (a.sortOrder ?? 0);
+              const idxB = domIndexMap.has(b.id) ? domIndexMap.get(b.id) : 999999 + (b.sortOrder ?? 0);
+              return idxA - idxB;
+            });
+            return res;
+          }
+        }
+      } catch {}
+    }
+
+    // 2. Canonical worksheet order from groupedSheetItems(clientItems(clientId))
+    if (typeof groupedSheetItems === 'function' && typeof clientItems === 'function') {
+      try {
+        const sheetOrder = groupedSheetItems(clientItems(clientId));
+        if (sheetOrder && sheetOrder.length > 0) {
+          const sheetIndexMap = new Map();
+          sheetOrder.forEach((item, idx) => sheetIndexMap.set(item.id, idx));
+
+          const res = [...chosen];
+          res.sort((a, b) => {
+            const idxA = sheetIndexMap.has(a.id) ? sheetIndexMap.get(a.id) : (a.sortOrder ?? 0);
+            const idxB = sheetIndexMap.has(b.id) ? sheetIndexMap.get(b.id) : (b.sortOrder ?? 0);
+            return idxA - idxB;
+          });
+          return res;
+        }
+      } catch {}
+    }
+
+    // 3. Fallback: sort by sortOrder
+    const res = [...chosen];
+    res.sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0));
+    return res;
+  }
+
+  const items = getOrderedInvoiceItems();
   if (!items.length) return;
   const notReady = items.filter(i => !['sent', 'paid'].includes(i.status));
   if (notReady.length) { toast('Select rows marked Sent or Paid for a new invoice'); return; }
@@ -9600,6 +9679,7 @@ function invoiceDialog() {
 
         const originalLines = items.map((i, n) => ({
           serial: n + 1,
+          itemId: i.id,
           service: i.service,
           quantity: num(i.quantity),
           rate: num(i.rate),
@@ -9705,9 +9785,57 @@ function invoiceHtml(i) {
   </div>`;
 }
 
+function alignInvoiceLinesWithSheetOrder(inv) {
+  if (!inv || !inv.itemIds || inv.itemIds.length <= 1) return;
+  const clientId = inv.clientId || (data.items.find(i => inv.itemIds.includes(i.id))?.clientId);
+  if (!clientId) return;
+
+  let sheetOrder = null;
+  if (typeof groupedSheetItems === 'function' && typeof clientItems === 'function') {
+    try {
+      sheetOrder = groupedSheetItems(clientItems(clientId));
+    } catch {}
+  }
+  if (!sheetOrder || !sheetOrder.length) return;
+
+  const sheetIndexMap = new Map();
+  sheetOrder.forEach((it, idx) => sheetIndexMap.set(it.id, idx));
+
+  if (Array.isArray(inv.originalLines) && inv.originalLines.length === inv.itemIds.length) {
+    const combined = inv.originalLines.map((line, idx) => ({
+      line,
+      itemId: line.itemId || inv.itemIds[idx]
+    }));
+    combined.sort((a, b) => {
+      const idxA = sheetIndexMap.has(a.itemId) ? sheetIndexMap.get(a.itemId) : 999999;
+      const idxB = sheetIndexMap.has(b.itemId) ? sheetIndexMap.get(b.itemId) : 999999;
+      return idxA - idxB;
+    });
+    inv.originalLines = combined.map((c, n) => ({ ...c.line, serial: n + 1, itemId: c.itemId }));
+    inv.itemIds = combined.map(c => c.itemId);
+    if (!inv.isLumpSum && Array.isArray(inv.lines) && inv.lines.length === inv.originalLines.length) {
+      inv.lines = structuredClone(inv.originalLines);
+    }
+  } else if (!inv.isLumpSum && Array.isArray(inv.lines) && inv.lines.length === inv.itemIds.length) {
+    const combined = inv.lines.map((line, idx) => ({
+      line,
+      itemId: line.itemId || inv.itemIds[idx]
+    }));
+    combined.sort((a, b) => {
+      const idxA = sheetIndexMap.has(a.itemId) ? sheetIndexMap.get(a.itemId) : 999999;
+      const idxB = sheetIndexMap.has(b.itemId) ? sheetIndexMap.get(b.itemId) : 999999;
+      return idxA - idxB;
+    });
+    inv.lines = combined.map((c, n) => ({ ...c.line, serial: n + 1, itemId: c.itemId }));
+    inv.itemIds = combined.map(c => c.itemId);
+  }
+}
+
 function viewInvoice(id) {
   const i = data.invoices.find(x => x.id === id);
   if (!i) return;
+
+  alignInvoiceLinesWithSheetOrder(i);
 
   const renderModal = () => {
     const isLump = !!i.isLumpSum;
