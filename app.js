@@ -319,7 +319,7 @@ function receiptEffectiveAmount(r) {
       return 0;
     }
     const g = data.groups.find(x => x.id === r.referenceId);
-    const billed = billedIds();
+    const billed = (typeof billedIds === 'function') ? billedIds() : new Set((data.invoices || []).flatMap(inv => inv.itemIds || []));
     const dealItems = data.items.filter(i => i.groupId === r.referenceId && i.status !== 'discarded' && !billed.has(i.id));
     if (!dealItems.length) return num(r.amount);
     const paidItems = dealItems.filter(i => i.status === 'paid');
@@ -337,7 +337,7 @@ function receiptEffectiveAmount(r) {
     if (projReceipts.length > 1 && projReceipts[0].id !== r.id) {
       return 0;
     }
-    const billed = billedIds();
+    const billed = (typeof billedIds === 'function') ? billedIds() : new Set((data.invoices || []).flatMap(inv => inv.itemIds || []));
     const nonDealItems = data.items.filter(i => i.projectGroupId === r.referenceId && !i.groupId && i.status !== 'discarded' && !billed.has(i.id));
     if (!nonDealItems.length) return 0;
     const paidItems = nonDealItems.filter(i => i.status === 'paid');
@@ -6692,7 +6692,7 @@ function syncDealReceipt(groupId, stamp = new Date().toISOString()) {
   if (!groupId || !Array.isArray(data.receipts)) return;
   const g = (data.groups || []).find(x => x.id === groupId);
   if (!g) return;
-  const billed = billedIds();
+  const billed = (typeof billedIds === 'function') ? billedIds() : new Set((data.invoices || []).flatMap(inv => inv.itemIds || []));
   const dealItems = (data.items || []).filter(i => i.groupId === groupId && i.status !== 'discarded' && !billed.has(i.id));
   const paidItems = dealItems.filter(i => i.status === 'paid');
   const existing = data.receipts.filter(r => r.referenceKind === 'deal' && r.referenceId === groupId);
@@ -6747,7 +6747,7 @@ function syncProjectReceipt(projectGroupId, stamp = new Date().toISOString()) {
   if (!projectGroupId || !Array.isArray(data.receipts)) return;
   const pg = (data.projectGroups || []).find(x => x.id === projectGroupId);
   if (!pg) return;
-  const billed = billedIds();
+  const billed = (typeof billedIds === 'function') ? billedIds() : new Set((data.invoices || []).flatMap(inv => inv.itemIds || []));
   const nonDealItems = (data.items || []).filter(i => i.projectGroupId === projectGroupId && !i.groupId && i.status !== 'discarded' && !billed.has(i.id));
   const paidItems = nonDealItems.filter(i => i.status === 'paid');
   const existing = data.receipts.filter(r => r.referenceKind === 'project' && r.referenceId === projectGroupId);
@@ -6897,7 +6897,7 @@ function syncItemReceipt(item) {
   }
 }
 function recordPaidItems(items, context = null, stamp = new Date().toISOString()) {
-  const billed = billedIds();
+  const billed = (typeof billedIds === 'function') ? billedIds() : new Set((data.invoices || []).flatMap(inv => inv.itemIds || []));
   const targetItems = items.filter(i => (i.status === 'paid' || i.status !== 'discarded') && !billed.has(i.id));
   if (!targetItems.length && !context) return;
 
