@@ -319,7 +319,8 @@ function receiptEffectiveAmount(r) {
       return 0;
     }
     const g = data.groups.find(x => x.id === r.referenceId);
-    const dealItems = data.items.filter(i => i.groupId === r.referenceId && i.status !== 'discarded');
+    const billed = billedIds();
+    const dealItems = data.items.filter(i => i.groupId === r.referenceId && i.status !== 'discarded' && !billed.has(i.id));
     if (!dealItems.length) return num(r.amount);
     const paidItems = dealItems.filter(i => i.status === 'paid');
     if (!paidItems.length) return 0;
@@ -336,7 +337,8 @@ function receiptEffectiveAmount(r) {
     if (projReceipts.length > 1 && projReceipts[0].id !== r.id) {
       return 0;
     }
-    const nonDealItems = data.items.filter(i => i.projectGroupId === r.referenceId && !i.groupId && i.status !== 'discarded');
+    const billed = billedIds();
+    const nonDealItems = data.items.filter(i => i.projectGroupId === r.referenceId && !i.groupId && i.status !== 'discarded' && !billed.has(i.id));
     if (!nonDealItems.length) return 0;
     const paidItems = nonDealItems.filter(i => i.status === 'paid');
     if (!paidItems.length) return 0;
@@ -6690,7 +6692,8 @@ function syncDealReceipt(groupId, stamp = new Date().toISOString()) {
   if (!groupId || !Array.isArray(data.receipts)) return;
   const g = (data.groups || []).find(x => x.id === groupId);
   if (!g) return;
-  const dealItems = (data.items || []).filter(i => i.groupId === groupId && i.status !== 'discarded');
+  const billed = billedIds();
+  const dealItems = (data.items || []).filter(i => i.groupId === groupId && i.status !== 'discarded' && !billed.has(i.id));
   const paidItems = dealItems.filter(i => i.status === 'paid');
   const existing = data.receipts.filter(r => r.referenceKind === 'deal' && r.referenceId === groupId);
 
@@ -6744,7 +6747,8 @@ function syncProjectReceipt(projectGroupId, stamp = new Date().toISOString()) {
   if (!projectGroupId || !Array.isArray(data.receipts)) return;
   const pg = (data.projectGroups || []).find(x => x.id === projectGroupId);
   if (!pg) return;
-  const nonDealItems = (data.items || []).filter(i => i.projectGroupId === projectGroupId && !i.groupId && i.status !== 'discarded');
+  const billed = billedIds();
+  const nonDealItems = (data.items || []).filter(i => i.projectGroupId === projectGroupId && !i.groupId && i.status !== 'discarded' && !billed.has(i.id));
   const paidItems = nonDealItems.filter(i => i.status === 'paid');
   const existing = data.receipts.filter(r => r.referenceKind === 'project' && r.referenceId === projectGroupId);
 
@@ -6783,6 +6787,30 @@ function syncProjectReceipt(projectGroupId, stamp = new Date().toISOString()) {
     const r = data.receipts.find(x => (x.referenceKind === 'item' && x.referenceId === item.id) || (x.source === 'app' && x.sourceKey === 'app:' + item.id));
     if (r) removeReceipt(r.id);
   }
+}
+function healInvoicedItemStatuses() {
+  if (!Array.isArray(data.invoices) || !Array.isArray(data.items)) return false;
+  let changed = false;
+  for (const inv of data.invoices) {
+    if (inv.status === 'paid' && Array.isArray(inv.itemIds)) {
+      for (const id of inv.itemIds) {
+        const it = data.items.find(x => x.id === id);
+        if (it && it.status !== 'paid' && it.status !== 'discarded') {
+          it.status = 'paid';
+          if (!it.paidAt) it.paidAt = inv.paidAt || today();
+          if (!it.paidAtTs) it.paidAtTs = inv.paidAtTs || (it.paidAt + 'T12:00:00.000Z');
+          it.updatedAt = new Date().toISOString();
+          enqueue('items', it.id);
+          changed = true;
+        }
+      }
+    }
+  }
+  if (changed) {
+    save();
+    scheduleSync();
+  }
+  return changed;
 }
 function consolidateAllReceipts() {
   if (!Array.isArray(data.receipts) || !data.receipts.length) return;
@@ -6869,8 +6897,9 @@ function syncItemReceipt(item) {
   }
 }
 function recordPaidItems(items, context = null, stamp = new Date().toISOString()) {
-  const targetItems = items.filter(i => i.status === 'paid' || i.status !== 'discarded');
-  if (!targetItems.length) return;
+  const billed = billedIds();
+  const targetItems = items.filter(i => (i.status === 'paid' || i.status !== 'discarded') && !billed.has(i.id));
+  if (!targetItems.length && !context) return;
 
   const dealIds = new Set();
   const projectIds = new Set();
@@ -6899,7 +6928,7 @@ function bulkSetStatus(next,idsOverride=null,context=null,customPaidDate=null) {
   const ids=new Set(idsOverride||selected),items=data.items.filter(i=>ids.has(i.id));if(!items.length)return;
   const previousItems = items.map(i => JSON.parse(JSON.stringify(i)));
   const invoices=data.invoices.filter(inv=>(inv.itemIds||[]).some(id=>ids.has(id)));
-  if(invoices.some(inv=>next!=='paid'||(inv.status==='issued'&&!(inv.itemIds||[]).every(id=>ids.has(id))))){toast('Select every row on an invoice to mark it Paid; use invoice payment tracking for other changes');return;}
+  if(invoices.some(inv=>next!=='paid'||(inv.status==='issued'&&!(inv.itemIds||[]).every(id=>ids.has(id)||(data.items.find(x=>x.id===id)?.status==='paid'))))){toast('Select every row on an invoice to mark it Paid; use invoice payment tracking for other changes');return;}
   const paidDay=(next==='paid'&&customPaidDate&&/^\d{4}-\d{2}-\d{2}/.test(customPaidDate))?customPaidDate.slice(0,10):today();
   const stamp=(next==='paid'&&customPaidDate)?(paidDay+'T12:00:00.000Z'):new Date().toISOString();
   if(next==='paid'){
@@ -6918,8 +6947,7 @@ function bulkSetStatus(next,idsOverride=null,context=null,customPaidDate=null) {
         inv.status='paid';inv.paidAt=paidDay;inv.paidAtTs=stamp;inv.updatedAt=stamp;enqueue('invoices',inv.id);
       }
     }
-    const nonInvoicedItems=items.filter(i=>!invoiced.has(i.id));
-    for(const item of nonInvoicedItems){
+    for(const item of items){
       if(item.status!=='paid'||customPaidDate){
         item.paidAt=paidDay;
         item.paidAtTs=stamp;
@@ -6928,6 +6956,7 @@ function bulkSetStatus(next,idsOverride=null,context=null,customPaidDate=null) {
       item.updatedAt=stamp;
       enqueue('items',item.id);
     }
+    const nonInvoicedItems=items.filter(i=>!invoiced.has(i.id));
     recordPaidItems(nonInvoicedItems,context,stamp);
   } else {
     const affectedDealIds = new Set();
@@ -9231,6 +9260,23 @@ function setGroupPaidDateDialog(kind, id) {
       enqueue('items', i.id);
     });
 
+    const groupItemIds = new Set(items.map(i => i.id));
+    const linkedInvoices = (data.invoices || []).filter(inv => (inv.itemIds || []).some(itemId => groupItemIds.has(itemId)));
+    for (const inv of linkedInvoices) {
+      inv.status = 'paid';
+      inv.paidAt = chosenDate;
+      inv.paidAtTs = stamp;
+      inv.updatedAt = stamp;
+      enqueue('invoices', inv.id);
+      let r = (data.receipts || []).find(x => x.referenceKind === 'invoice' && x.referenceId === inv.id);
+      if (r) {
+        r.receivedOn = chosenDate;
+        r.receivedMonth = chosenDate.slice(0, 7) + '-01';
+        r.receivedAt = stamp;
+        enqueue('receipts', r.id);
+      }
+    }
+
     if (kind === 'deal') syncDealReceipt(id, chosenDate);
     else syncProjectReceipt(id, chosenDate);
 
@@ -9999,22 +10045,34 @@ function deleteInvoiceDialog(id) {
 
 function markInvoicePaid(id) {
   const i = data.invoices.find(x => x.id === id);
-  if (!i || i.status === 'paid') return;
+  if (!i) return;
   const stamp = new Date().toISOString();
-  createReceipt(i.clientId, Math.max(0, num(i.finalAmount) - invoiceAdvance(i)), `Invoice ${i.number}`, 'invoice', i.id, stamp);
+  const paidDay = today();
+  let r = (data.receipts || []).find(x => x.referenceKind === 'invoice' && x.referenceId === i.id);
+  if (!r) {
+    createReceipt(i.clientId, Math.max(0, num(i.finalAmount) - invoiceAdvance(i)), `Invoice ${i.number}`, 'invoice', i.id, stamp);
+  } else {
+    r.receivedOn = paidDay;
+    r.receivedMonth = paidDay.slice(0, 7) + '-01';
+    r.receivedAt = stamp;
+    enqueue('receipts', r.id);
+  }
   i.status = 'paid';
-  i.paidAt = today();
+  i.paidAt = paidDay;
   i.paidAtTs = stamp;
   mutate('invoices', i);
-  i.itemIds.forEach(itemId => {
+  (i.itemIds || []).forEach(itemId => {
     const item = data.items.find(x => x.id === itemId);
     if (item) {
       item.status = 'paid';
       item.paidAt = i.paidAt;
       item.paidAtTs = stamp;
-      queue('items', itemId);
+      item.updatedAt = stamp;
+      enqueue('items', itemId);
     }
   });
+  save();
+  scheduleSync();
   render();
   toast('Payment recorded');
 }
@@ -10300,6 +10358,7 @@ async function pullRemote(){
       if(ix<0)data[table].push(local);else data[table][ix]=local;
     }
   });
+  healInvoicedItemStatuses();
   consolidateAllReceipts();
   if(!activeClient || !data.clients.some(c=>c.id===activeClient))activeClient=sortedClients()[0]?.id||null;
   lastSyncTime=Date.now();
@@ -10664,4 +10723,4 @@ document.addEventListener('paste',e=>{
   if(value.includes('\t')||value.includes('\n'))pasteGrid(e,{dataset:{id:selectionCell.id,cell:selectionCell.key}});
   else{e.preventDefault();editCell(selectionCell.id,selectionCell.key,value);}
 });
-(async()=>{try{const saved=await window.desk.read();if(saved)data={...structuredClone(defaults),...saved,rentals:saved.rentals||[],rentalItems:saved.rentalItems||[],settings:{...structuredClone(defaults.settings),...(saved.settings||{}),seller:{...defaults.settings.seller,...(saved.settings?.seller||{})}}};ensureDefaultRentalItems();(data.items||[]).forEach(i=>{if(i.serial)i.serial=cleanSerial(i.serial);});consolidateAllReceipts();ensureBankAccounts();syncActiveBankDetails();const topClient=sortedClients()[0]?.id;if(topClient)activeClient=topClient;render();setupSupabase();}catch(e){render();toast('Could not load local data: '+e.message);}})();
+(async()=>{try{const saved=await window.desk.read();if(saved)data={...structuredClone(defaults),...saved,rentals:saved.rentals||[],rentalItems:saved.rentalItems||[],settings:{...structuredClone(defaults.settings),...(saved.settings||{}),seller:{...defaults.settings.seller,...(saved.settings?.seller||{})}}};ensureDefaultRentalItems();(data.items||[]).forEach(i=>{if(i.serial)i.serial=cleanSerial(i.serial);});healInvoicedItemStatuses();consolidateAllReceipts();ensureBankAccounts();syncActiveBankDetails();const topClient=sortedClients()[0]?.id;if(topClient)activeClient=topClient;render();setupSupabase();}catch(e){render();toast('Could not load local data: '+e.message);}})();
