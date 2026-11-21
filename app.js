@@ -297,11 +297,11 @@ function receiptEffectiveAmount(r) {
   const item = receiptEffectiveItem(r);
   if (item) {
     if (item.status !== 'paid') return 0;
-    if (item.groupId) return 0;
+    if (item.groupId || (item.projectGroupId && (data.receipts || []).some(x => x.referenceKind === 'project' && x.referenceId === item.projectGroupId))) return 0;
     return Math.max(0, effectiveItemValue(item) - num(item.advanceAmount));
   }
   if (r.referenceKind === 'item' || (r.source === 'app' && r.sourceKey && r.sourceKey.startsWith('app:'))) {
-    const dealItems = (data.items || []).filter(i => i.groupId);
+    const dealItems = (data.items || []).filter(i => i.groupId || i.projectGroupId);
     if (dealItems.some(di => di.clientId === r.clientId && di.service && di.service.trim().toLowerCase() === (r.description || '').trim().toLowerCase())) {
       return 0;
     }
@@ -310,7 +310,7 @@ function receiptEffectiveAmount(r) {
     const inv = data.invoices.find(x => x.id === r.referenceId);
     if (inv) {
       if (inv.status !== 'paid') return 0;
-      return Math.max(0, num(inv.finalAmount) - invoiceAdvance(inv));
+      return Math.max(0, num(inv.finalAmount) - (typeof invoiceAdvance === 'function' ? invoiceAdvance(inv) : 0));
     }
   }
   if (r.referenceKind === 'deal' && r.referenceId) {
@@ -318,10 +318,17 @@ function receiptEffectiveAmount(r) {
     if (dealReceipts.length > 1 && dealReceipts[0].id !== r.id) {
       return 0;
     }
-    const g = data.groups.find(x => x.id === r.referenceId);
+    const g = (data.groups || []).find(x => x.id === r.referenceId);
     const billed = (typeof billedIds === 'function') ? billedIds() : new Set((data.invoices || []).flatMap(inv => inv.itemIds || []));
-    const dealItems = data.items.filter(i => i.groupId === r.referenceId && i.status !== 'discarded' && !billed.has(i.id));
-    if (!dealItems.length) return num(r.amount);
+    const allGroupItems = (data.items || []).filter(i => i.groupId === r.referenceId && i.status !== 'discarded');
+    if (allGroupItems.length > 0 && allGroupItems.every(i => billed.has(i.id))) {
+      return 0;
+    }
+    const dealItems = allGroupItems.filter(i => !billed.has(i.id));
+    if (!dealItems.length) {
+      if (allGroupItems.length > 0) return 0;
+      return num(r.amount);
+    }
     const paidItems = dealItems.filter(i => i.status === 'paid');
     if (!paidItems.length) return 0;
     if (paidItems.length === dealItems.length) {
@@ -337,11 +344,25 @@ function receiptEffectiveAmount(r) {
     if (projReceipts.length > 1 && projReceipts[0].id !== r.id) {
       return 0;
     }
+    const pg = (data.projectGroups || []).find(x => x.id === r.referenceId);
     const billed = (typeof billedIds === 'function') ? billedIds() : new Set((data.invoices || []).flatMap(inv => inv.itemIds || []));
-    const nonDealItems = data.items.filter(i => i.projectGroupId === r.referenceId && !i.groupId && i.status !== 'discarded' && !billed.has(i.id));
-    if (!nonDealItems.length) return 0;
+    const allGroupItems = (data.items || []).filter(i => i.projectGroupId === r.referenceId && !i.groupId && i.status !== 'discarded');
+    if (allGroupItems.length > 0 && allGroupItems.every(i => billed.has(i.id))) {
+      return 0;
+    }
+    const nonDealItems = allGroupItems.filter(i => !billed.has(i.id));
+    if (!nonDealItems.length) {
+      if (allGroupItems.length > 0) return 0;
+      return num(r.amount);
+    }
     const paidItems = nonDealItems.filter(i => i.status === 'paid');
     if (!paidItems.length) return 0;
+    if (paidItems.length === nonDealItems.length && pg && pg.agreedAmount != null && pg.agreedAmount !== '' && Number.isFinite(num(pg.agreedAmount))) {
+      const total = nonDealItems.reduce((sum, i) => sum + num(i.quotedTotal), 0);
+      const agreed = num(pg.agreedAmount);
+      const advances = nonDealItems.reduce((sum, i) => sum + num(i.advanceAmount), 0);
+      return Math.max(0, agreed - advances);
+    }
     return paidItems.reduce((sum, i) => sum + Math.max(0, effectiveItemValue(i) - num(i.advanceAmount)), 0);
   }
   return num(r.amount);
@@ -390,12 +411,23 @@ function financials() {
     amount.quoted += num(i.quotedTotal);
     amount.advances += num(i.advanceAmount);
   }
-  const groups = new Map(data.groups.map(g => [g.id,g]));
+  const allGroups = [
+    ...(data.groups || []),
+    ...(data.projectGroups || [])
+  ];
+  const groups = new Map(allGroups.map(g => [g.id, g]));
   const groupTotals = new Map();
-  for (const i of data.items) if (i.status !== 'discarded' && i.groupId && groups.has(i.groupId)) groupTotals.set(i.groupId, (groupTotals.get(i.groupId) || 0) + num(i.quotedTotal));
+  for (const i of data.items) {
+    const gid = i.groupId ? i.groupId : i.projectGroupId;
+    if (i.status !== 'discarded' && gid && groups.has(gid)) {
+      groupTotals.set(gid, (groupTotals.get(gid) || 0) + num(i.quotedTotal));
+    }
+  }
   for (const i of data.items) {
     if (billed.has(i.id) || i.status === 'discarded') continue;
-    const g = groups.get(i.groupId), total = groupTotals.get(i.groupId) || 0;
+    const gid = i.groupId ? i.groupId : i.projectGroupId;
+    const g = gid ? groups.get(gid) : null;
+    const total = gid ? (groupTotals.get(gid) || 0) : 0;
     const value = g && g.agreedAmount !== null && g.agreedAmount !== '' && total > 0 ? num(g.agreedAmount) * num(i.quotedTotal) / total : num(i.quotedTotal);
     const advance=Math.min(Math.max(0,num(i.advanceAmount)),Math.max(0,value));
     if(i.status==='paid'){amount.revenue+=value;amount.closed+=value;month(i.advanceReceivedAt,'received',advance);month(i.paidAt,'received',Math.max(0,value-advance));month(i.paidAt,'closed',value);}
@@ -812,12 +844,12 @@ function renderDashboard() {
 }
 function groupTotalValue(kind, group, items) {
   const active = (items || []).filter(i => i.status !== 'discarded');
+  if (group && group.agreedAmount != null && group.agreedAmount !== '') {
+    const agreed = num(group.agreedAmount);
+    const isAllPaid = active.length > 0 && active.every(i => i.status === 'paid');
+    return { agreed: true, total: agreed, paid: isAllPaid ? agreed : 0 };
+  }
   if (kind === 'deal') {
-    if (group.agreedAmount != null && group.agreedAmount !== '') {
-      const agreed = num(group.agreedAmount);
-      const isAllPaid = active.length > 0 && active.every(i => i.status === 'paid');
-      return { agreed: true, total: agreed, paid: isAllPaid ? agreed : 0 };
-    }
     const total = active.reduce((s, i) => s + num(i.quotedTotal), 0);
     const paid = active.filter(i => i.status === 'paid').reduce((s, i) => s + num(i.quotedTotal), 0);
     return { agreed: false, total, paid };
@@ -2437,6 +2469,7 @@ function renderGoals() {
   return `<div class="section-top"><div><h2>Client Details</h2><p>Client names and billing information used on worksheets and invoices.</p></div></div><div class="panel">${data.clients.length?data.clients.map(c=>`<div class="list-row"><div><strong>${esc(c.name)}</strong><small>${c.billing?.name && c.billing.name !== c.name ? `Billing: ${esc(c.billing.name)} · ` : ''}${esc(c.billing?.email||'No email')}${c.billing?.phone ? ` · ${esc(c.billing.phone)}` : ''}</small></div><button class="small-btn" data-billing-edit="${c.id}">Edit details</button></div>`).join(''):'<p class="muted">Add a client using the + button in the bottom tab bar.</p>'}</div>`;
 }
 function renderRevenue() {
+  if (typeof healGroupRevenueSync === 'function') healGroupRevenueSync();
   const f=financials(), receipts=[...(data.receipts||[])].sort((a,b)=>(b.receivedMonth||'').localeCompare(a.receivedMonth||'')||(b.receivedOn||'').localeCompare(a.receivedOn||''));
   const months=new Map();
   for(const r of receipts){
@@ -6677,10 +6710,13 @@ function smartUpdateDialog() {
 
 function newItem(clientId,order) { return { id:uid(), clientId, groupId:null, projectGroupId:null, sourceRow:null, sortOrder:order, serial:cleanSerial(String(order+1)), workDate:today(), dueDate:'', service:'', quantity:1, rate:0, quotedTotal:0, advanceAmount:0, status:'pending', revisionCount:0, assigneeId:'', remarks:'', manualTotal:false }; }
 function effectiveItemValue(item){
-  const group=data.groups.find(g=>g.id===item.groupId);
-  if(!group||group.agreedAmount==null||group.agreedAmount==='')return num(item.quotedTotal);
-  const total=data.items.filter(i=>i.groupId===group.id&&i.status!=='discarded').reduce((sum,i)=>sum+num(i.quotedTotal),0);
-  return total>0?num(group.agreedAmount)*num(item.quotedTotal)/total:num(item.quotedTotal);
+  const gid = item.groupId || item.projectGroupId;
+  if (!gid) return num(item.quotedTotal);
+  const group = item.groupId ? (data.groups || []).find(g => g.id === item.groupId) : (data.projectGroups || []).find(g => g.id === item.projectGroupId);
+  if (!group || group.agreedAmount == null || group.agreedAmount === '' || !Number.isFinite(num(group.agreedAmount))) return num(item.quotedTotal);
+  const groupItems = (data.items || []).filter(i => (item.groupId ? i.groupId === item.groupId : (i.projectGroupId === item.projectGroupId && !i.groupId)) && i.status !== 'discarded');
+  const total = groupItems.reduce((sum, i) => sum + num(i.quotedTotal), 0);
+  return total > 0 ? num(group.agreedAmount) * num(item.quotedTotal) / total : num(item.quotedTotal);
 }
 function createReceipt(clientId,amount,description,referenceKind,referenceId,stamp=new Date().toISOString()){
   if(amount<=0)return;
@@ -6759,7 +6795,16 @@ function syncProjectReceipt(projectGroupId, stamp = new Date().toISOString()) {
     return;
   }
 
-  const amount = Math.round(paidItems.reduce((sum, i) => sum + Math.max(0, effectiveItemValue(i) - num(i.advanceAmount)), 0) * 100) / 100;
+  let amount = 0;
+  if (paidItems.length === nonDealItems.length && nonDealItems.length > 0 && pg.agreedAmount != null && pg.agreedAmount !== '' && Number.isFinite(num(pg.agreedAmount))) {
+    const total = nonDealItems.reduce((sum, i) => sum + num(i.quotedTotal), 0);
+    const agreed = num(pg.agreedAmount);
+    const advances = nonDealItems.reduce((sum, i) => sum + num(i.advanceAmount), 0);
+    amount = Math.max(0, agreed - advances);
+  } else {
+    amount = paidItems.reduce((sum, i) => sum + Math.max(0, effectiveItemValue(i) - num(i.advanceAmount)), 0);
+  }
+  amount = Math.round(amount * 100) / 100;
   const paidDates = paidItems.map(i => i.paidAt).filter(d => /^\d{4}-\d{2}-\d{2}/.test(d || ''));
   paidDates.sort();
   const date = paidDates.length ? paidDates[paidDates.length - 1] : ((stamp && /^\d{4}-\d{2}-\d{2}/.test(stamp)) ? stamp.slice(0, 10) : today());
@@ -6808,6 +6853,144 @@ function healInvoicedItemStatuses() {
       }
     }
   }
+  if (changed) {
+    save();
+    scheduleSync();
+  }
+  return changed;
+}
+function syncGroupInvoicesAndReceipts(kind, groupId, agreedAmount, label) {
+  if (!groupId || !Array.isArray(data.invoices)) return false;
+  let changed = false;
+  const groupItems = (data.items || []).filter(i => (kind === 'deal' ? i.groupId === groupId : (i.projectGroupId === groupId && !i.groupId)));
+  if (!groupItems.length) return false;
+  const activeItems = groupItems.filter(i => i.status !== 'discarded');
+  const groupItemIds = new Set(groupItems.map(i => i.id));
+
+  const linkedInvoices = data.invoices.filter(inv => {
+    const invItemIds = inv.itemIds || [];
+    if (!invItemIds.length) return false;
+    const matchCount = invItemIds.filter(id => groupItemIds.has(id)).length;
+    return matchCount > 0 && (matchCount === invItemIds.length || matchCount >= activeItems.length * 0.7 || inv.seller?.lumpSum?.isLumpSum);
+  });
+
+  for (const inv of linkedInvoices) {
+    let targetSubtotal = 0;
+    if (agreedAmount != null && agreedAmount !== '' && Number.isFinite(num(agreedAmount))) {
+      targetSubtotal = num(agreedAmount);
+    } else {
+      targetSubtotal = activeItems.reduce((sum, i) => sum + num(i.quotedTotal), 0);
+    }
+    const discount = num(inv.discount);
+    const expectedFinal = Math.max(0, targetSubtotal - discount);
+
+    if (num(inv.finalAmount) !== expectedFinal || num(inv.subtotal) !== targetSubtotal) {
+      inv.subtotal = targetSubtotal;
+      inv.finalAmount = expectedFinal;
+      if (inv.lines && inv.lines.length === 1) {
+        inv.lines[0].rate = targetSubtotal;
+        inv.lines[0].total = targetSubtotal;
+        if (label) inv.lines[0].description = label;
+      }
+      inv.updatedAt = new Date().toISOString();
+      enqueue('invoices', inv.id);
+      changed = true;
+    }
+
+    const invReceipts = (data.receipts || []).filter(r => r.referenceKind === 'invoice' && r.referenceId === inv.id);
+    for (const r of invReceipts) {
+      const expectedReceiptAmt = Math.max(0, num(inv.finalAmount) - (typeof invoiceAdvance === 'function' ? invoiceAdvance(inv) : 0));
+      if (num(r.amount) !== expectedReceiptAmt) {
+        r.amount = Math.round(expectedReceiptAmt * 100) / 100;
+        r.updatedAt = new Date().toISOString();
+        enqueue('receipts', r.id);
+        changed = true;
+      }
+    }
+  }
+  return changed;
+}
+function healGroupRevenueSync() {
+  if (!Array.isArray(data.items)) return false;
+  let changed = false;
+
+  const allGroups = [
+    ...(data.groups || []).map(g => ({ ...g, kind: 'deal' })),
+    ...(data.projectGroups || []).map(g => ({ ...g, kind: 'project' }))
+  ];
+
+  for (const group of allGroups) {
+    if (group.agreedAmount == null || group.agreedAmount === '' || !Number.isFinite(num(group.agreedAmount))) continue;
+    const agreed = num(group.agreedAmount);
+    const groupItems = (data.items || []).filter(i => (group.kind === 'deal' ? i.groupId === group.id : (i.projectGroupId === group.id && !i.groupId)));
+    if (!groupItems.length) continue;
+    const activeItems = groupItems.filter(i => i.status !== 'discarded');
+    if (!activeItems.length) continue;
+    const groupItemIds = new Set(groupItems.map(i => i.id));
+
+    // 1. Sync linked invoices & invoice receipts
+    const linkedInvoices = (data.invoices || []).filter(inv => {
+      const invItemIds = inv.itemIds || [];
+      if (!invItemIds.length) return false;
+      const matchCount = invItemIds.filter(id => groupItemIds.has(id)).length;
+      return matchCount > 0 && (matchCount === invItemIds.length || matchCount >= activeItems.length * 0.7 || inv.seller?.lumpSum?.isLumpSum);
+    });
+
+    for (const inv of linkedInvoices) {
+      const discount = num(inv.discount);
+      const expectedFinal = Math.max(0, agreed - discount);
+      if (num(inv.finalAmount) !== expectedFinal || num(inv.subtotal) !== agreed) {
+        inv.subtotal = agreed;
+        inv.finalAmount = expectedFinal;
+        if (inv.lines && inv.lines.length === 1) {
+          inv.lines[0].rate = agreed;
+          inv.lines[0].total = agreed;
+        }
+        inv.updatedAt = new Date().toISOString();
+        enqueue('invoices', inv.id);
+        changed = true;
+      }
+
+      const invReceipts = (data.receipts || []).filter(r => r.referenceKind === 'invoice' && r.referenceId === inv.id);
+      for (const r of invReceipts) {
+        const expectedReceiptAmt = Math.max(0, num(inv.finalAmount) - (typeof invoiceAdvance === 'function' ? invoiceAdvance(inv) : 0));
+        if (num(r.amount) !== expectedReceiptAmt) {
+          r.amount = Math.round(expectedReceiptAmt * 100) / 100;
+          r.updatedAt = new Date().toISOString();
+          enqueue('receipts', r.id);
+          changed = true;
+        }
+      }
+    }
+
+    // 2. Sync unbilled deal / project receipts
+    const billed = (typeof billedIds === 'function') ? billedIds() : new Set((data.invoices || []).flatMap(inv => inv.itemIds || []));
+    const unbilledItems = activeItems.filter(i => !billed.has(i.id));
+
+    if (unbilledItems.length > 0) {
+      const paidUnbilled = unbilledItems.filter(i => i.status === 'paid');
+      const existingReceipts = (data.receipts || []).filter(r => (r.referenceKind === 'deal' || r.referenceKind === 'project') && r.referenceId === group.id);
+      if (paidUnbilled.length === unbilledItems.length) {
+        const advances = unbilledItems.reduce((sum, i) => sum + num(i.advanceAmount), 0);
+        const expectedAmount = Math.max(0, agreed - advances);
+        if (existingReceipts.length) {
+          for (const r of existingReceipts) {
+            if (num(r.amount) !== expectedAmount) {
+              r.amount = Math.round(expectedAmount * 100) / 100;
+              r.updatedAt = new Date().toISOString();
+              enqueue('receipts', r.id);
+              changed = true;
+            }
+          }
+        } else {
+          if (group.kind === 'deal') syncDealReceipt(group.id);
+          else syncProjectReceipt(group.id);
+          changed = true;
+        }
+      }
+    }
+  }
+
   if (changed) {
     save();
     scheduleSync();
@@ -8743,7 +8926,7 @@ function billingDialog(id=activeClient){
     toast('Client details updated');
   };
 }
-function groupDialog(id){const chosen=id?data.items.filter(i=>i.groupId===id):data.items.filter(i=>selected.has(i.id));if(!chosen.length)return;const existing=id?data.groups.find(g=>g.id===id):null;const quote=chosen.reduce((n,i)=>n+num(i.quotedTotal),0);modal(existing?'Edit grouped deal':'Group selected rows',`<p>${chosen.length} rows · Original quote ${money(quote)}</p><div class="field"><label>Group name</label><input id="groupLabel" value="${esc(existing?.label||'Agreed deal')}"></div><div class="field"><label>Agreed final amount</label><input id="groupAmount" type="number" min="0" step="0.01" placeholder="Enter negotiated amount" value="${existing?.agreedAmount??''}"></div><div class="notice">This amount replaces the sum of row totals in revenue and payment estimates. Individual rows stay visible for work tracking.</div>`,`<div class="modal-actions"><button class="small-btn blue" id="saveGroup">Save group</button></div>`);$('#saveGroup').onclick=()=>{pushUndo(existing?'Edit deal group':'Group deal');const value=inputValue('groupAmount');const g=existing||{id:uid(),clientId:activeClient};g.label=inputValue('groupLabel')||'Agreed deal';g.agreedAmount=value===''?null:num(value);if(!existing)chosen.forEach(i=>{i.groupId=g.id;queue('items',i.id);});mutate('groups',g);syncDealReceipt(g.id);selected.clear();closeModal();toast('Deal group saved');};}
+function groupDialog(id){const chosen=id?data.items.filter(i=>i.groupId===id):data.items.filter(i=>selected.has(i.id));if(!chosen.length)return;const existing=id?data.groups.find(g=>g.id===id):null;const quote=chosen.reduce((n,i)=>n+num(i.quotedTotal),0);modal(existing?'Edit grouped deal':'Group selected rows',`<p>${chosen.length} rows · Original quote ${money(quote)}</p><div class="field"><label>Group name</label><input id="groupLabel" value="${esc(existing?.label||'Agreed deal')}"></div><div class="field"><label>Agreed final amount</label><input id="groupAmount" type="number" min="0" step="0.01" placeholder="Enter negotiated amount" value="${existing?.agreedAmount??''}"></div><div class="notice">This amount replaces the sum of row totals in revenue and payment estimates. Individual rows stay visible for work tracking.</div>`,`<div class="modal-actions"><button class="small-btn blue" id="saveGroup">Save group</button></div>`);$('#saveGroup').onclick=()=>{pushUndo(existing?'Edit deal group':'Group deal');const value=inputValue('groupAmount');const g=existing||{id:uid(),clientId:activeClient};g.label=inputValue('groupLabel')||'Agreed deal';g.agreedAmount=value===''?null:num(value);if(!existing)chosen.forEach(i=>{i.groupId=g.id;queue('items',i.id);});mutate('groups',g);syncDealReceipt(g.id);syncGroupInvoicesAndReceipts('deal',g.id,g.agreedAmount,g.label);selected.clear();closeModal();toast('Deal group saved');};}
 function projectGroupDialog() {
   const chosen=data.items.filter(i=>selected.has(i.id));if(!chosen.length)return;
   if(new Set(chosen.map(i=>i.clientId)).size!==1){toast('Select rows from one client');return;}
@@ -8904,8 +9087,8 @@ function openGroupDealDialog(kind, id) {
   }
 
   const quote = allItems.reduce((sum, i) => sum + num(i.quotedTotal), 0);
-  const currentAgreed = (!isProj && group.agreedAmount != null) ? group.agreedAmount : '';
-  const hasAgreed = !isProj && group.agreedAmount != null && group.agreedAmount !== '';
+  const currentAgreed = group.agreedAmount != null ? group.agreedAmount : '';
+  const hasAgreed = group.agreedAmount != null && group.agreedAmount !== '';
 
   modal(
     isProj ? 'Make Group Deal' : 'Edit Group Deal',
@@ -8991,6 +9174,7 @@ function openGroupDealDialog(kind, id) {
       const receiptsToRemove = (data.receipts || []).filter(r => r.referenceKind === 'deal' && r.referenceId === id);
       receiptsToRemove.forEach(r => removeReceipt(r.id));
       syncProjectReceipt(projGroup.id);
+      syncGroupInvoicesAndReceipts('project', projGroup.id, null, projGroup.label);
       save();
       scheduleSync();
       closeModal();
@@ -9013,6 +9197,7 @@ function openGroupDealDialog(kind, id) {
       if (agreedAmount === null) {
         group.label = label;
         mutate('projectGroups', group);
+        syncGroupInvoicesAndReceipts('project', group.id, null, group.label);
         save();
         scheduleSync();
         closeModal();
@@ -9048,6 +9233,7 @@ function openGroupDealDialog(kind, id) {
       data.groups = (data.groups || []).filter(g => g.id === dealGroup.id || (data.items || []).some(i => i.groupId === g.id));
 
       syncDealReceipt(dealGroup.id);
+      syncGroupInvoicesAndReceipts('deal', dealGroup.id, agreedAmount, label);
       save();
       scheduleSync();
       closeModal();
@@ -9058,6 +9244,7 @@ function openGroupDealDialog(kind, id) {
       group.agreedAmount = agreedAmount;
       mutate('groups', group);
       syncDealReceipt(group.id);
+      syncGroupInvoicesAndReceipts('deal', group.id, agreedAmount, label);
       save();
       scheduleSync();
       closeModal();
@@ -10442,6 +10629,7 @@ async function pullRemote(){
     }
   });
   healInvoicedItemStatuses();
+  healGroupRevenueSync();
   consolidateAllReceipts();
   if(!activeClient || !data.clients.some(c=>c.id===activeClient))activeClient=sortedClients()[0]?.id||null;
   lastSyncTime=Date.now();
@@ -10806,4 +10994,4 @@ document.addEventListener('paste',e=>{
   if(value.includes('\t')||value.includes('\n'))pasteGrid(e,{dataset:{id:selectionCell.id,cell:selectionCell.key}});
   else{e.preventDefault();editCell(selectionCell.id,selectionCell.key,value);}
 });
-(async()=>{try{const saved=await window.desk.read();if(saved)data={...structuredClone(defaults),...saved,rentals:saved.rentals||[],rentalItems:saved.rentalItems||[],settings:{...structuredClone(defaults.settings),...(saved.settings||{}),seller:{...defaults.settings.seller,...(saved.settings?.seller||{})}}};ensureDefaultRentalItems();(data.items||[]).forEach(i=>{if(i.serial)i.serial=cleanSerial(i.serial);});healInvoicedItemStatuses();consolidateAllReceipts();ensureBankAccounts();syncActiveBankDetails();const topClient=sortedClients()[0]?.id;if(topClient)activeClient=topClient;render();setupSupabase();}catch(e){render();toast('Could not load local data: '+e.message);}})();
+(async()=>{try{const saved=await window.desk.read();if(saved)data={...structuredClone(defaults),...saved,rentals:saved.rentals||[],rentalItems:saved.rentalItems||[],settings:{...structuredClone(defaults.settings),...(saved.settings||{}),seller:{...defaults.settings.seller,...(saved.settings?.seller||{})}}};ensureDefaultRentalItems();(data.items||[]).forEach(i=>{if(i.serial)i.serial=cleanSerial(i.serial);});healInvoicedItemStatuses();healGroupRevenueSync();consolidateAllReceipts();ensureBankAccounts();syncActiveBankDetails();const topClient=sortedClients()[0]?.id;if(topClient)activeClient=topClient;render();setupSupabase();}catch(e){render();toast('Could not load local data: '+e.message);}})();
