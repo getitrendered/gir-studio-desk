@@ -112,7 +112,7 @@ console.log('Testing Group Deals and Total Amount Display...');
   const headerHtml = ctx.groupHeader('project', p1, items);
   assert(headerHtml.includes('Total ₹8,820'), `Header should include 'Total ₹8,820', got: ${headerHtml}`);
   assert(headerHtml.includes('Paid in full'), 'Paid group header must include prominent Paid in full seal');
-  assert(!headerHtml.includes('data-group-deal="project:p1"'), 'Paid group header must omit Group Deal button');
+  assert(headerHtml.includes('data-group-deal="project:p1"'), 'Paid group header must provide Group Deal button to allow editing deal amount');
   assert(!headerHtml.includes('data-group-status="project:p1:sent"'), 'Paid group header must omit Mark sent button');
   assert(!headerHtml.includes('data-group-status="project:p1:paid"'), 'Paid group header must omit Mark paid button');
   assert(headerHtml.includes('data-group-paid-date="project:p1"'), 'Paid group header must keep Paid date button');
@@ -143,10 +143,10 @@ console.log('Testing Group Deals and Total Amount Display...');
   assert(html.includes('PROJECT GROUP'), 'Must have PROJECT GROUP badge');
   assert(html.includes('<span>Total ₹8,820</span>'), 'Project card must show <span>Total ₹8,820</span>');
   assert(html.includes('Paid in full'), 'Paid project card must show prominent Paid in full seal');
-  assert(!html.includes('data-group-deal-card="project:p1"'), 'Paid project card must omit Group deal button');
+  assert(html.includes('data-group-deal-card="project:p1"'), 'Paid project card must provide Group deal button to allow editing deal amount');
 
   assert(html.includes('DEAL GROUP'), 'Must have DEAL GROUP badge');
-  assert(html.includes('<span>Agreed ₹70,000</span>'), 'Deal card must show <span>Agreed ₹70,000</span>');
+  assert(html.includes('Agreed ₹70,000'), 'Deal card must show Agreed ₹70,000');
   assert(html.includes('data-group-deal-card="deal:g1"'), 'Deal card must have Group deal button');
   console.log('✓ Test 3: Groups tab cards show formatted total amounts, paid seals, and group deal buttons');
 }

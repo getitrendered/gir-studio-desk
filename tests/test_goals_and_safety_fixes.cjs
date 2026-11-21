@@ -208,11 +208,11 @@ console.log('Testing Goals Dashboard, Paid Group Badges, Chat Self Badge Removal
   assert(groupsHtml.includes('Paid in full'), 'Seal must contain text "Paid in full"');
   assert(groupsHtml.includes('is-paid-group'), 'Paid group card must have is-paid-group class');
 
-  // In paid group g1, verify Mark Sent, Mark Paid, and Group Deal buttons are absent!
+  // In paid group g1, verify Mark Sent and Mark Paid buttons are absent, but Group Deal / Edit Deal is available to edit amount
   const g1Html = groupsHtml.slice(groupsHtml.indexOf('Annual Gala Deal'));
   assert(!g1Html.includes('data-group-status="deal:g1:sent"'), 'Paid group card must NOT have Mark Sent button');
   assert(!g1Html.includes('data-group-status="deal:g1:paid"'), 'Paid group card must NOT have Mark Paid button');
-  assert(!g1Html.includes('data-group-deal-card="deal:g1"'), 'Paid group card must NOT have Group Deal button');
+  assert(g1Html.includes('data-group-deal-card="deal:g1"'), 'Paid group card must have Group Deal / Edit Deal button to edit amount');
   assert(g1Html.includes('data-group-paid-date="deal:g1"'), 'Paid group card must retain Paid Date button');
 
   // groupHeader for g1 in worksheet
@@ -220,7 +220,7 @@ console.log('Testing Goals Dashboard, Paid Group Badges, Chat Self Badge Removal
   const g1Items = context.data.items.filter(i => i.groupId === 'g1');
   const headerHtml = context.groupHeader('deal', g1Group, g1Items);
   assert(headerHtml.includes('group-paid-seal'), 'Worksheet header must show prominent Paid in full seal');
-  assert(!headerHtml.includes('data-group-deal="deal:g1"'), 'Worksheet header must omit Group Deal button when paid');
+  assert(headerHtml.includes('data-group-deal="deal:g1"'), 'Worksheet header must include Edit deal button even when paid');
   assert(!headerHtml.includes('data-group-status="deal:g1:sent"'), 'Worksheet header must omit Mark Sent button when paid');
   assert(!headerHtml.includes('data-group-status="deal:g1:paid"'), 'Worksheet header must omit Mark Paid button when paid');
   assert(headerHtml.includes('data-group-paid-date="deal:g1"'), 'Worksheet header must retain Paid Date button');

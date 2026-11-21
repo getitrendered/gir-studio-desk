@@ -7312,6 +7312,41 @@ table.sheet input[data-blank-cell="advanceAmount"] {
   border-bottom: 2px solid #854d0e !important;
 }
 
+/* Group deal button and edit links */
+.group-heading .group-quick.group-deal-btn,
+.group-card-actions .group-quick.group-deal-btn {
+  background: #fefce8 !important;
+  border-color: #fef08a !important;
+  color: #854d0e !important;
+  font-weight: 800 !important;
+}
+.group-heading .group-quick.group-deal-btn:hover,
+.group-card-actions .group-quick.group-deal-btn:hover {
+  background: #fef9c3 !important;
+  border-color: #fde047 !important;
+  color: #713f12 !important;
+}
+.group-card-deal-link:hover,
+.group-header-deal-link:hover {
+  color: #047857 !important;
+  text-decoration: underline !important;
+}
+[data-theme="dark"] .group-heading .group-quick.group-deal-btn,
+[data-theme="dark"] .group-card-actions .group-quick.group-deal-btn {
+  background: #42200644 !important;
+  border-color: #854d0e !important;
+  color: #fde047 !important;
+}
+[data-theme="dark"] .group-heading .group-quick.group-deal-btn:hover,
+[data-theme="dark"] .group-card-actions .group-quick.group-deal-btn:hover {
+  background: #42200688 !important;
+  border-color: #ca8a04 !important;
+}
+[data-theme="dark"] .group-card-deal-link:hover,
+[data-theme="dark"] .group-header-deal-link:hover {
+  color: #34d399 !important;
+}
+
 
 
 

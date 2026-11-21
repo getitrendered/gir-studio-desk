@@ -854,7 +854,7 @@ function groupHeader(kind,group,items) {
   const gVal=groupTotalValue(kind,group,items);
   let detail='';
   if(gVal.agreed){
-    detail=` · Agreed ${money(gVal.total)}`;
+    detail=` · <span class="group-header-deal-link" data-group-deal="${kind}:${group.id}" title="Click to edit agreed deal amount" style="cursor:pointer; text-decoration:underline dashed; text-underline-offset:3px;">Agreed ${money(gVal.total)} ✏️</span>`;
   } else if(gVal.total>0){
     if(gVal.paid>0 && gVal.paid<gVal.total){
       detail=` · Total ${money(gVal.total)} (${money(gVal.paid)} paid)`;
@@ -868,13 +868,14 @@ function groupHeader(kind,group,items) {
   const actionButtons = isPaid ? `
     <button class="group-quick select-btn" data-group-select="${kind}:${group.id}" title="Select all rows in this group">Select all</button>
     <button class="group-quick invoice-btn" data-group-invoice="${kind}:${group.id}" title="Create invoice for this group">Create invoice</button>
+    <button class="group-deal-btn" data-group-deal="${kind}:${group.id}" title="Make or edit group deal">${gVal.agreed ? 'Edit deal' : 'Group deal'}</button>
     <button class="group-date-btn" data-group-paid-date="${kind}:${group.id}" title="Set or modify payment date for this group">Paid date</button>
   ` : `
     <button class="group-quick select-btn" data-group-select="${kind}:${group.id}" title="Select all rows in this group">Select all</button>
     <button class="group-quick invoice-btn" data-group-invoice="${kind}:${group.id}" title="Create invoice for this group">Create invoice</button>
     <button class="group-quick" data-group-status="${kind}:${group.id}:sent" ${!active.length?'disabled':''}>Mark sent</button>
     <button class="group-quick" data-group-status="${kind}:${group.id}:paid" ${!active.length?'disabled':''}>Mark paid</button>
-    <button class="group-deal-btn" data-group-deal="${kind}:${group.id}" title="Make or edit group deal">Group deal</button>
+    <button class="group-deal-btn" data-group-deal="${kind}:${group.id}" title="Make or edit group deal">${gVal.agreed ? 'Edit deal' : 'Group deal'}</button>
     <button class="group-date-btn" data-group-paid-date="${kind}:${group.id}" title="Set or modify payment date for this group">Paid date</button>
   `;
   return `<tr class="sheet-group-header ${kind} ${isPaid ? 'is-paid-group-row' : ''}" data-sheet-group="${kind}:${group.id}"><td colspan="11"><div class="group-heading"><button data-group-collapse="${kind}:${group.id}" aria-expanded="${!folded}"><svg class="group-chevron ${folded?'collapsed':''}" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="m3.5 5.75 4.5 4.5 4.5-4.5" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg><strong>${esc(group.label)}</strong><span>${done}/${active.length} complete${detail}</span></button><span class="group-status ${status.toLowerCase().replaceAll(' ','-')}">${status}</span>${paidSeal}${actionButtons}${kind==='project'?`<button class="group-add" data-group-add="${group.id}" title="Add work under this project">＋ Row</button>`:''}<button class="group-rename" data-group-rename="${kind}:${group.id}" title="Rename group">Rename</button><button class="group-ungroup" data-group-ungroup="${kind}:${group.id}" title="Ungroup (keep rows, remove group)">Ungroup</button></div></td></tr>`;
@@ -893,10 +894,10 @@ function updateGroupHeaderDOM(item) {
     const done = items.filter(i => ['sent', 'paid'].includes(i.status)).length;
     const gVal = groupTotalValue(kind, group, items);
     let detail = '';
-    if (gVal.agreed) { detail = ` · Agreed ${money(gVal.total)}`; }
+    if (gVal.agreed) { detail = ` · <span class="group-header-deal-link" data-group-deal="${kind}:${group.id}" title="Click to edit agreed deal amount" style="cursor:pointer; text-decoration:underline dashed; text-underline-offset:3px;">Agreed ${money(gVal.total)} ✏️</span>`; }
     else if (gVal.total > 0) { detail = gVal.paid > 0 && gVal.paid < gVal.total ? ` · Total ${money(gVal.total)} (${money(gVal.paid)} paid)` : ` · Total ${money(gVal.total)}`; }
     const span = headerRow.querySelector('[data-group-collapse] span');
-    if (span) span.textContent = `${done}/${active.length} complete${detail}`;
+    if (span) span.innerHTML = `${done}/${active.length} complete${detail}`;
   }
 }
 function blankRowHtml(order) {
@@ -2153,7 +2154,7 @@ function renderGroups() {
     const gVal=groupTotalValue(g.kind,g,rows);
     let amount='';
     if(gVal.agreed){
-      amount=`<div class="group-card-amount"><span>Agreed ${money(gVal.total)}</span></div>`;
+      amount=`<div class="group-card-amount"><span class="group-card-deal-link" data-group-deal-card="${g.kind}:${g.id}" title="Click to edit agreed deal amount" style="cursor:pointer; text-decoration:underline dashed; text-underline-offset:3px;">Agreed ${money(gVal.total)} ✏️</span></div>`;
     } else if(gVal.total>0){
       if(gVal.paid>0 && gVal.paid<gVal.total){
         amount=`<div class="group-card-amount"><span>Total ${money(gVal.total)} (${money(gVal.paid)} paid)</span></div>`;
@@ -2194,6 +2195,7 @@ function renderGroups() {
       <div class="group-card-actions">
         <button class="group-quick view-sheet-btn" data-open-group="${g.kind}:${g.id}">View in sheet →</button>
         <button class="group-quick invoice-btn" data-group-card-invoice="${g.kind}:${g.id}" title="Create invoice for this group">Create invoice</button>
+        <button class="group-quick group-deal-btn" data-group-deal-card="${g.kind}:${g.id}" title="Set or edit agreed deal amount">${gVal.agreed ? 'Edit deal' : 'Group deal'}</button>
         <button class="group-quick" data-group-paid-date="${g.kind}:${g.id}">Paid date</button>
       </div>
     ` : `
@@ -2201,7 +2203,7 @@ function renderGroups() {
         <button class="group-quick invoice-btn" data-group-card-invoice="${g.kind}:${g.id}" title="Create invoice for this group">Create invoice</button>
         <button class="group-quick" data-group-status="${g.kind}:${g.id}:sent">Mark sent</button>
         <button class="group-quick" data-group-status="${g.kind}:${g.id}:paid">Mark paid</button>
-        <button class="group-quick" data-group-deal-card="${g.kind}:${g.id}">Group deal</button>
+        <button class="group-quick group-deal-btn" data-group-deal-card="${g.kind}:${g.id}" title="Set or edit agreed deal amount">${gVal.agreed ? 'Edit deal' : 'Group deal'}</button>
         <button class="group-quick" data-group-paid-date="${g.kind}:${g.id}">Paid date</button>
       </div>
     `;
@@ -4843,8 +4845,8 @@ function bindMain() {
   $$('[data-group-collapse]').forEach(b=>b.onclick=()=>{const id=b.dataset.groupCollapse;collapsedGroups.has(id)?collapsedGroups.delete(id):collapsedGroups.add(id);render();});
   $$('[data-group-add]').forEach(b=>b.onclick=()=>{const group=data.projectGroups.find(g=>g.id===b.dataset.groupAdd);if(!group)return;const item=newItem(group.clientId,clientItems(group.clientId).length);item.projectGroupId=group.id;mutate('items',item);setTimeout(()=>{const row=document.querySelector(`[data-row="${item.id}"]`);row?.scrollIntoView({block:'center'});const field=row?.querySelector('[data-cell="service"]');if(field)activateSheetField(field);},60);});
   $$('[data-group-rename]').forEach(b=>b.onclick=()=>{const [kind,id]=b.dataset.groupRename.split(':');renameGroup(kind,id);});
-  $$('[data-group-deal]').forEach(b=>b.onclick=()=>{const [kind,id]=b.dataset.groupDeal.split(':');openGroupDealDialog(kind,id);});
-  $$('[data-group-deal-card]').forEach(b=>b.onclick=()=>{const [kind,id]=b.dataset.groupDealCard.split(':');openGroupDealDialog(kind,id);});
+  $$('[data-group-deal]').forEach(b=>b.onclick=e=>{if(e)e.stopPropagation();const [kind,id]=b.dataset.groupDeal.split(':');openGroupDealDialog(kind,id);});
+  $$('[data-group-deal-card]').forEach(b=>b.onclick=e=>{if(e)e.stopPropagation();const [kind,id]=b.dataset.groupDealCard.split(':');openGroupDealDialog(kind,id);});
   $$('[data-group-ungroup]').forEach(b=>b.onclick=()=>{const [kind,id]=b.dataset.groupUngroup.split(':');ungroupDialog(kind,id);});
   $$('[data-ungroup-card]').forEach(b=>b.onclick=()=>{const [kind,id]=b.dataset.ungroupCard.split(':');ungroupDialog(kind,id);});
   $$('[data-group-select]').forEach(b=>b.onclick=e=>{e.stopPropagation();const [kind,id]=b.dataset.groupSelect.split(':');selectGroupRows(kind,id);});
@@ -4873,7 +4875,7 @@ function bindMain() {
         <button id="contextGroupInvoice"><span class="context-icon">▣</span><span>Create invoice for group</span></button>
         <div class="context-divider"></div>
         <button id="contextGroupUngroup"><span class="context-icon">⎘</span><span>Ungroup ${kind === 'project' ? 'project' : 'deal'}</span></button>
-        ${isGroupPaid ? '' : `<button id="contextGroupDeal"><span class="context-icon">🏷️</span><span>Group deal…</span></button>`}
+        <button id="contextGroupDeal"><span class="context-icon">🏷️</span><span>${kind === 'deal' && group.agreedAmount != null ? 'Edit group deal…' : 'Group deal…'}</span></button>
         <button id="contextGroupRename"><span class="context-icon">✏️</span><span>Rename group</span></button>
         <div class="context-divider"></div>
         ${kind === 'project' ? `<button id="contextGroupAddRow"><span class="context-icon">➕</span><span>Add row in project</span></button>` : ''}
@@ -8903,6 +8905,7 @@ function openGroupDealDialog(kind, id) {
 
   const quote = allItems.reduce((sum, i) => sum + num(i.quotedTotal), 0);
   const currentAgreed = (!isProj && group.agreedAmount != null) ? group.agreedAmount : '';
+  const hasAgreed = !isProj && group.agreedAmount != null && group.agreedAmount !== '';
 
   modal(
     isProj ? 'Make Group Deal' : 'Edit Group Deal',
@@ -8912,12 +8915,31 @@ function openGroupDealDialog(kind, id) {
        <input id="groupDealLabel" value="${esc(group.label || 'Agreed deal')}">
      </div>
      <div class="field">
-       <label>Agreed final deal amount</label>
-       <input id="groupDealAmount" type="number" min="0" step="0.01" placeholder="Enter negotiated amount" value="${currentAgreed}" autofocus>
+       <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:5px;">
+         <label style="margin:0;">Agreed final deal amount</label>
+         <div style="display:flex; gap:6px;">
+           <button type="button" class="small-btn quiet" id="resetToRowTotalBtn" style="font-size:11px; padding:2px 8px; cursor:pointer;" title="Reset deal amount to use sum of row totals">
+             ↺ Reset to row total (${money(quote)})
+           </button>
+           <button type="button" class="small-btn quiet" id="useQuoteBtn" style="font-size:11px; padding:2px 8px; cursor:pointer;" title="Fill input with row quote">
+             Use quote
+           </button>
+         </div>
+       </div>
+       <input id="groupDealAmount" type="number" min="0" step="0.01" placeholder="Enter negotiated amount (leave blank for row total)" value="${currentAgreed}" autofocus>
      </div>
      <div class="notice">
-       This amount replaces the sum of row totals in revenue and payment estimates. Individual rows stay visible for work tracking.
-     </div>`,
+       This amount replaces the sum of row totals in revenue, receipts, and payment estimates.
+       ${hasAgreed ? 'To remove the agreed deal and revert to individual row totals, click <em>Reset to row total</em> or clear the amount.' : 'Enter the negotiated lump sum amount, or leave blank to use the sum of row totals.'}
+     </div>
+     ${(!isProj) ? `
+       <div style="margin-top:12px; padding-top:10px; border-top:1px dashed var(--line, #cbd5e1); display:flex; justify-content:space-between; align-items:center;">
+         <span style="font-size:11px; color:var(--muted, #64748b);">Need this as a regular Project Group instead?</span>
+         <button type="button" class="small-btn quiet" id="convertToProjectGroupBtn" style="font-size:11px; padding:3px 8px; color:#c2410c; border:1px solid #fed7aa; background:#fff7ed; cursor:pointer;" title="Convert this deal back into a standard project group">
+           Convert to Project Group
+         </button>
+       </div>
+     ` : ''}`,
     `<div class="modal-actions">
        <button class="small-btn" id="cancelGroupDeal">Cancel</button>
        <button class="small-btn blue" id="saveGroupDeal">Save group deal</button>
@@ -8925,6 +8947,57 @@ function openGroupDealDialog(kind, id) {
   );
 
   $('#cancelGroupDeal').onclick = closeModal;
+  if ($('#resetToRowTotalBtn')) {
+    $('#resetToRowTotalBtn').onclick = () => {
+      const amt = $('#groupDealAmount');
+      if (amt) {
+        amt.value = '';
+        amt.focus();
+        toast(`Cleared deal amount. Click Save to use row total (${money(quote)})`);
+      }
+    };
+  }
+  if ($('#useQuoteBtn')) {
+    $('#useQuoteBtn').onclick = () => {
+      const amt = $('#groupDealAmount');
+      if (amt) {
+        amt.value = quote;
+        amt.focus();
+      }
+    };
+  }
+  if ($('#convertToProjectGroupBtn')) {
+    $('#convertToProjectGroupBtn').onclick = () => {
+      pushUndo('Convert deal to project group');
+      const label = inputValue('groupDealLabel').trim() || group.label || 'Project';
+      const projGroup = {
+        id: group.id,
+        clientId: group.clientId,
+        label
+      };
+      mutate('projectGroups', projGroup);
+      allItems.forEach(i => {
+        i.projectGroupId = projGroup.id;
+        i.groupId = null;
+        enqueue('items', i.id);
+      });
+      data.groups = (data.groups || []).filter(g => g.id !== id);
+      data.pending = (data.pending || []).filter(p => !(p.table === 'groups' && p.id === id));
+      data.pendingDeletes ||= [];
+      if (!data.pendingDeletes.some(d => d.table === 'groups' && d.id === id)) {
+        data.pendingDeletes.push({ table: 'groups', id });
+      }
+      collapsedGroups.delete('deal:' + id);
+      const receiptsToRemove = (data.receipts || []).filter(r => r.referenceKind === 'deal' && r.referenceId === id);
+      receiptsToRemove.forEach(r => removeReceipt(r.id));
+      syncProjectReceipt(projGroup.id);
+      save();
+      scheduleSync();
+      closeModal();
+      render();
+      toast('Converted to Project Group');
+    };
+  }
 
   const submitDeal = () => {
     pushUndo(isProj ? 'Convert to group deal' : 'Edit group deal');
@@ -8937,6 +9010,16 @@ function openGroupDealDialog(kind, id) {
     }
 
     if (isProj) {
+      if (agreedAmount === null) {
+        group.label = label;
+        mutate('projectGroups', group);
+        save();
+        scheduleSync();
+        closeModal();
+        render();
+        toast('Project group updated');
+        return;
+      }
       const dealGroup = {
         id: group.id,
         clientId: group.clientId,
@@ -8979,7 +9062,7 @@ function openGroupDealDialog(kind, id) {
       scheduleSync();
       closeModal();
       render();
-      toast('Group deal saved');
+      toast(agreedAmount != null ? 'Group deal saved' : 'Group deal reset to row total');
     }
   };
 
