@@ -5,7 +5,7 @@ const path = require('path');
 console.log('--- TEST: 2-Click Cell Edit Activation & Row Blur Deactivation (v0.2.59) ---');
 
 const appPath = path.resolve(__dirname, '../app.js');
-const appCode = fs.readFileSync(appPath, 'utf8');
+const appCode = fs.readFileSync(appPath, 'utf8').replace(/\r\n/g, '\n');
 
 // 1. Verify function declarations and state wiring in app.js
 assert(appCode.includes('let lastCellClick = { rowId: null, cellKey: null, blankOrder: null, time: 0 };'), 'lastCellClick tracking state must be defined');

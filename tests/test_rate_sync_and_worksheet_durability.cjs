@@ -5,7 +5,7 @@ const path = require('path');
 console.log('--- TEST: Rate Sync, Real-Time Group Header, and Worksheet Durability (v0.2.77) ---');
 
 const appPath = path.resolve(__dirname, '../app.js');
-const appCode = fs.readFileSync(appPath, 'utf8');
+const appCode = fs.readFileSync(appPath, 'utf8').replace(/\r\n/g, '\n');
 
 const cssPath = path.resolve(__dirname, '../extras.css');
 const cssCode = fs.readFileSync(cssPath, 'utf8');
